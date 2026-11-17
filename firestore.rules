@@ -1,0 +1,432 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidTier(tier) {
+      return tier in ['BLUE', 'GOLD', 'EMERALD', 'ROSE_GOLD', 'AMETHYST', 'ONYX'];
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
+    }
+
+    function isConvoParticipant(conversationId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+    }
+
+    function isValidUserProfile(data) {
+      return data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 40 &&
+             (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() <= 300)) &&
+             (!('profession' in data) || data.profession == null || (data.profession is string && data.profession.size() <= 80)) &&
+             (!('isProfessionalVerified' in data) || data.isProfessionalVerified is bool) &&
+             (!('professionalOrg' in data) || data.professionalOrg == null || (data.professionalOrg is string && data.professionalOrg.size() <= 100)) &&
+             (!('openToNetworking' in data) || data.openToNetworking is bool) &&
+             (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 2000)) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('verifiedTier' in data) || (data.verifiedTier is string && isValidTier(data.verifiedTier))) &&
+             (!('quietMode' in data) || data.quietMode is bool) &&
+             (!('readReceiptsEnabled' in data) || data.readReceiptsEnabled is bool) &&
+             (!('lastSeen' in data) || data.lastSeen == null || (data.lastSeen is timestamp && data.lastSeen <= request.time)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time &&
+             !('id' in data) &&
+             !('email' in data) &&
+             !('phone' in data) &&
+             !('role' in data) &&
+             !('isAdmin' in data);
+    }
+
+    function isValidConversation(data) {
+      return (data.type == 'direct' || data.type == 'group') &&
+             (!('title' in data) || data.title == null || (data.title is string && data.title.size() <= 100)) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             (!('verifiedTier' in data) || (data.verifiedTier is string && isValidTier(data.verifiedTier))) &&
+             isValidStringList(data.participantIds, 50) && data.participantIds.size() >= 1 &&
+             (!('lastMessageText' in data) || data.lastMessageText == null || (data.lastMessageText is string && data.lastMessageText.size() <= 2000)) &&
+             (!('lastMessageSenderId' in data) || data.lastMessageSenderId == null || (data.lastMessageSenderId is string && data.lastMessageSenderId.size() <= 128)) &&
+             (!('lastMessageTimestamp' in data) || data.lastMessageTimestamp == null || (data.lastMessageTimestamp is timestamp && data.lastMessageTimestamp <= request.time)) &&
+             (!('pinnedBy' in data) || isValidStringList(data.pinnedBy, 50)) &&
+             (!('archivedBy' in data) || isValidStringList(data.archivedBy, 50)) &&
+             (!('mutedBy' in data) || isValidStringList(data.mutedBy, 50)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
+             !('id' in data);
+    }
+
+    function isValidMessage(data) {
+      return data.conversationId is string && isValidId(data.conversationId) &&
+             data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 100 &&
+             (!('isSenderVerified' in data) || data.isSenderVerified is bool) &&
+             (!('senderVerifiedTier' in data) || (data.senderVerifiedTier is string && isValidTier(data.senderVerifiedTier))) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 4000 &&
+             (!('replyToId' in data) || data.replyToId == null || (data.replyToId is string && data.replyToId.size() <= 128)) &&
+             (!('replyToSender' in data) || data.replyToSender == null || (data.replyToSender is string && data.replyToSender.size() <= 100)) &&
+             (!('replyToText' in data) || data.replyToText == null || (data.replyToText is string && data.replyToText.size() <= 500)) &&
+             (!('status' in data) || data.status in ['sent', 'delivered', 'read']) &&
+             (!('readBy' in data) || isValidStringList(data.readBy, 50)) &&
+             (!('isEdited' in data) || data.isEdited is bool) &&
+             (!('isDeleted' in data) || data.isDeleted is bool) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
+             !('id' in data);
+    }
+
+    function isValidPost(data) {
+      return data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             data.authorHandle is string && data.authorHandle.size() >= 1 && data.authorHandle.size() <= 50 &&
+             (!('isAuthorVerified' in data) || data.isAuthorVerified is bool) &&
+             (!('authorVerifiedTier' in data) || (data.authorVerifiedTier is string && isValidTier(data.authorVerifiedTier))) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 5000 &&
+             (data.audience == 'public' || data.audience == 'circles') &&
+             (!('likedBy' in data) || isValidStringList(data.likedBy, 200)) &&
+             (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
+             (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
+             !('id' in data);
+    }
+
+    function isValidPostComment(data) {
+      return data.postId is string && isValidId(data.postId) &&
+             data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             (!('authorHandle' in data) || data.authorHandle == null || (data.authorHandle is string && data.authorHandle.size() <= 50)) &&
+             (!('isAuthorVerified' in data) || data.isAuthorVerified is bool) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             !('id' in data);
+    }
+
+    function isValidSavedMemory(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.originalMessageId is string && data.originalMessageId.size() >= 1 && data.originalMessageId.size() <= 128 &&
+             (!('conversationId' in data) || data.conversationId == null || (data.conversationId is string && data.conversationId.size() <= 128)) &&
+             data.snippet is string && data.snippet.size() >= 1 && data.snippet.size() <= 1000 &&
+             (!('senderName' in data) || data.senderName == null || (data.senderName is string && data.senderName.size() <= 100)) &&
+             (!('privateNote' in data) || data.privateNote == null || (data.privateNote is string && data.privateNote.size() <= 2000)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             !('id' in data);
+    }
+
+    function isValidFluxVideo(data) {
+      return data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             data.authorHandle is string && data.authorHandle.size() >= 1 && data.authorHandle.size() <= 50 &&
+             (!('isAuthorVerified' in data) || data.isAuthorVerified is bool) &&
+             (!('authorVerifiedTier' in data) || (data.authorVerifiedTier is string && isValidTier(data.authorVerifiedTier))) &&
+             data.caption is string && data.caption.size() >= 1 && data.caption.size() <= 2000 &&
+             (!('videoUri' in data) || data.videoUri == null || (data.videoUri is string && data.videoUri.size() <= 1000)) &&
+             (!('audioTitle' in data) || data.audioTitle == null || (data.audioTitle is string && data.audioTitle.size() <= 120)) &&
+             (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
+             (!('likedBy' in data) || isValidStringList(data.likedBy, 200)) &&
+             (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
+             (!('sharesCount' in data) || (data.sharesCount is int && data.sharesCount >= 0)) &&
+             (!('savedBy' in data) || isValidStringList(data.savedBy, 200)) &&
+             (!('tags' in data) || isValidStringList(data.tags, 15)) &&
+             (!('gradientTheme' in data) || data.gradientTheme in ['BLURPLE', 'NITRO', 'EMERALD', 'SOLAR', 'CYBER']) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             !('id' in data);
+    }
+
+    function isValidFluxComment(data) {
+      return data.fluxId is string && isValidId(data.fluxId) &&
+             data.authorId is string && data.authorId.size() >= 1 && data.authorId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100 &&
+             (!('authorHandle' in data) || data.authorHandle == null || (data.authorHandle is string && data.authorHandle.size() <= 50)) &&
+             (!('isAuthorVerified' in data) || data.isAuthorVerified is bool) &&
+             (!('authorVerifiedTier' in data) || (data.authorVerifiedTier is string && isValidTier(data.authorVerifiedTier))) &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             !('id' in data);
+    }
+
+    // User Directory Profiles (Zero-PII)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       (!('isProfessionalVerified' in incoming()) || incoming().isProfessionalVerified == false) &&
+                       incoming().keys().hasAll(['displayName', 'handle', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly([
+                         'displayName', 'handle', 'bio', 'profession', 'isProfessionalVerified',
+                         'professionalOrg', 'openToNetworking', 'avatarUrl', 'isVerified',
+                         'verifiedTier', 'quietMode', 'readReceiptsEnabled', 'lastSeen',
+                         'createdAt', 'updatedAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       (!('isProfessionalVerified' in incoming()) ||
+                        incoming().isProfessionalVerified == existing().get('isProfessionalVerified', false)) &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly(['lastSeen']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'displayName', 'handle', 'bio', 'profession', 'professionalOrg',
+                           'openToNetworking', 'avatarUrl', 'isVerified', 'verifiedTier',
+                           'quietMode', 'readReceiptsEnabled', 'lastSeen', 'updatedAt'
+                         ])
+                       );
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Saved Memories subcollection (Strictly private per-user vault)
+      match /saved_memories/{memoryId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(memoryId) && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(memoryId) &&
+                         request.auth.uid == userId &&
+                         isValidSavedMemory(incoming()) &&
+                         incoming().userId == userId &&
+                         incoming().keys().hasAll(['userId', 'originalMessageId', 'snippet', 'createdAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'originalMessageId', 'conversationId', 'snippet',
+                           'senderName', 'privateNote', 'createdAt'
+                         ]);
+
+        allow update: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(memoryId) &&
+                         request.auth.uid == userId &&
+                         isValidSavedMemory(incoming()) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['privateNote']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(memoryId) && request.auth.uid == userId;
+      }
+    }
+
+    // Conversations (Strict Participant Isolation)
+    match /conversations/{conversationId} {
+      allow get: if isSignedIn() && isValidId(conversationId) && request.auth.uid in existing().participantIds;
+      allow list: if isSignedIn() && request.auth.uid in existing().participantIds;
+
+      allow create: if isSignedIn() &&
+                       isValidId(conversationId) &&
+                       isValidConversation(incoming()) &&
+                       request.auth.uid in incoming().participantIds &&
+                       incoming().keys().hasAll(['type', 'participantIds', 'createdAt']) &&
+                       incoming().keys().hasOnly([
+                         'type', 'title', 'isVerified', 'verifiedTier', 'participantIds',
+                         'lastMessageText', 'lastMessageSenderId', 'lastMessageTimestamp',
+                         'pinnedBy', 'archivedBy', 'mutedBy', 'createdAt', 'updatedAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(conversationId) &&
+                       isValidConversation(incoming()) &&
+                       request.auth.uid in existing().participantIds &&
+                       request.auth.uid in incoming().participantIds &&
+                       incoming().type == existing().type &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'lastMessageText', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt'
+                         ]) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'pinnedBy', 'archivedBy', 'mutedBy', 'updatedAt'
+                         ]) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'updatedAt'
+                         ])
+                       );
+
+      allow delete: if false;
+
+      // Messages inside a conversation (Parent-Gated)
+      match /messages/{messageId} {
+        allow get: if isValidId(conversationId) && isValidId(messageId) && isConvoParticipant(conversationId);
+        allow list: if isValidId(conversationId) && isConvoParticipant(conversationId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(conversationId) &&
+                         isValidId(messageId) &&
+                         isValidMessage(incoming()) &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().conversationId == conversationId &&
+                         (!('isEdited' in incoming()) || incoming().isEdited == false) &&
+                         (!('isDeleted' in incoming()) || incoming().isDeleted == false) &&
+                         incoming().keys().hasAll(['conversationId', 'senderId', 'senderName', 'content', 'createdAt']) &&
+                         incoming().keys().hasOnly([
+                           'conversationId', 'senderId', 'senderName', 'isSenderVerified', 'senderVerifiedTier',
+                           'content', 'replyToId', 'replyToSender', 'replyToText', 'status', 'readBy',
+                           'isEdited', 'isDeleted', 'createdAt', 'updatedAt'
+                         ]) &&
+                         isConvoParticipant(conversationId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(conversationId) &&
+                         isValidId(messageId) &&
+                         isValidMessage(incoming()) &&
+                         incoming().senderId == existing().senderId &&
+                         incoming().conversationId == existing().conversationId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isConvoParticipant(conversationId) &&
+                         (
+                           (existing().senderId == request.auth.uid &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['content', 'isEdited', 'isDeleted', 'updatedAt'])) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'readBy', 'updatedAt'])
+                         );
+
+        allow delete: if false;
+      }
+    }
+
+    // Social Feed Posts
+    match /posts/{postId} {
+      allow get: if isSignedIn() && isValidId(postId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(postId) &&
+                       isValidPost(incoming()) &&
+                       incoming().authorId == request.auth.uid &&
+                       (!('likesCount' in incoming()) || incoming().likesCount == 0) &&
+                       (!('commentsCount' in incoming()) || incoming().commentsCount == 0) &&
+                       (!('likedBy' in incoming()) || incoming().likedBy.size() == 0) &&
+                       incoming().keys().hasAll(['authorId', 'authorName', 'authorHandle', 'content', 'audience', 'createdAt']) &&
+                       incoming().keys().hasOnly([
+                         'authorId', 'authorName', 'authorHandle', 'isAuthorVerified', 'authorVerifiedTier',
+                         'content', 'audience', 'likedBy', 'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(postId) &&
+                       isValidPost(incoming()) &&
+                       incoming().authorId == existing().authorId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (existing().authorId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['content', 'audience', 'updatedAt'])) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['likedBy', 'likesCount']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount'])
+                       );
+
+      allow delete: if isSignedIn() && isValidId(postId) && existing().authorId == request.auth.uid;
+
+      // Post Comments / Context Threads
+      match /comments/{commentId} {
+        allow get: if isSignedIn() && isValidId(postId) && isValidId(commentId);
+        allow list: if isSignedIn() && isValidId(postId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(postId) &&
+                         isValidId(commentId) &&
+                         isValidPostComment(incoming()) &&
+                         incoming().authorId == request.auth.uid &&
+                         incoming().postId == postId &&
+                         incoming().keys().hasAll(['postId', 'authorId', 'authorName', 'content', 'createdAt']) &&
+                         incoming().keys().hasOnly([
+                           'postId', 'authorId', 'authorName', 'authorHandle', 'isAuthorVerified',
+                           'content', 'createdAt'
+                         ]) &&
+                         exists(/databases/$(database)/documents/posts/$(postId));
+
+        allow update: if isSignedIn() &&
+                         isValidId(postId) &&
+                         isValidId(commentId) &&
+                         isValidPostComment(incoming()) &&
+                         existing().authorId == request.auth.uid &&
+                         incoming().authorId == existing().authorId &&
+                         incoming().postId == existing().postId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['content']);
+
+        allow delete: if isSignedIn() && isValidId(postId) && isValidId(commentId) && existing().authorId == request.auth.uid;
+      }
+    }
+
+    // Flux Short Videos
+    match /flux_videos/{fluxId} {
+      allow get: if isSignedIn() && isValidId(fluxId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(fluxId) &&
+                       isValidFluxVideo(incoming()) &&
+                       incoming().authorId == request.auth.uid &&
+                       (!('likesCount' in incoming()) || incoming().likesCount == 0) &&
+                       (!('commentsCount' in incoming()) || incoming().commentsCount == 0) &&
+                       (!('sharesCount' in incoming()) || incoming().sharesCount == 0) &&
+                       incoming().keys().hasAll(['authorId', 'authorName', 'authorHandle', 'caption', 'createdAt']) &&
+                       incoming().keys().hasOnly([
+                         'authorId', 'authorName', 'authorHandle', 'isAuthorVerified', 'authorVerifiedTier',
+                         'caption', 'videoUri', 'audioTitle', 'likesCount', 'likedBy', 'commentsCount',
+                         'sharesCount', 'savedBy', 'tags', 'gradientTheme', 'createdAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(fluxId) &&
+                       isValidFluxVideo(incoming()) &&
+                       incoming().authorId == existing().authorId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (existing().authorId == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'audioTitle'])) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['likedBy', 'likesCount']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['savedBy']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['sharesCount']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount'])
+                       );
+
+      allow delete: if isSignedIn() && isValidId(fluxId) && existing().authorId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow get: if isSignedIn() && isValidId(fluxId) && isValidId(commentId);
+        allow list: if isSignedIn() && isValidId(fluxId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(fluxId) &&
+                         isValidId(commentId) &&
+                         isValidFluxComment(incoming()) &&
+                         incoming().authorId == request.auth.uid &&
+                         incoming().fluxId == fluxId &&
+                         incoming().keys().hasAll(['fluxId', 'authorId', 'authorName', 'content', 'createdAt']) &&
+                         incoming().keys().hasOnly([
+                           'fluxId', 'authorId', 'authorName', 'authorHandle', 'isAuthorVerified',
+                           'authorVerifiedTier', 'content', 'createdAt'
+                         ]) &&
+                         exists(/databases/$(database)/documents/flux_videos/$(fluxId));
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(fluxId) && isValidId(commentId) && existing().authorId == request.auth.uid;
+      }
+    }
+  }
+}

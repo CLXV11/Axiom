@@ -1,0 +1,142 @@
+package com.example
+
+import androidx.test.core.app.ApplicationProvider
+import com.example.data.repository.FluxRepository
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
+class FluxRepositoryTest {
+
+  private lateinit var fluxRepository: FluxRepository
+
+  @Before
+  fun setup() {
+    val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    context.getSharedPreferences("flux_storage_prefs", android.content.Context.MODE_PRIVATE)
+      .edit()
+      .clear()
+      .commit()
+    fluxRepository = FluxRepository(context)
+  }
+
+  @Test
+  fun testInitialVideos_emptyWhenNoUserPublishedClipsExist() = runTest {
+    val videos = fluxRepository.observeVideos().first()
+    assertTrue("Flux feed should contain no fake seeded videos initially", videos.isEmpty())
+  }
+
+  @Test
+  fun testPublishFlux_addsVideo() = runTest {
+    val newVideo = fluxRepository.publishFlux(
+      authorId = "test_user_1",
+      authorName = "GamerOne",
+      authorHandle = "@gamerone",
+      isAuthorVerified = true,
+      authorVerifiedTier = "ONYX",
+      caption = "Check out this insane play! #clutch #esports",
+      videoUri = "content://media/external/video/media/123",
+      audioTitle = "Epic Gaming Synth",
+      gradientTheme = "NITRO"
+    )
+
+    assertNotNull(newVideo.id)
+    assertEquals("GamerOne", newVideo.authorName)
+    assertEquals("ONYX", newVideo.authorVerifiedTier)
+    assertTrue("Should extract #clutch tag", newVideo.tags.contains("#clutch"))
+
+    val updatedVideos = fluxRepository.observeVideos().first()
+    assertEquals(1, updatedVideos.size)
+    assertEquals(newVideo.id, updatedVideos.first().id)
+  }
+
+  @Test
+  fun testToggleLike_updatesCountAndLikedBy() = runTest {
+    val target = fluxRepository.publishFlux(
+      authorId = "author_1",
+      authorName = "Creator",
+      authorHandle = "@creator",
+      isAuthorVerified = false,
+      authorVerifiedTier = "GOLD",
+      caption = "Test clip #flux",
+      videoUri = null,
+      audioTitle = "Sound"
+    )
+    val initialLikes = target.likesCount
+    val userId = "tester_101"
+
+    fluxRepository.toggleLike(target.id, userId)
+    val afterLike = fluxRepository.observeVideos().first().first { it.id == target.id }
+    assertTrue(afterLike.likedBy.contains(userId))
+    assertEquals(initialLikes + 1, afterLike.likesCount)
+
+    fluxRepository.toggleLike(target.id, userId)
+    val afterUnlike = fluxRepository.observeVideos().first().first { it.id == target.id }
+    assertFalse(afterUnlike.likedBy.contains(userId))
+    assertEquals(initialLikes, afterUnlike.likesCount)
+  }
+
+  @Test
+  fun testToggleSave_updatesSavedList() = runTest {
+    val target = fluxRepository.publishFlux(
+      authorId = "author_1",
+      authorName = "Creator",
+      authorHandle = "@creator",
+      isAuthorVerified = false,
+      authorVerifiedTier = "GOLD",
+      caption = "Saveable clip #flux",
+      videoUri = null,
+      audioTitle = "Sound"
+    )
+    val userId = "bookmark_user"
+
+    fluxRepository.toggleSave(target.id, userId)
+    val afterSave = fluxRepository.observeVideos().first().first { it.id == target.id }
+    assertTrue(afterSave.savedBy.contains(userId))
+
+    fluxRepository.toggleSave(target.id, userId)
+    val afterUnsave = fluxRepository.observeVideos().first().first { it.id == target.id }
+    assertFalse(afterUnsave.savedBy.contains(userId))
+  }
+
+  @Test
+  fun testAddComment_updatesCommentsCount() = runTest {
+    val target = fluxRepository.publishFlux(
+      authorId = "author_1",
+      authorName = "Creator",
+      authorHandle = "@creator",
+      isAuthorVerified = false,
+      authorVerifiedTier = "GOLD",
+      caption = "Commentable clip #flux",
+      videoUri = null,
+      audioTitle = "Sound"
+    )
+    val initialComments = target.commentsCount
+
+    val comment = fluxRepository.addComment(
+      fluxId = target.id,
+      authorId = "commenter_1",
+      authorName = "SuperFan",
+      authorHandle = "@superfan",
+      isAuthorVerified = true,
+      authorVerifiedTier = "EMERALD",
+      content = "Best Flux clip ever!"
+    )
+
+    assertNotNull(comment.id)
+    assertEquals("Best Flux clip ever!", comment.content)
+
+    val updatedTarget = fluxRepository.observeVideos().first().first { it.id == target.id }
+    assertEquals(initialComments + 1, updatedTarget.commentsCount)
+  }
+}

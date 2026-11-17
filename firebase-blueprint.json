@@ -1,0 +1,195 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public user directory profile, handle, profession, and presence settings (no PII)",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "handle": { "type": "string" },
+        "bio": { "type": "string" },
+        "profession": { "type": "string" },
+        "isProfessionalVerified": { "type": "boolean" },
+        "professionalOrg": { "type": "string" },
+        "openToNetworking": { "type": "boolean" },
+        "avatarUrl": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX"] },
+        "quietMode": { "type": "boolean" },
+        "readReceiptsEnabled": { "type": "boolean" },
+        "lastSeen": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "handle", "createdAt", "updatedAt"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Direct or group chat conversation metadata and participant list",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["direct", "group"] },
+        "title": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX"] },
+        "participantIds": { "type": "array" },
+        "lastMessageText": { "type": "string" },
+        "lastMessageSenderId": { "type": "string" },
+        "lastMessageTimestamp": { "type": "string", "format": "date-time" },
+        "pinnedBy": { "type": "array" },
+        "archivedBy": { "type": "array" },
+        "mutedBy": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "participantIds", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual message within a conversation",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "isSenderVerified": { "type": "boolean" },
+        "senderVerifiedTier": { "type": "string" },
+        "content": { "type": "string" },
+        "replyToId": { "type": "string" },
+        "replyToSender": { "type": "string" },
+        "replyToText": { "type": "string" },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read"] },
+        "readBy": { "type": "array" },
+        "isEdited": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversationId", "senderId", "senderName", "content", "createdAt"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "Social feed post with audience control and contextual threads",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "isAuthorVerified": { "type": "boolean" },
+        "authorVerifiedTier": { "type": "string" },
+        "content": { "type": "string" },
+        "audience": { "type": "string", "enum": ["public", "circles"] },
+        "likedBy": { "type": "array" },
+        "likesCount": { "type": "integer" },
+        "commentsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorName", "authorHandle", "content", "audience", "createdAt"]
+    },
+    "PostComment": {
+      "title": "PostComment",
+      "description": "Comment or context thread attached to a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "isAuthorVerified": { "type": "boolean" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "authorId", "authorName", "content", "createdAt"]
+    },
+    "SavedMemory": {
+      "title": "SavedMemory",
+      "description": "Private bookmarked message with personal notes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "originalMessageId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "snippet": { "type": "string" },
+        "senderName": { "type": "string" },
+        "privateNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "originalMessageId", "snippet", "createdAt"]
+    },
+    "FluxVideo": {
+      "title": "FluxVideo",
+      "description": "Short video or creative gradient clip shared on Flux",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "isAuthorVerified": { "type": "boolean" },
+        "authorVerifiedTier": { "type": "string" },
+        "caption": { "type": "string" },
+        "videoUri": { "type": "string" },
+        "audioTitle": { "type": "string" },
+        "likesCount": { "type": "integer" },
+        "likedBy": { "type": "array" },
+        "commentsCount": { "type": "integer" },
+        "sharesCount": { "type": "integer" },
+        "savedBy": { "type": "array" },
+        "tags": { "type": "array" },
+        "gradientTheme": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorName", "authorHandle", "caption", "createdAt"]
+    },
+    "FluxComment": {
+      "title": "FluxComment",
+      "description": "Comment on a Flux short video clip",
+      "type": "object",
+      "properties": {
+        "fluxId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorHandle": { "type": "string" },
+        "isAuthorVerified": { "type": "boolean" },
+        "authorVerifiedTier": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fluxId", "authorId", "authorName", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User directory profiles and presence status"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Direct and group chat conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages inside conversation"
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Feed posts"
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "PostComment",
+      "description": "Comments and context threads for posts"
+    },
+    "/users/{userId}/saved_memories/{memoryId}": {
+      "schema": "SavedMemory",
+      "description": "User personal saved messages with private notes"
+    },
+    "/flux_videos/{fluxId}": {
+      "schema": "FluxVideo",
+      "description": "Short video clips shared in Flux feed"
+    },
+    "/flux_videos/{fluxId}/comments/{commentId}": {
+      "schema": "FluxComment",
+      "description": "Comments on Flux video clips"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Kora",
+  "description": "Editorial social networking and real-time instant messaging platform with quiet presence and context threads",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
