@@ -141,7 +141,8 @@ class MainActivity : ComponentActivity() {
       LaunchedEffect(Unit) {
         if (Firebase.auth.currentUser == null) {
           try {
-            val clientId = getString(R.string.default_web_client_id)
+            val clientIdRes = resources.getIdentifier("default_web_client_id", "string", packageName)
+            val clientId = if (clientIdRes != 0) getString(clientIdRes) else ""
             if (clientId.isNotBlank()) {
               val googleIdOption = GetGoogleIdOption.Builder()
                 .setFilterByAuthorizedAccounts(true)

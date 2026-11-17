@@ -51,7 +51,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
-import com.example.R
 import com.example.data.model.UserProfile
 import com.example.data.repository.UserRepository
 import com.example.ui.util.AppLanguage
@@ -114,9 +113,21 @@ fun AuthScreen(
 
   fun executeGoogleSignIn() {
     val clientId = try {
-      context.getString(R.string.default_web_client_id)
+      val clientIdRes = context.resources.getIdentifier(
+        "default_web_client_id",
+        "string",
+        context.packageName
+      )
+      if (clientIdRes != 0) context.getString(clientIdRes) else ""
     } catch (e: Exception) {
-      errorMessage = "Google Web Client ID missing in configuration"
+      ""
+    }
+    if (clientId.isBlank()) {
+      errorMessage = if (isArabic) {
+        "إعدادات تسجيل الدخول عبر Google غير مكتملة في هذه النسخة."
+      } else {
+        "Google Web Client ID missing in configuration"
+      }
       return
     }
 
