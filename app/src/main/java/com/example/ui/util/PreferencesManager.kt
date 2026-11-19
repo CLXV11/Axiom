@@ -2,6 +2,8 @@ package com.example.ui.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.data.model.UserProfile
+import org.json.JSONObject
 import java.util.UUID
 
 class PreferencesManager(context: Context) {
@@ -49,6 +51,56 @@ class PreferencesManager(context: Context) {
     set(value) {
       prefs.edit().putString("key_accent_choice", value.id).apply()
     }
+
+  fun saveCachedProfile(profile: UserProfile) {
+    if (profile.id.isBlank()) return
+    val json = JSONObject().apply {
+      put("id", profile.id)
+      put("displayName", profile.displayName)
+      put("handle", profile.handle)
+      put("bio", profile.bio)
+      put("profession", profile.profession)
+      put("isProfessionalVerified", profile.isProfessionalVerified)
+      put("professionalOrg", profile.professionalOrg)
+      put("openToNetworking", profile.openToNetworking)
+      put("avatarUrl", profile.avatarUrl)
+      put("isVerified", profile.isVerified)
+      put("verifiedTier", profile.verifiedTier)
+      put("quietMode", profile.quietMode)
+      put("readReceiptsEnabled", profile.readReceiptsEnabled)
+    }
+    prefs.edit().putString("key_cached_profile_json", json.toString()).apply()
+  }
+
+  fun getCachedProfile(uid: String): UserProfile? {
+    if (uid.isBlank()) return null
+    val raw = prefs.getString("key_cached_profile_json", null) ?: return null
+    return try {
+      val json = JSONObject(raw)
+      if (json.optString("id") != uid) return null
+      UserProfile(
+        id = uid,
+        displayName = json.optString("displayName", ""),
+        handle = json.optString("handle", ""),
+        bio = json.optString("bio", ""),
+        profession = json.optString("profession", ""),
+        isProfessionalVerified = json.optBoolean("isProfessionalVerified", false),
+        professionalOrg = json.optString("professionalOrg", ""),
+        openToNetworking = json.optBoolean("openToNetworking", true),
+        avatarUrl = json.optString("avatarUrl", ""),
+        isVerified = json.optBoolean("isVerified", false),
+        verifiedTier = json.optString("verifiedTier", "GOLD"),
+        quietMode = json.optBoolean("quietMode", false),
+        readReceiptsEnabled = json.optBoolean("readReceiptsEnabled", true)
+      )
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  fun clearCachedProfile() {
+    prefs.edit().remove("key_cached_profile_json").apply()
+  }
 
   fun getOrCreateGuestUserId(): String {
     val existing = prefs.getString("key_guest_user_id", null)

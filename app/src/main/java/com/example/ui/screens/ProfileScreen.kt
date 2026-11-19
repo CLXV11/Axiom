@@ -1,12 +1,17 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,8 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CameraAlt
@@ -66,9 +69,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.model.UserProfile
 import com.example.data.repository.UserRepository
@@ -77,6 +82,7 @@ import com.example.ui.components.KoraTopBar
 import com.example.ui.theme.StatusQuiet
 import com.example.ui.util.LocalAppLanguage
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -97,7 +103,8 @@ fun ProfileScreen(
   val coroutineScope = rememberCoroutineScope()
   val uid = userRepository.requireUserId()
 
-  val profile by userRepository.observeUserProfile(uid).collectAsState(initial = null)
+  val cachedInitialProfile = remember(uid) { userRepository.getCachedProfile(uid) }
+  val profile by userRepository.observeUserProfile(uid).collectAsState(initial = cachedInitialProfile)
   val equippedFrame by storeRepository.equippedFrame.collectAsState()
   val equippedNameplate by storeRepository.equippedNameplate.collectAsState()
   val coins by storeRepository.coinBalance.collectAsState()
@@ -164,15 +171,22 @@ fun ProfileScreen(
         .verticalScroll(scrollState)
         .padding(16.dp)
     ) {
+      val colors = MaterialTheme.colorScheme
+      val cardShape = RoundedCornerShape(16.dp)
+      val cardBorder = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f))
+
       // Profile Info Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(
-          modifier = Modifier.padding(20.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
           Box(
@@ -182,29 +196,28 @@ fun ProfileScreen(
             contentAlignment = Alignment.Center
           ) {
             AvatarView(
-              name = profile?.displayName ?: "User",
+              name = profile?.displayName ?: strings.appName,
               avatarUrl = profile?.avatarUrl,
-              size = 88.dp,
+              size = 90.dp,
               frameStyleKey = equippedFrame,
               showPresence = true,
               isOnline = true,
               isQuiet = profile?.quietMode == true
             )
 
-            // Edit Avatar Camera Badge Icon
             Box(
               modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .size(28.dp)
+                .size(30.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                .background(colors.primary)
+                .border(2.dp, colors.surface, CircleShape),
               contentAlignment = Alignment.Center
             ) {
               Icon(
                 imageVector = Icons.Default.CameraAlt,
                 contentDescription = strings.changeAvatarTitle,
-                tint = Color.White,
+                tint = colors.onPrimary,
                 modifier = Modifier.size(16.dp)
               )
             }
@@ -214,12 +227,13 @@ fun ProfileScreen(
 
           TextButton(
             onClick = { showAvatarPickerSheet = true },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             modifier = Modifier.testTag("change_avatar_text_button")
           ) {
             Icon(
               imageVector = Icons.Default.PhotoCamera,
               contentDescription = null,
-              modifier = Modifier.size(16.dp)
+              modifier = Modifier.size(15.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
@@ -229,17 +243,19 @@ fun ProfileScreen(
             )
           }
 
-          Spacer(modifier = Modifier.height(8.dp))
+          Spacer(modifier = Modifier.height(6.dp))
 
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
           ) {
             Text(
-              text = profile?.displayName ?: "Loading...",
+              text = profile?.displayName?.takeIf { it.isNotBlank() } ?: strings.loading,
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
+              color = colors.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
             if (profile?.isVerified == true) {
               Spacer(modifier = Modifier.width(6.dp))
@@ -248,28 +264,29 @@ fun ProfileScreen(
           }
 
           if (equippedNameplate != null) {
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             RoleNameplateView(
               styleKey = equippedNameplate!!,
-              title = profile?.displayName ?: "User"
+              title = profile?.profession?.takeIf { it.isNotBlank() }
+                ?: if (isArabic) "عضو كورا المميز" else "Kora Member"
             )
           }
 
-          Spacer(modifier = Modifier.height(4.dp))
+          Spacer(modifier = Modifier.height(6.dp))
 
           Text(
-            text = profile?.handle ?: "@handle",
+            text = formatHandleForDisplay(profile?.handle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Medium
+            color = colors.primary,
+            fontWeight = FontWeight.SemiBold
           )
 
-          if (!profile?.profession.isNullOrBlank()) {
+          if (!profile?.profession.isNullOrBlank() && equippedNameplate == null) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(
               text = profile!!.profession,
               style = MaterialTheme.typography.labelLarge,
-              color = MaterialTheme.colorScheme.secondary,
+              color = colors.secondary,
               fontWeight = FontWeight.SemiBold
             )
           }
@@ -279,7 +296,7 @@ fun ProfileScreen(
             Text(
               text = profile!!.bio,
               style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              color = colors.onSurfaceVariant
             )
           }
 
@@ -287,39 +304,47 @@ fun ProfileScreen(
 
           OutlinedButton(
             onClick = { openEditDialog() },
-            modifier = Modifier.fillMaxWidth().testTag("edit_profile_button")
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, colors.outlineVariant),
+            modifier = Modifier
+              .fillMaxWidth()
+              .defaultMinSize(minHeight = 48.dp)
+              .testTag("edit_profile_button")
           ) {
             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Edit Profile")
+            Text(strings.editProfile, fontWeight = FontWeight.SemiBold)
           }
         }
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(14.dp))
 
       // Custom Decoration Store Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Row(
           modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+          ) {
             Box(
               modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
                 .background(
                   Brush.linearGradient(
-                    listOf(Color(0xFF6366F1), Color(0xFFA855F7))
+                    listOf(Color(0xFF6366F1), Color(0xFF22D3EE))
                   )
                 ),
               contentAlignment = Alignment.Center
@@ -328,15 +353,18 @@ fun ProfileScreen(
                 imageVector = Icons.Default.Diamond,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(22.dp)
               )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
               Text(
                 text = strings.customDecoration,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
               Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -347,49 +375,66 @@ fun ProfileScreen(
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                  text = "$coins ${strings.buyCoins}",
+                  text = "$coins ${strings.coinsUnit}",
                   style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  color = colors.onSurfaceVariant,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
               }
             }
           }
 
+          Spacer(modifier = Modifier.width(12.dp))
+
           Button(
             onClick = onOpenStore,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            shape = RoundedCornerShape(10.dp)
+            colors = ButtonDefaults.buttonColors(
+              containerColor = colors.primary,
+              contentColor = colors.onPrimary
+            ),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.defaultMinSize(minHeight = 44.dp)
           ) {
-            Text(strings.preview, fontWeight = FontWeight.Bold)
+            Text(
+              text = strings.preview,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+              softWrap = false
+            )
           }
         }
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(14.dp))
 
-      // Pro Theme Studio Card
+      // Theme Studio Card
       if (onOpenThemeStudio != null) {
         Card(
-          shape = RoundedCornerShape(20.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+          shape = cardShape,
+          colors = CardDefaults.cardColors(containerColor = colors.surface),
+          border = cardBorder,
+          elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
               Box(
                 modifier = Modifier
                   .size(44.dp)
                   .clip(CircleShape)
                   .background(
                     Brush.linearGradient(
-                      listOf(MaterialTheme.colorScheme.primary, Color(0xFFEB459E))
+                      listOf(colors.primary, Color(0xFFEC4899))
                     )
                   ),
                 contentAlignment = Alignment.Center
@@ -398,43 +443,61 @@ fun ProfileScreen(
                   imageVector = Icons.Default.Palette,
                   contentDescription = null,
                   tint = Color.White,
-                  modifier = Modifier.size(24.dp)
+                  modifier = Modifier.size(22.dp)
                 )
               }
               Spacer(modifier = Modifier.width(12.dp))
-              Column {
+              Column(modifier = Modifier.weight(1f)) {
                 Text(
                   text = strings.themeSwitcherTitle,
                   style = MaterialTheme.typography.titleMedium,
-                  fontWeight = FontWeight.Bold
+                  fontWeight = FontWeight.Bold,
+                  color = colors.onSurface,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
                 Text(
                   text = strings.themePresets,
                   style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.primary,
-                  fontWeight = FontWeight.SemiBold
+                  color = colors.primary,
+                  fontWeight = FontWeight.SemiBold,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
               }
             }
 
+            Spacer(modifier = Modifier.width(12.dp))
+
             Button(
               onClick = onOpenThemeStudio,
-              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-              shape = RoundedCornerShape(10.dp)
+              colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary
+              ),
+              shape = RoundedCornerShape(12.dp),
+              contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+              modifier = Modifier.defaultMinSize(minHeight = 44.dp)
             ) {
-              Text(strings.quickThemeSwitcher, fontWeight = FontWeight.Bold)
+              Text(
+                text = strings.quickThemeSwitcher,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
+              )
             }
           }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
       }
 
       // Verification Badge Management Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth().testTag("verification_badge_card")
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -627,17 +690,20 @@ fun ProfileScreen(
                     }
 
                     if (isSelected) {
+                      val chipFg = if (tier.accentColor.luminance() > 0.52f) Color(0xFF0B0F19) else Color.White
                       Box(
                         modifier = Modifier
-                          .clip(RoundedCornerShape(6.dp))
+                          .clip(RoundedCornerShape(8.dp))
                           .background(tier.accentColor)
                           .padding(horizontal = 8.dp, vertical = 4.dp)
                       ) {
                         Text(
                           text = if (isArabic) "مفعّل" else "Active",
-                          color = Color.White,
+                          color = chipFg,
                           style = MaterialTheme.typography.labelSmall,
-                          fontWeight = FontWeight.Bold
+                          fontWeight = FontWeight.Bold,
+                          maxLines = 1,
+                          softWrap = false
                         )
                       }
                     }
@@ -649,13 +715,14 @@ fun ProfileScreen(
         }
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(14.dp))
 
       // Quiet Presence Settings Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -663,30 +730,32 @@ fun ProfileScreen(
             text = strings.quietPresence,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = colors.onSurface
           )
           Text(
             text = strings.quietModeDesc,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = colors.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
           )
 
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.45f))
 
           // Quiet Mode Toggle
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
               Icon(
                 imageVector = Icons.Default.Bedtime,
                 contentDescription = null,
-                tint = if (profile?.quietMode == true) StatusQuiet else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (profile?.quietMode == true) StatusQuiet else colors.onSurfaceVariant
               )
               Spacer(modifier = Modifier.width(12.dp))
               Column {
@@ -696,12 +765,14 @@ fun ProfileScreen(
                   fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                  text = if (profile?.quietMode == true) "Active focus" else "Standard alerts",
+                  text = if (profile?.quietMode == true) strings.quietFocusActive else strings.standardAlerts,
                   style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  color = colors.onSurfaceVariant
                 )
               }
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             Switch(
               checked = profile?.quietMode == true,
@@ -712,21 +783,23 @@ fun ProfileScreen(
             )
           }
 
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+          HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.35f))
 
           // Read Receipts Toggle
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
               Icon(
                 imageVector = Icons.Default.Visibility,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = colors.primary
               )
               Spacer(modifier = Modifier.width(12.dp))
               Column {
@@ -738,10 +811,12 @@ fun ProfileScreen(
                 Text(
                   text = strings.readReceiptsDesc,
                   style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                  color = colors.onSurfaceVariant
                 )
               }
             }
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             Switch(
               checked = profile?.readReceiptsEnabled != false,
@@ -756,11 +831,14 @@ fun ProfileScreen(
         }
       }
 
-      Spacer(modifier = Modifier.height(20.dp))
+      Spacer(modifier = Modifier.height(18.dp))
 
       if (onSignOut != null) {
-        Button(
+        OutlinedButton(
           onClick = onSignOut,
+          shape = RoundedCornerShape(14.dp),
+          border = BorderStroke(1.dp, colors.error.copy(alpha = 0.45f)),
+          colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
           modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
@@ -773,6 +851,7 @@ fun ProfileScreen(
       } else {
         Button(
           onClick = onOpenStore,
+          shape = RoundedCornerShape(14.dp),
           modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
@@ -783,6 +862,8 @@ fun ProfileScreen(
           Text(if (LocalAppLanguage.current.code == "ar") "استكشاف متجر الإطارات والشارات" else "Explore Custom Frames & Decorations", fontWeight = FontWeight.SemiBold)
         }
       }
+
+      Spacer(modifier = Modifier.height(24.dp))
     }
   }
 

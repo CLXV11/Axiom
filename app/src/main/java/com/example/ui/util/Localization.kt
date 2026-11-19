@@ -8,6 +8,17 @@ enum class AppLanguage(val code: String, val displayName: String, val layoutDire
   AR("ar", "العربية", LayoutDirection.Rtl)
 }
 
+/**
+ * Wraps @handle in Unicode Left-to-Right Isolate characters (\u2066...\u2069)
+ * so handles always render as "@username" instead of "username@" in RTL Arabic UI.
+ */
+fun formatHandleForDisplay(handle: String?): String {
+  val trimmed = handle?.trim().orEmpty()
+  if (trimmed.isBlank()) return "\u2066@user\u2069"
+  val normalized = if (trimmed.startsWith("@")) trimmed else "@$trimmed"
+  return "\u2066$normalized\u2069"
+}
+
 data class KoraStrings(
   // Brand & Welcome
   val appName: String,
@@ -225,7 +236,23 @@ data class KoraStrings(
   val checkingAccount: String,
   val syncingProfile: String,
   val openToNetworkingToggle: String,
-  val profileUpdated: String
+  val profileUpdated: String,
+
+  // Additional UI polish labels
+  val editProfile: String,
+  val quietFocusActive: String,
+  val standardAlerts: String,
+  val getPack: String,
+  val coinsUnit: String,
+  val fromLabel: String,
+  val privateNoteLabel: String,
+  val loading: String,
+  val aboutKoraTitle: String,
+  val aboutKoraDesc: String,
+  val activeChatsCount: String,
+  val publishedSuccess: String,
+  val groupNameLabel: String,
+  val selectedLabel: String
 )
 
 val EnglishStrings = KoraStrings(
@@ -356,28 +383,28 @@ val EnglishStrings = KoraStrings(
   newFlux = "Post Flux",
   publishFlux = "Publish Flux",
   selectVideo = "Choose Video",
-  fluxCaptionPlaceholder = "Write a caption & tags... #gaming #discord #flux",
+  fluxCaptionPlaceholder = "Write a caption & tags... #kora #flux #design",
   fluxAudioPlaceholder = "Soundtrack or original audio name",
   noFluxYet = "No Flux Videos Yet",
-  beFirstToPublishFlux = "Be the first to share an epic Flux clip!",
+  beFirstToPublishFlux = "Be the first to share an inspiring Flux clip!",
   fluxPublished = "Flux clip published successfully!",
   fluxCommentsTitle = "Flux Comments",
   addFluxComment = "Add a comment...",
-  themeSwitcherTitle = "Pro Theme Studio",
+  themeSwitcherTitle = "Theme Studio",
   themePresets = "Theme Presets",
   customAccentColor = "Custom Accent Color",
   amoledMode = "AMOLED Pure Black",
-  amoledModeDesc = "Pure pitch black (0% power on dark pixels) for OLED battery savings",
+  amoledModeDesc = "Pure pitch black for deeper contrast and OLED battery savings",
   themePreview = "Live Theme Preview",
-  livePreviewChannel = "discord-general",
-  livePreviewSampleMessage = "This is how your Discord chat, header, and badges look!",
-  quickThemeSwitcher = "Switch Theme",
+  livePreviewChannel = "kora-lounge",
+  livePreviewSampleMessage = "This is how your Kora conversations, headers, and badges look!",
+  quickThemeSwitcher = "Themes",
 
   // Profile Avatar Customization
-  changeAvatarTitle = "Change Profile Picture",
-  changeAvatarSubtitle = "Pick from gallery, Discord presets, or custom image URL",
+  changeAvatarTitle = "Change Avatar",
+  changeAvatarSubtitle = "Pick from gallery, Kora curated portraits, or custom URL",
   chooseFromGallery = "Choose from Gallery",
-  curatedAvatars = "Curated Discord Avatars",
+  curatedAvatars = "Curated Kora Avatars",
   customImageUrl = "Custom Image URL",
   enterImageUrlPlaceholder = "https://example.com/avatar.png",
   applyUrl = "Apply Link",
@@ -420,7 +447,21 @@ val EnglishStrings = KoraStrings(
   checkingAccount = "Checking session...",
   syncingProfile = "Syncing your cloud profile...",
   openToNetworkingToggle = "Open for professional networking",
-  profileUpdated = "Profile updated"
+  profileUpdated = "Profile updated",
+  editProfile = "Edit Profile",
+  quietFocusActive = "Active focus",
+  standardAlerts = "Standard alerts",
+  getPack = "Top Up",
+  coinsUnit = "Coins",
+  fromLabel = "From",
+  privateNoteLabel = "Private Note",
+  loading = "Loading...",
+  aboutKoraTitle = "About Kora",
+  aboutKoraDesc = "Crafted for thoughtful conversations with quiet presence, focused threads, and instant cloud synchronization.",
+  activeChatsCount = "%d active",
+  publishedSuccess = "Published",
+  groupNameLabel = "Group Name",
+  selectedLabel = "Selected"
 )
 
 val ArabicStrings = KoraStrings(
@@ -509,11 +550,11 @@ val ArabicStrings = KoraStrings(
   ok = "حسناً",
   errorOccurred = "حدث خطأ غير متوقع",
   retry = "إعادة المحاولة",
-  storeTitle = "متجر الزينة والتخصيص",
+  storeTitle = "متجر الزينة",
   customDecoration = "الزينة المخصصة",
   buyCoins = "شراء العملات",
   earnCoins = "كسب العملات",
-  avatarFrames = "إطارات الصور الرمزية",
+  avatarFrames = "الإطارات",
   roleNameplates = "لوحات الاسم",
   chatBubbles = "فقاعات المحادثة",
   allCategories = "الكل",
@@ -525,7 +566,7 @@ val ArabicStrings = KoraStrings(
   notEnoughCoins = "رصيد العملات غير كافٍ لهذا العنصر",
   purchasedSuccess = "تم شراء العنصر وتجهيزه بنجاح!",
   dailyCheckIn = "تسجيل الدخول اليومي",
-  dailyCheckInDesc = "استلم مكافأتك اليومية المجانية من العملات لفتح إطارات أسطورية",
+  dailyCheckInDesc = "استلم مكافأتك اليومية المجانية من العملات لفتح إطارات فاخرة",
   claimCoins = "استلم +250 عملة",
   coinsClaimed = "تم استلام مكافأة اليوم",
   shopBannerText = "أبرز هويتك بأسلوبك الراقي والفريد",
@@ -534,12 +575,12 @@ val ArabicStrings = KoraStrings(
   packPopular = "باقة الحِرفي (2,000 عملة)",
   packElite = "خزينة الإمبراطور (5,000 عملة)",
   verifiedAccount = "حساب موثق",
-  verificationBadge = "شارة التحقق الزرقاء",
+  verificationBadge = "شارة التوثيق",
   verifiedBadgeSubtitle = "توثيق رسمي للهوية وموثوقية الحساب",
   verifiedStatusActive = "حساب موثق رسمياً",
   verifiedStatusInactive = "غير مفعل",
-  toggleVerification = "تفعيل شارة التحقق الزرقاء",
-  verificationDetails = "تمنحك شارة التحقق الزرقاء ظهوراً مميزاً وثقة رسمية وأولوية واضحة في المحادثات وقوائم الموجز على منصة كورا.",
+  toggleVerification = "تفعيل شارة التوثيق",
+  verificationDetails = "تمنحك شارة التوثيق ظهوراً مميزاً وثقة رسمية وأولوية واضحة في المحادثات وقوائم الموجز على منصة كورا.",
   verifiedDialogTitle = "توثيق رسمي ومعتمد",
   verifiedDialogMessage = "هذا الحساب تم التحقق من هويته ومطابقته لمعايير الأمان والإنتاجية العالية في منصة كورا.",
   isTyping = "يكتب الآن...",
@@ -551,28 +592,28 @@ val ArabicStrings = KoraStrings(
   newFlux = "نشر فلوكس",
   publishFlux = "نشر مقطع فلوكس",
   selectVideo = "اختيار فيديو",
-  fluxCaptionPlaceholder = "اكتب وصفاً مع الهاشتاغات... #فلوكس #ألعاب #ديسكورد",
+  fluxCaptionPlaceholder = "اكتب وصفاً مع الوسوم... #فلوكس #كورا #تصميم",
   fluxAudioPlaceholder = "اسم المسار الصوتي أو الصوت الأصلي",
   noFluxYet = "لا توجد فيديوهات فلوكس بعد",
   beFirstToPublishFlux = "كن أول من ينشر مقطع فلوكس مميز!",
   fluxPublished = "تم نشر مقطع الفلوكس بنجاح!",
   fluxCommentsTitle = "تعليقات فلوكس",
   addFluxComment = "أضف تعليقاً...",
-  themeSwitcherTitle = "مبدل السمات الاحترافي",
+  themeSwitcherTitle = "استوديو السمات",
   themePresets = "السمات الجاهزة",
   customAccentColor = "لون التمييز المخصص",
-  amoledMode = "وضع الشاشات السوداء AMOLED",
-  amoledModeDesc = "سواد نقي 100% يطفئ بكسلات الشاشة لتوفير أقصى طاقة للبطارية",
+  amoledMode = "سواد AMOLED النقي",
+  amoledModeDesc = "سواد عميق 100% يريح العين ويوفر طاقة البطارية",
   themePreview = "معاينة السمة الحية",
-  livePreviewChannel = "قناة-ديسكورد-العامة",
-  livePreviewSampleMessage = "هكذا ستبدو رسائلك وتنسيقات ديسكورد وشارات التوثيق مع هذه السمة!",
-  quickThemeSwitcher = "تبديل السمة",
+  livePreviewChannel = "kora-lounge",
+  livePreviewSampleMessage = "هكذا ستبدو محادثات كورا والعناوين وشارات التوثيق مع هذه السمة!",
+  quickThemeSwitcher = "السمات",
 
   // Profile Avatar Customization
-  changeAvatarTitle = "تغيير صورة الحساب",
-  changeAvatarSubtitle = "اختر من معرض الصور أو تشكيلة ديسكورد الفاخرة أو رابط خارجي",
+  changeAvatarTitle = "تغيير الصورة",
+  changeAvatarSubtitle = "اختر من معرض الصور أو مجموعة كورا الفاخرة أو رابط خارجي",
   chooseFromGallery = "اختيار من المعرض",
-  curatedAvatars = "شخصيات وصور ديسكورد الرمزية الفاخرة",
+  curatedAvatars = "صور كورا الرمزية الفاخرة",
   customImageUrl = "رابط صورة مخصص",
   enterImageUrlPlaceholder = "https://example.com/avatar.png",
   applyUrl = "تطبيق الرابط",
@@ -615,7 +656,21 @@ val ArabicStrings = KoraStrings(
   checkingAccount = "جارٍ التحقق من الجلسة...",
   syncingProfile = "جارٍ مزامنة ملفك السحابي...",
   openToNetworkingToggle = "الظهور كمتاح للتواصل المهني",
-  profileUpdated = "تم تحديث الملف الشخصي"
+  profileUpdated = "تم تحديث الملف الشخصي",
+  editProfile = "تعديل الملف الشخصي",
+  quietFocusActive = "التركيز الهادئ نشط",
+  standardAlerts = "التنبيهات الاعتيادية",
+  getPack = "شحن",
+  coinsUnit = "عملة",
+  fromLabel = "من",
+  privateNoteLabel = "ملاحظة خاصة",
+  loading = "جارٍ التحميل...",
+  aboutKoraTitle = "عن منصة كورا",
+  aboutKoraDesc = "صُممت لتواصل راقٍ وهادئ بخيوط نقاش منظمة ومزامنة سحابية فورية خالية من الضوضاء.",
+  activeChatsCount = "%d محادثات نشطة",
+  publishedSuccess = "تم النشر",
+  groupNameLabel = "اسم المجموعة",
+  selectedLabel = "محدد"
 )
 
 val LocalAppStrings = compositionLocalOf { EnglishStrings }

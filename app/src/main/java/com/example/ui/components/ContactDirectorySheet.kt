@@ -59,8 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.UserProfile
 import com.example.data.repository.UserRepository
-import com.example.ui.theme.DiscordBlurple
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -124,14 +124,14 @@ fun ContactDirectorySheet(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
           Box(
             modifier = Modifier
               .size(38.dp)
               .clip(CircleShape)
               .background(
                 Brush.linearGradient(
-                  listOf(DiscordBlurple, Color(0xFF8B5CF6))
+                  listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
                 )
               ),
             contentAlignment = Alignment.Center
@@ -139,12 +139,12 @@ fun ContactDirectorySheet(
             Icon(
               imageVector = Icons.Default.Contacts,
               contentDescription = null,
-              tint = Color.White,
+              tint = MaterialTheme.colorScheme.onPrimary,
               modifier = Modifier.size(20.dp)
             )
           }
           Spacer(modifier = Modifier.width(12.dp))
-          Column {
+          Column(modifier = Modifier.weight(1f)) {
             Text(
               text = strings.contactDirectoryTitle,
               style = MaterialTheme.typography.titleMedium,
@@ -223,7 +223,10 @@ fun ContactDirectorySheet(
             Spacer(modifier = Modifier.height(16.dp))
             Button(
               onClick = { filterContacts("", "all") },
-              colors = ButtonDefaults.buttonColors(containerColor = DiscordBlurple),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+              ),
               shape = RoundedCornerShape(10.dp),
               modifier = Modifier.testTag("reset_contact_filters_button")
             ) {
@@ -308,20 +311,20 @@ fun ContactDirectorySheet(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                           .clip(RoundedCornerShape(6.dp))
-                          .background(DiscordBlurple.copy(alpha = 0.14f))
+                          .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
                           .padding(horizontal = 6.dp, vertical = 2.dp)
                       ) {
                         Icon(
                           imageVector = Icons.Default.WorkOutline,
                           contentDescription = null,
-                          tint = DiscordBlurple,
+                          tint = MaterialTheme.colorScheme.primary,
                           modifier = Modifier.size(11.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                           text = user.profession,
                           style = MaterialTheme.typography.labelSmall,
-                          color = DiscordBlurple,
+                          color = MaterialTheme.colorScheme.primary,
                           fontWeight = FontWeight.SemiBold,
                           fontSize = 11.sp
                         )
@@ -336,7 +339,7 @@ fun ContactDirectorySheet(
                       append(user.professionalOrg)
                       append(" • ")
                     }
-                    append(user.handle)
+                    append(formatHandleForDisplay(user.handle))
                     if (user.bio.isNotBlank()) {
                       append(" • ")
                       append(user.bio)
@@ -357,15 +360,15 @@ fun ContactDirectorySheet(
                 IconButton(
                   onClick = { onSelectUserToMessage(user) },
                   modifier = Modifier
-                    .size(36.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(DiscordBlurple.copy(alpha = 0.12f))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
                     .testTag("message_contact_button_${user.id}")
                 ) {
                   Icon(
                     imageVector = Icons.Default.Chat,
                     contentDescription = strings.newChat,
-                    tint = DiscordBlurple,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                   )
                 }

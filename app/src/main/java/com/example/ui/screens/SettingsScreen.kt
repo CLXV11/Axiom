@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,8 +49,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.KoraTopBar
@@ -57,14 +60,7 @@ import com.example.ui.components.ThemePreviewCard
 import com.example.ui.components.ThemeSwitcherSheet
 import com.example.ui.theme.AccentColorChoice
 import com.example.ui.theme.AppThemePreset
-import com.example.ui.theme.DiscordBlurple
 import com.example.ui.theme.KoraTheme
-import com.example.ui.theme.DiscordBorder
-import com.example.ui.theme.DiscordDarkDeepest
-import com.example.ui.theme.DiscordDarkInput
-import com.example.ui.theme.DiscordTextMuted
-import com.example.ui.theme.DiscordTextNormal
-import com.example.ui.theme.DiscordTextPrimary
 import com.example.ui.util.AppLanguage
 import com.example.ui.util.LocalAppLanguage
 import com.example.ui.util.LocalAppStrings
@@ -99,62 +95,79 @@ fun SettingsScreen(
         .padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-      // Professional Theme Studio Card
+      val colors = MaterialTheme.colorScheme
+      val cardShape = RoundedCornerShape(16.dp)
+      val cardBorder = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f))
+
+      // Theme Studio Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
               Box(
                 modifier = Modifier
                   .size(36.dp)
                   .clip(CircleShape)
-                  .background(MaterialTheme.colorScheme.primaryContainer),
+                  .background(colors.primaryContainer),
                 contentAlignment = Alignment.Center
               ) {
                 Icon(
                   imageVector = Icons.Default.Palette,
                   contentDescription = null,
-                  tint = MaterialTheme.colorScheme.primary,
+                  tint = colors.primary,
                   modifier = Modifier.size(20.dp)
                 )
               }
               Spacer(modifier = Modifier.width(12.dp))
-              Column {
+              Column(modifier = Modifier.weight(1f)) {
                 Text(
                   text = strings.themeSwitcherTitle,
                   style = MaterialTheme.typography.titleMedium,
                   fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.onSurface
+                  color = colors.onSurface,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
                 Text(
                   text = if (isArabic) currentPreset.nameAr else currentPreset.nameEn,
                   style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.primary,
-                  fontWeight = FontWeight.SemiBold
+                  color = colors.primary,
+                  fontWeight = FontWeight.SemiBold,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
               }
             }
 
+            Spacer(modifier = Modifier.width(12.dp))
+
             Button(
               onClick = { showThemeSheet = true },
-              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-              shape = RoundedCornerShape(16.dp),
-              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+              colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary
+              ),
+              shape = RoundedCornerShape(12.dp),
+              contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
               Text(
                 text = strings.quickThemeSwitcher,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimary,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
               )
             }
           }
@@ -287,6 +300,7 @@ fun SettingsScreen(
             items(AccentColorChoice.entries) { choice ->
               val isSelected = currentAccent == choice
               val chipColor = if (choice == AccentColorChoice.DEFAULT) currentPreset.primaryColor else choice.color
+              val checkTint = if (chipColor.luminance() > 0.52f) Color(0xFF0B0F19) else Color.White
 
               Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -302,7 +316,7 @@ fun SettingsScreen(
                     .clip(CircleShape)
                     .background(chipColor)
                     .border(
-                      width = if (isSelected) 3.dp else 1.dp,
+                      width = if (isSelected) 2.5.dp else 1.dp,
                       color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                       shape = CircleShape
                     ),
@@ -312,16 +326,18 @@ fun SettingsScreen(
                     Icon(
                       imageVector = Icons.Default.Check,
                       contentDescription = "Selected",
-                      tint = Color.White,
+                      tint = checkTint,
                       modifier = Modifier.size(18.dp)
                     )
                   }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                  text = if (isArabic) choice.nameAr.take(8) else choice.nameEn.take(8),
+                  text = if (isArabic) choice.nameAr else choice.nameEn,
                   style = KoraTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                  color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                  color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 1,
+                  softWrap = false
                 )
               }
             }
@@ -384,9 +400,10 @@ fun SettingsScreen(
 
       // Language Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -394,7 +411,7 @@ fun SettingsScreen(
             Icon(
               imageVector = Icons.Default.Translate,
               contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
+              tint = colors.primary,
               modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -406,7 +423,7 @@ fun SettingsScreen(
           }
 
           Spacer(modifier = Modifier.height(12.dp))
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.45f))
 
           // English option
           Row(
@@ -429,7 +446,7 @@ fun SettingsScreen(
             )
           }
 
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+          HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.35f))
 
           // Arabic option
           Row(
@@ -456,9 +473,10 @@ fun SettingsScreen(
 
       // About Kora Card
       Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -466,12 +484,12 @@ fun SettingsScreen(
             Icon(
               imageVector = Icons.Default.Info,
               contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
+              tint = colors.primary,
               modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-              text = "Kora Architecture",
+              text = strings.aboutKoraTitle,
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.SemiBold
             )
@@ -479,12 +497,14 @@ fun SettingsScreen(
 
           Spacer(modifier = Modifier.height(8.dp))
           Text(
-            text = "Designed for high-signal communication with quiet presence, context threads, and zero algorithmic noise. Built natively with Jetpack Compose & Firebase Cloud Sync.",
+            text = strings.aboutKoraDesc,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = colors.onSurfaceVariant
           )
         }
       }
+
+      Spacer(modifier = Modifier.height(16.dp))
     }
 
     // Quick-Access Theme Switcher Bottom Sheet

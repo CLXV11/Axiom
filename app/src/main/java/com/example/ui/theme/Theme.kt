@@ -12,6 +12,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 /**
  * Builds dynamic color schemes based on AppThemePreset, AMOLED black mode, and custom accent choice.
@@ -33,89 +34,107 @@ fun buildKoraColorScheme(
     preset.primaryColor
   }
 
-  val baseBg = if (isDark) {
-    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF000000)
-    else preset.backgroundColor
+  val onPrimaryColor = if (basePrimary.luminance() > 0.52f) {
+    Color(0xFF0B0F19)
   } else {
     PureWhite
   }
 
+  val baseBg = if (isDark) {
+    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF000000)
+    else preset.backgroundColor
+  } else {
+    Color(0xFFF6F8FC)
+  }
+
   val baseSurface = if (isDark) {
-    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF0C0E12)
+    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF0D1117)
     else preset.surfaceColor
   } else {
-    Color(0xFFF2F3F5)
+    PureWhite
   }
 
   val baseInput = if (isDark) {
-    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF16181D)
+    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF161B24)
     else when (preset) {
-      AppThemePreset.NITRO_MAGENTA -> Color(0xFF2C1E3C)
-      AppThemePreset.CYBER_EMERALD -> Color(0xFF1B3027)
-      AppThemePreset.CRIMSON_RUBY -> Color(0xFF341B21)
-      AppThemePreset.SOLAR_AMBER -> Color(0xFF34281A)
+      AppThemePreset.NITRO_MAGENTA -> Color(0xFF281C34)
+      AppThemePreset.CYBER_EMERALD -> Color(0xFF182E28)
+      AppThemePreset.CRIMSON_RUBY -> Color(0xFF301A20)
+      AppThemePreset.SOLAR_AMBER -> Color(0xFF2E2618)
       else -> DiscordDarkInput
     }
   } else {
-    Color(0xFFE3E5E8)
+    Color(0xFFEDF1F7)
   }
 
   val baseBorder = if (isDark) {
-    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF22262E)
+    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF212836)
     else when (preset) {
-      AppThemePreset.NITRO_MAGENTA -> Color(0xFF452D5C)
-      AppThemePreset.CYBER_EMERALD -> Color(0xFF28483B)
-      AppThemePreset.CRIMSON_RUBY -> Color(0xFF4A252E)
-      AppThemePreset.SOLAR_AMBER -> Color(0xFF4A3824)
+      AppThemePreset.NITRO_MAGENTA -> Color(0xFF3B294D)
+      AppThemePreset.CYBER_EMERALD -> Color(0xFF224238)
+      AppThemePreset.CRIMSON_RUBY -> Color(0xFF45242C)
+      AppThemePreset.SOLAR_AMBER -> Color(0xFF423622)
       else -> DiscordBorder
     }
   } else {
-    Color(0xFFDCDDDE)
+    Color(0xFFDCE3EE)
   }
 
   val colorScheme = if (isDark) {
     darkColorScheme(
       primary = basePrimary,
-      onPrimary = PureWhite,
-      primaryContainer = basePrimary.copy(alpha = 0.35f),
+      onPrimary = onPrimaryColor,
+      primaryContainer = basePrimary.copy(alpha = 0.20f),
       onPrimaryContainer = DiscordTextPrimary,
-      secondary = DiscordTextInteractive,
-      onSecondary = DiscordDarkDeepest,
+      secondary = KoraCyanAccent,
+      onSecondary = Color(0xFF0B0F19),
       secondaryContainer = baseInput,
       onSecondaryContainer = DiscordTextPrimary,
       tertiary = basePrimary,
-      onTertiary = PureWhite,
+      onTertiary = onPrimaryColor,
       background = baseBg,
       onBackground = DiscordTextPrimary,
       surface = baseSurface,
       onSurface = DiscordTextPrimary,
       surfaceVariant = baseInput,
-      onSurfaceVariant = DiscordTextNormal,
+      onSurfaceVariant = DiscordTextMuted,
+      surfaceContainerLow = baseBg,
+      surfaceContainer = baseSurface,
+      surfaceContainerHigh = baseInput,
+      inverseSurface = Color(0xFF1E293B),
+      inverseOnSurface = DiscordTextPrimary,
+      inversePrimary = basePrimary,
       outline = baseBorder,
-      outlineVariant = if (amoledPureBlack) Color(0xFF14161B) else DiscordDarkElevated,
+      outlineVariant = baseBorder.copy(alpha = 0.7f),
       error = SemanticError,
       onError = PureWhite
     )
   } else {
     lightColorScheme(
       primary = basePrimary,
-      onPrimary = PureWhite,
-      primaryContainer = basePrimary.copy(alpha = 0.15f),
+      onPrimary = onPrimaryColor,
+      primaryContainer = basePrimary.copy(alpha = 0.14f),
       onPrimaryContainer = basePrimary,
-      secondary = Slate600,
+      secondary = Color(0xFF0891B2),
       onSecondary = PureWhite,
-      secondaryContainer = Slate100,
-      onSecondaryContainer = DiscordDarkDeepest,
+      secondaryContainer = Color(0xFFEFF3FA),
+      onSecondaryContainer = Color(0xFF0F172A),
       tertiary = basePrimary,
-      onTertiary = PureWhite,
-      background = PureWhite,
-      onBackground = Color(0xFF060607),
-      surface = Color(0xFFF2F3F5),
-      onSurface = Color(0xFF060607),
-      surfaceVariant = Color(0xFFE3E5E8),
-      onSurfaceVariant = Color(0xFF2E3338),
-      outline = Color(0xFFDCDDDE),
-      outlineVariant = Color(0xFFE3E5E8),
+      onTertiary = onPrimaryColor,
+      background = baseBg,
+      onBackground = Color(0xFF0F172A),
+      surface = baseSurface,
+      onSurface = Color(0xFF0F172A),
+      surfaceVariant = baseInput,
+      onSurfaceVariant = Color(0xFF475569),
+      surfaceContainerLow = Color(0xFFF1F5F9),
+      surfaceContainer = PureWhite,
+      surfaceContainerHigh = baseInput,
+      inverseSurface = Color(0xFF0F172A),
+      inverseOnSurface = PureWhite,
+      inversePrimary = basePrimary,
+      outline = baseBorder,
+      outlineVariant = Color(0xFFE2E8F0),
       error = SemanticError,
       onError = PureWhite
     )
@@ -135,7 +154,6 @@ fun buildKoraColorScheme(
 
 /**
  * Centralized design system accessor for Kora.
- * Provides colors, typography, shapes, consistent spacing units, and extended semantic tokens.
  */
 object KoraTheme {
   val colors: ColorScheme

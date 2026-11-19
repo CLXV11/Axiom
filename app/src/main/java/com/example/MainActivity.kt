@@ -92,6 +92,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 private fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
   val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
@@ -156,50 +157,46 @@ class MainActivity : ComponentActivity() {
 
             val currentUser by Firebase.auth.authStateFlow()
               .collectAsState(initial = Firebase.auth.currentUser)
-            var isCheckingSilentAuth by remember {
-              mutableStateOf(Firebase.auth.currentUser == null)
-            }
 
-            // Cold-start silent Google Sign-In attempt for pre-authorized accounts only
+            // Non-blocking cold-start silent Google Sign-In attempt for pre-authorized accounts
             LaunchedEffect(Unit) {
               if (Firebase.auth.currentUser == null) {
-                try {
-                  val clientIdRes = resources.getIdentifier("default_web_client_id", "string", packageName)
-                  val clientId = if (clientIdRes != 0) getString(clientIdRes) else ""
-                  if (clientId.isNotBlank()) {
-                    val googleIdOption = GetGoogleIdOption.Builder()
-                      .setFilterByAuthorizedAccounts(true)
-                      .setServerClientId(clientId)
-                      .setAutoSelectEnabled(true)
-                      .build()
-                    val request = GetCredentialRequest.Builder()
-                      .addCredentialOption(googleIdOption)
-                      .build()
-                    val result = credentialManager.getCredential(this@MainActivity, request)
-                    val credential = result.credential
-                    if (credential is CustomCredential &&
-                      credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                    ) {
-                      val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-                      val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-                      Firebase.auth.signInWithCredential(authCredential).await()
+                withTimeoutOrNull(1800L) {
+                  try {
+                    val clientIdRes = resources.getIdentifier("default_web_client_id", "string", packageName)
+                    val clientId = if (clientIdRes != 0) getString(clientIdRes) else ""
+                    if (clientId.isNotBlank()) {
+                      val googleIdOption = GetGoogleIdOption.Builder()
+                        .setFilterByAuthorizedAccounts(true)
+                        .setServerClientId(clientId)
+                        .setAutoSelectEnabled(true)
+                        .build()
+                      val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+                      val result = credentialManager.getCredential(this@MainActivity, request)
+                      val credential = result.credential
+                      if (credential is CustomCredential &&
+                        credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                      ) {
+                        val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
+                        val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
+                        Firebase.auth.signInWithCredential(authCredential).await()
+                      }
                     }
+                  } catch (_: NoCredentialException) {
+                    // No previously authorized Google account
+                  } catch (_: GetCredentialCancellationException) {
+                    // Cancelled silently
+                  } catch (_: Exception) {
+                    // Fallback cleanly to manual Sign in with Google button
                   }
-                } catch (_: NoCredentialException) {
-                  // No previously authorized Google account; show manual sign-in button
-                } catch (_: GetCredentialCancellationException) {
-                  // Cancelled silently
-                } catch (_: Exception) {
-                  // Fallback cleanly to manual Sign in with Google button
-                } finally {
-                  isCheckingSilentAuth = false
                 }
-              } else {
-                isCheckingSilentAuth = false
               }
             }
 
             val signOutAction: () -> Unit = {
+              prefs.clearCachedProfile()
               coroutineScope.launch {
                 withContext(NonCancellable) {
                   runCatching {
@@ -214,27 +211,42 @@ class MainActivity : ComponentActivity() {
             if (signedInUser == null) {
               AuthScreen(
                 userRepository = userRepository,
-                onAuthSuccess = { /* Reactive authStateFlow transitions automatically */ },
-                isCheckingAutoSignIn = isCheckingSilentAuth
+                onAuthSuccess = { saved ->
+                  prefs.saveCachedProfile(saved)
+                },
+                isCheckingAutoSignIn = false
               )
             } else {
             key(signedInUser.uid) {
-              var profileState by remember { mutableStateOf<ProfileLoadState>(ProfileLoadState.Loading) }
+              val cachedProfile = remember(signedInUser.uid) {
+                prefs.getCachedProfile(signedInUser.uid)
+              }
+              var profileState by remember {
+                mutableStateOf<ProfileLoadState>(
+                  cachedProfile?.let { ProfileLoadState.Ready(it) } ?: ProfileLoadState.Loading
+                )
+              }
               var reloadTrigger by remember { mutableIntStateOf(0) }
 
               LaunchedEffect(signedInUser.uid, reloadTrigger) {
-                profileState = ProfileLoadState.Loading
+                if (profileState !is ProfileLoadState.Ready) {
+                  profileState = ProfileLoadState.Loading
+                }
                 try {
                   val loaded = userRepository.getUserProfile(signedInUser.uid)
-                  profileState = if (loaded != null) {
-                    ProfileLoadState.Ready(loaded)
+                  if (loaded != null) {
+                    prefs.saveCachedProfile(loaded)
+                    profileState = ProfileLoadState.Ready(loaded)
                   } else {
-                    ProfileLoadState.NeedsSetup
+                    prefs.clearCachedProfile()
+                    profileState = ProfileLoadState.NeedsSetup
                   }
                 } catch (e: Exception) {
-                  profileState = ProfileLoadState.Error(
-                    e.localizedMessage ?: strings.errorOccurred
-                  )
+                  if (profileState !is ProfileLoadState.Ready) {
+                    profileState = ProfileLoadState.Error(
+                      e.localizedMessage ?: strings.errorOccurred
+                    )
+                  }
                 }
               }
 
@@ -315,7 +327,10 @@ class MainActivity : ComponentActivity() {
                   AuthScreen(
                     userRepository = userRepository,
                     startInProfileSetup = true,
-                    onAuthSuccess = { saved -> profileState = ProfileLoadState.Ready(saved) },
+                    onAuthSuccess = { saved ->
+                      prefs.saveCachedProfile(saved)
+                      profileState = ProfileLoadState.Ready(saved)
+                    },
                     onSwitchAccount = signOutAction
                   )
                 }

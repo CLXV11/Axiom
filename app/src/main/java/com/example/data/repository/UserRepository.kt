@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.tasks.await
 
 class UserRepository(
@@ -75,20 +76,27 @@ class UserRepository(
     return getEffectiveUserId()
   }
 
+  fun getCachedProfile(userId: String): UserProfile? = prefsManager?.getCachedProfile(userId)
+
   fun observeUserProfile(userId: String): Flow<UserProfile?> {
     if (auth.currentUser != null) {
       val docRef = db.collection("users").document(userId)
       return docRef.snapshots()
         .map { snapshot ->
           if (snapshot.exists()) {
-            snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
+              prefsManager?.saveCachedProfile(it)
+            }
           } else {
             null
           }
         }
+        .onStart {
+          prefsManager?.getCachedProfile(userId)?.let { emit(it) }
+        }
         .catch { e ->
           handleFirestoreError(e, OperationType.GET, docRef.path, auth)
-          emit(null)
+          emit(prefsManager?.getCachedProfile(userId))
         }
     } else {
       return localUserProfileFlow.asStateFlow()
@@ -101,7 +109,9 @@ class UserRepository(
       return try {
         val snapshot = docRef.get().await()
         if (snapshot.exists()) {
-          snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+          snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
+            prefsManager?.saveCachedProfile(it)
+          }
         } else {
           null
         }
@@ -177,6 +187,7 @@ class UserRepository(
           docRef.update(payload).await()
         }
         localUserProfileFlow.value = normalizedProfile
+        prefsManager?.saveCachedProfile(normalizedProfile)
         Result.success(Unit)
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.WRITE, docRef.path, auth)

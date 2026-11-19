@@ -1,17 +1,17 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,13 +20,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -34,19 +34,19 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.MonetizationOn
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
@@ -58,7 +58,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -68,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,11 +76,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.DecorationItem
 import com.example.data.model.DecorationType
 import com.example.data.model.ItemRarity
+import com.example.data.model.UserProfile
 import com.example.data.repository.StoreRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
 import com.example.ui.components.RoleNameplateView
-import com.example.ui.theme.KoraTheme
 import com.example.ui.util.AppLanguage
 import com.example.ui.util.LocalAppLanguage
 import com.example.ui.util.LocalAppStrings
@@ -102,22 +102,26 @@ fun DecorationStoreScreen(
   val strings = LocalAppStrings.current
   val currentLang = LocalAppLanguage.current
   val isArabic = currentLang == AppLanguage.AR
+  val colors = MaterialTheme.colorScheme
 
   val coins by storeRepository.coinBalance.collectAsState()
   val equippedFrame by storeRepository.equippedFrame.collectAsState()
   val equippedNameplate by storeRepository.equippedNameplate.collectAsState()
 
   val currentUid = remember {
-    try { userRepository.requireUserId() } catch (e: Exception) { null }
+    runCatching { userRepository.requireUserId() }.getOrNull()
+  }
+  val cachedUser = remember(currentUid) {
+    currentUid?.let { userRepository.getCachedProfile(it) }
   }
   val currentUser by if (currentUid != null) {
-    userRepository.observeUserProfile(currentUid).collectAsState(initial = null)
+    userRepository.observeUserProfile(currentUid).collectAsState(initial = cachedUser)
   } else {
-    remember { mutableStateOf<com.example.data.model.UserProfile?>(null) }
+    remember { mutableStateOf<UserProfile?>(null) }
   }
 
   var selectedTab by remember { mutableStateOf(StoreTab.CUSTOM_DECORATION) }
-  var selectedCategory by remember { mutableStateOf<DecorationType?>(null) } // null = All
+  var selectedCategory by remember { mutableStateOf<DecorationType?>(null) }
   var previewItem by remember { mutableStateOf<DecorationItem?>(null) }
   var dailyClaimed by remember { mutableStateOf(false) }
 
@@ -132,160 +136,180 @@ fun DecorationStoreScreen(
     }
   }
 
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(Color(0xFF090D16)) // Dark gaming aesthetic from reference screenshots
-      .statusBarsPadding()
-      .navigationBarsPadding()
-  ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-      // 1. Top Header Row: Back, Title, Coin Balance pill
-      Row(
+  Scaffold(
+    containerColor = colors.background,
+    snackbarHost = {
+      SnackbarHost(hostState = snackbarHostState) { data ->
+        Snackbar(
+          snackbarData = data,
+          containerColor = colors.surfaceVariant,
+          contentColor = colors.onSurface,
+          shape = RoundedCornerShape(14.dp)
+        )
+      }
+    },
+    topBar = {
+      Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+          .background(colors.surface)
+          .statusBarsPadding()
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(onClick = onBack) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Back",
-              tint = Color.White
-            )
-          }
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = strings.storeTitle,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp
-          )
-        }
-
-        // Coin Balance Pill
+        // 1. Top Header Row: Back, Title (weighted), Coin Balance Pill
         Row(
           modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF1E293B))
-            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-            .clickable { selectedTab = StoreTab.BUY_COINS }
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .fillMaxWidth()
+            .height(58.dp)
+            .padding(horizontal = 8.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Icon(
-            imageVector = Icons.Default.MonetizationOn,
-            contentDescription = null,
-            tint = Color(0xFFFBBF24),
-            modifier = Modifier.size(18.dp)
-          )
-          Spacer(modifier = Modifier.width(5.dp))
-          Text(
-            text = "$coins",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp
-          )
-          Spacer(modifier = Modifier.width(4.dp))
-          Box(
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+          ) {
+            IconButton(onClick = onBack) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = strings.cancel,
+                tint = colors.onSurface
+              )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = strings.storeTitle,
+              style = MaterialTheme.typography.titleMedium,
+              color = colors.onSurface,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+
+          Spacer(modifier = Modifier.width(10.dp))
+
+          // Coin Balance Pill
+          Row(
             modifier = Modifier
-              .size(16.dp)
-              .clip(CircleShape)
-              .background(Color(0xFFF59E0B)),
-            contentAlignment = Alignment.Center
+              .clip(RoundedCornerShape(20.dp))
+              .background(colors.surfaceVariant)
+              .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f), RoundedCornerShape(20.dp))
+              .clickable { selectedTab = StoreTab.BUY_COINS }
+              .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
-              imageVector = Icons.Default.Add,
-              contentDescription = "Add",
-              tint = Color.Black,
-              modifier = Modifier.size(12.dp)
+              imageVector = Icons.Default.MonetizationOn,
+              contentDescription = null,
+              tint = Color(0xFFF59E0B),
+              modifier = Modifier.size(16.dp)
             )
-          }
-        }
-      }
-
-      // 2. Top Tabs: Buy Coins | Earn Coins | Custom Decoration (NEW)
-      TabRow(
-        selectedTabIndex = selectedTab.ordinal,
-        containerColor = Color.Transparent,
-        contentColor = Color.White,
-        divider = {
-          HorizontalDivider(color = Color(0xFF1E293B))
-        },
-        indicator = { tabPositions ->
-          TabRowDefaults.SecondaryIndicator(
-            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
-            color = Color(0xFFEC4899), // Neon magenta underline from reference
-            height = 3.dp
-          )
-        }
-      ) {
-        Tab(
-          selected = selectedTab == StoreTab.BUY_COINS,
-          onClick = { selectedTab = StoreTab.BUY_COINS },
-          text = {
+            Spacer(modifier = Modifier.width(5.dp))
             Text(
-              text = strings.buyCoins,
-              fontWeight = if (selectedTab == StoreTab.BUY_COINS) FontWeight.Bold else FontWeight.Normal,
-              color = if (selectedTab == StoreTab.BUY_COINS) Color.White else Color(0xFF94A3B8),
-              fontSize = 14.sp
+              text = "$coins",
+              color = colors.onSurface,
+              fontWeight = FontWeight.Bold,
+              style = MaterialTheme.typography.labelLarge,
+              maxLines = 1,
+              softWrap = false
             )
-          }
-        )
-
-        Tab(
-          selected = selectedTab == StoreTab.EARN_COINS,
-          onClick = { selectedTab = StoreTab.EARN_COINS },
-          text = {
-            Text(
-              text = strings.earnCoins,
-              fontWeight = if (selectedTab == StoreTab.EARN_COINS) FontWeight.Bold else FontWeight.Normal,
-              color = if (selectedTab == StoreTab.EARN_COINS) Color.White else Color(0xFF94A3B8),
-              fontSize = 14.sp
-            )
-          }
-        )
-
-        Tab(
-          selected = selectedTab == StoreTab.CUSTOM_DECORATION,
-          onClick = { selectedTab = StoreTab.CUSTOM_DECORATION },
-          text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = strings.customDecoration,
-                fontWeight = if (selectedTab == StoreTab.CUSTOM_DECORATION) FontWeight.Bold else FontWeight.Normal,
-                color = if (selectedTab == StoreTab.CUSTOM_DECORATION) Color.White else Color(0xFF94A3B8),
-                fontSize = 14.sp
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+              modifier = Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFF59E0B)),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = strings.buyCoins,
+                tint = Color(0xFF0B0F19),
+                modifier = Modifier.size(11.dp)
               )
-              Spacer(modifier = Modifier.width(4.dp))
-              Box(
-                modifier = Modifier
-                  .clip(RoundedCornerShape(4.dp))
-                  .background(Color(0xFFEF4444))
-                  .padding(horizontal = 4.dp, vertical = 1.dp)
-              ) {
-                Text(
-                  text = "NEW",
-                  color = Color.White,
-                  fontSize = 9.sp,
-                  fontWeight = FontWeight.Black
-                )
-              }
             }
           }
-        )
-      }
+        }
 
-      // Tab Content View
+        // 2. Top Tabs: Buy Coins | Earn Coins | Custom Decoration
+        TabRow(
+          selectedTabIndex = selectedTab.ordinal,
+          containerColor = colors.surface,
+          contentColor = colors.primary,
+          divider = {
+            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.45f))
+          },
+          indicator = { tabPositions ->
+            TabRowDefaults.SecondaryIndicator(
+              modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
+              color = colors.primary,
+              height = 3.dp
+            )
+          }
+        ) {
+          Tab(
+            selected = selectedTab == StoreTab.BUY_COINS,
+            onClick = { selectedTab = StoreTab.BUY_COINS },
+            text = {
+              Text(
+                text = strings.buyCoins,
+                fontWeight = if (selectedTab == StoreTab.BUY_COINS) FontWeight.Bold else FontWeight.Medium,
+                color = if (selectedTab == StoreTab.BUY_COINS) colors.onSurface else colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          )
+
+          Tab(
+            selected = selectedTab == StoreTab.EARN_COINS,
+            onClick = { selectedTab = StoreTab.EARN_COINS },
+            text = {
+              Text(
+                text = strings.earnCoins,
+                fontWeight = if (selectedTab == StoreTab.EARN_COINS) FontWeight.Bold else FontWeight.Medium,
+                color = if (selectedTab == StoreTab.EARN_COINS) colors.onSurface else colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          )
+
+          Tab(
+            selected = selectedTab == StoreTab.CUSTOM_DECORATION,
+            onClick = { selectedTab = StoreTab.CUSTOM_DECORATION },
+            text = {
+              Text(
+                text = strings.customDecoration,
+                fontWeight = if (selectedTab == StoreTab.CUSTOM_DECORATION) FontWeight.Bold else FontWeight.Medium,
+                color = if (selectedTab == StoreTab.CUSTOM_DECORATION) colors.onSurface else colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          )
+        }
+      }
+    }
+  ) { paddingValues ->
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(paddingValues)
+        .navigationBarsPadding()
+    ) {
       when (selectedTab) {
         StoreTab.CUSTOM_DECORATION -> {
-          // Subcategory Filter Chips: All, Avatar Frames, Role Nameplates
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = 14.dp, vertical = 8.dp),
+              .horizontalScroll(rememberScrollState())
+              .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
@@ -306,28 +330,17 @@ fun DecorationStoreScreen(
             )
           }
 
-          // Banner Slogan
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 14.dp, vertical = 4.dp)
-          ) {
-            Text(
-              text = strings.shopBannerText,
-              color = Color(0xFFE2E8F0),
-              fontSize = 13.sp,
-              fontWeight = FontWeight.Medium,
-              style = androidx.compose.ui.text.TextStyle(
-                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-              )
-            )
-          }
+          Text(
+            text = strings.shopBannerText,
+            color = colors.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+          )
 
-          // 2-Column Store Grid
           LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
           ) {
@@ -352,7 +365,7 @@ fun DecorationStoreScreen(
             onBuyPack = { amount ->
               storeRepository.addCoins(amount)
               coroutineScope.launch {
-                snackbarHostState.showSnackbar("+$amount ${strings.buyCoins}!")
+                snackbarHostState.showSnackbar("+$amount ${strings.coinsUnit}")
               }
             }
           )
@@ -362,10 +375,10 @@ fun DecorationStoreScreen(
           EarnCoinsTabContent(
             dailyClaimed = dailyClaimed,
             onClaimDaily = {
-              val reward = storeRepository.claimDailyReward()
+              storeRepository.claimDailyReward()
               dailyClaimed = true
               coroutineScope.launch {
-                snackbarHostState.showSnackbar(strings.purchasedSuccess)
+                snackbarHostState.showSnackbar(strings.coinsClaimed)
               }
             }
           )
@@ -373,7 +386,7 @@ fun DecorationStoreScreen(
       }
     }
 
-    // Live Preview BottomSheet / Modal
+    // Live Preview BottomSheet
     if (previewItem != null) {
       val item = previewItem!!
       val isOwned = storeRepository.isOwned(item.id)
@@ -383,35 +396,36 @@ fun DecorationStoreScreen(
       ModalBottomSheet(
         onDismissRequest = { previewItem = null },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color(0xFF0F172A),
-        contentColor = Color.White
+        containerColor = colors.surface,
+        contentColor = colors.onSurface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
       ) {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 16.dp)
+            .navigationBarsPadding(),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          // Preview Stage
           Box(
             modifier = Modifier
-              .size(140.dp)
+              .size(144.dp)
               .clip(RoundedCornerShape(24.dp))
               .background(
                 Brush.radialGradient(
-                  colors = listOf(Color(0xFF1E293B), Color(0xFF090D16))
+                  colors = listOf(colors.surfaceVariant, colors.background)
                 )
               )
-              .border(1.dp, Color(0xFF334155), RoundedCornerShape(24.dp)),
+              .border(1.dp, colors.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(24.dp)),
             contentAlignment = Alignment.Center
           ) {
-            val userDisplayName = currentUser?.displayName ?: "User"
+            val userDisplayName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: strings.appName
             val userAvatarUrl = currentUser?.avatarUrl
             if (item.type == DecorationType.AVATAR_FRAME) {
               AvatarView(
                 name = userDisplayName,
                 avatarUrl = userAvatarUrl,
-                size = 100.dp,
+                size = 96.dp,
                 frameStyleKey = item.styleKey
               )
             } else {
@@ -433,7 +447,6 @@ fun DecorationStoreScreen(
 
           Spacer(modifier = Modifier.height(16.dp))
 
-          // Rarity & Title
           Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
               imageVector = Icons.Default.Diamond,
@@ -442,16 +455,16 @@ fun DecorationStoreScreen(
                 ItemRarity.LEGENDARY -> Color(0xFFF59E0B)
                 ItemRarity.EPIC -> Color(0xFFA855F7)
                 ItemRarity.RARE -> Color(0xFF38BDF8)
-                ItemRarity.COMMON -> Color(0xFF94A3B8)
+                ItemRarity.COMMON -> colors.onSurfaceVariant
               },
               modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
               text = if (isArabic) item.nameAr else item.nameEn,
-              color = Color.White,
+              color = colors.onSurface,
               fontWeight = FontWeight.Bold,
-              fontSize = 20.sp
+              style = MaterialTheme.typography.titleLarge
             )
           }
 
@@ -459,47 +472,45 @@ fun DecorationStoreScreen(
 
           Text(
             text = if (isArabic) item.descriptionAr else item.descriptionEn,
-            color = Color(0xFF94A3B8),
-            fontSize = 13.sp,
+            color = colors.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 12.dp)
           )
 
           Spacer(modifier = Modifier.height(16.dp))
 
-          // Price Tag
           Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
               .clip(RoundedCornerShape(12.dp))
-              .background(Color(0xFF1E293B))
+              .background(colors.surfaceVariant)
               .padding(horizontal = 16.dp, vertical = 8.dp)
           ) {
             Icon(
               imageVector = Icons.Default.MonetizationOn,
               contentDescription = null,
-              tint = Color(0xFFFBBF24),
+              tint = Color(0xFFF59E0B),
               modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-              text = "${item.price}",
-              color = Color.White,
+              text = "${item.price} ${strings.coinsUnit}",
+              color = colors.onSurface,
               fontWeight = FontWeight.Bold,
-              fontSize = 16.sp
+              style = MaterialTheme.typography.titleSmall
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
               text = if (isArabic) item.rarity.labelAr else item.rarity.labelEn,
-              color = Color(0xFFFBBF24),
-              fontSize = 12.sp,
+              color = Color(0xFFF59E0B),
+              style = MaterialTheme.typography.labelMedium,
               fontWeight = FontWeight.SemiBold
             )
           }
 
-          Spacer(modifier = Modifier.height(24.dp))
+          Spacer(modifier = Modifier.height(22.dp))
 
-          // Action Buttons
           when {
             isEquipped -> {
               OutlinedButton(
@@ -511,9 +522,10 @@ fun DecorationStoreScreen(
                   }
                   previewItem = null
                 },
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444))
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
+                border = BorderStroke(1.dp, colors.error.copy(alpha = 0.6f))
               ) {
                 Text(strings.unequip, fontWeight = FontWeight.Bold)
               }
@@ -528,10 +540,14 @@ fun DecorationStoreScreen(
                     snackbarHostState.showSnackbar(strings.purchasedSuccess)
                   }
                 },
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = colors.primary,
+                  contentColor = colors.onPrimary
+                )
               ) {
-                Text(strings.equip, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(strings.equip, fontWeight = FontWeight.Bold)
               }
             }
 
@@ -555,15 +571,16 @@ fun DecorationStoreScreen(
                     previewItem = null
                   }
                 },
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                  containerColor = if (canAfford) Color(0xFFD97706) else Color(0xFF475569)
+                  containerColor = if (canAfford) colors.primary else colors.surfaceVariant,
+                  contentColor = if (canAfford) colors.onPrimary else colors.onSurfaceVariant
                 )
               ) {
                 Text(
                   text = "${strings.buyFor} ${item.price}",
-                  fontWeight = FontWeight.Bold,
-                  color = Color.White
+                  fontWeight = FontWeight.Bold
                 )
               }
             }
@@ -573,13 +590,6 @@ fun DecorationStoreScreen(
         }
       }
     }
-
-    SnackbarHost(
-      hostState = snackbarHostState,
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .padding(16.dp)
-    )
   }
 }
 
@@ -589,23 +599,28 @@ private fun StoreFilterChip(
   selected: Boolean,
   onClick: () -> Unit
 ) {
+  val colors = MaterialTheme.colorScheme
   Box(
     modifier = Modifier
-      .clip(RoundedCornerShape(16.dp))
-      .background(if (selected) Color(0xFF4338CA) else Color(0xFF1E293B))
+      .defaultMinSize(minHeight = 36.dp)
+      .clip(RoundedCornerShape(12.dp))
+      .background(if (selected) colors.primary else colors.surfaceVariant.copy(alpha = 0.6f))
       .border(
         1.dp,
-        if (selected) Color(0xFF818CF8) else Color(0xFF334155),
-        RoundedCornerShape(16.dp)
+        if (selected) colors.primary else colors.outlineVariant.copy(alpha = 0.5f),
+        RoundedCornerShape(12.dp)
       )
       .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp, vertical = 6.dp)
+      .padding(horizontal = 14.dp, vertical = 8.dp),
+    contentAlignment = Alignment.Center
   ) {
     Text(
       text = label,
-      color = if (selected) Color.White else Color(0xFF94A3B8),
-      fontSize = 12.sp,
-      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+      color = if (selected) colors.onPrimary else colors.onSurfaceVariant,
+      style = MaterialTheme.typography.labelMedium,
+      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+      maxLines = 1,
+      softWrap = false
     )
   }
 }
@@ -619,40 +634,33 @@ private fun DecorationItemCard(
   onPreviewClick: () -> Unit
 ) {
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   val gemColor = when (item.rarity) {
     ItemRarity.LEGENDARY -> Color(0xFFF59E0B)
     ItemRarity.EPIC -> Color(0xFFA855F7)
     ItemRarity.RARE -> Color(0xFF38BDF8)
-    ItemRarity.COMMON -> Color(0xFF94A3B8)
+    ItemRarity.COMMON -> colors.onSurfaceVariant
   }
 
   Card(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(14.dp))
-      .border(
-        width = 1.dp,
-        brush = Brush.verticalGradient(
-          listOf(
-            Color(0xFFF59E0B).copy(alpha = 0.5f),
-            Color(0xFF312E81).copy(alpha = 0.3f),
-            Color(0xFF1E293B)
-          )
-        ),
-        shape = RoundedCornerShape(14.dp)
-      ),
-    colors = CardDefaults.cardColors(containerColor = Color(0xFF121926))
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    border = BorderStroke(
+      width = 1.dp,
+      color = if (isEquipped) Color(0xFF10B981).copy(alpha = 0.65f) else colors.outlineVariant.copy(alpha = 0.45f)
+    ),
+    colors = CardDefaults.cardColors(containerColor = colors.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
   ) {
-    Column(modifier = Modifier.padding(10.dp)) {
-      // 1. Showcase Pedestal Preview
+    Column(modifier = Modifier.padding(12.dp)) {
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(115.dp)
-          .clip(RoundedCornerShape(10.dp))
+          .height(112.dp)
+          .clip(RoundedCornerShape(12.dp))
           .background(
             Brush.verticalGradient(
-              listOf(Color(0xFF1E293B), Color(0xFF0B0F19))
+              listOf(colors.surfaceVariant, colors.background)
             )
           ),
         contentAlignment = Alignment.Center
@@ -660,7 +668,7 @@ private fun DecorationItemCard(
         if (item.type == DecorationType.AVATAR_FRAME) {
           AvatarView(
             name = "K",
-            size = 80.dp,
+            size = 76.dp,
             frameStyleKey = item.styleKey
           )
         } else {
@@ -678,28 +686,26 @@ private fun DecorationItemCard(
         }
       }
 
-      Spacer(modifier = Modifier.height(8.dp))
+      Spacer(modifier = Modifier.height(10.dp))
 
-      // 2. Price Row
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
           imageVector = Icons.Default.MonetizationOn,
           contentDescription = null,
-          tint = Color(0xFFFBBF24),
-          modifier = Modifier.size(15.dp)
+          tint = Color(0xFFF59E0B),
+          modifier = Modifier.size(14.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-          text = "${item.price}",
-          color = Color.White,
+          text = "${item.price} ${strings.coinsUnit}",
+          color = colors.onSurface,
           fontWeight = FontWeight.Bold,
-          fontSize = 14.sp
+          style = MaterialTheme.typography.labelLarge
         )
       }
 
       Spacer(modifier = Modifier.height(4.dp))
 
-      // 3. Gem Icon + Name
       Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
           imageVector = Icons.Default.Diamond,
@@ -710,9 +716,9 @@ private fun DecorationItemCard(
         Spacer(modifier = Modifier.width(5.dp))
         Text(
           text = if (isArabic) item.nameAr else item.nameEn,
-          color = Color.White,
+          color = colors.onSurface,
           fontWeight = FontWeight.Bold,
-          fontSize = 13.sp,
+          style = MaterialTheme.typography.bodyMedium,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
@@ -720,66 +726,55 @@ private fun DecorationItemCard(
 
       Spacer(modifier = Modifier.height(3.dp))
 
-      // 4. Description
       Text(
         text = if (isArabic) item.descriptionAr else item.descriptionEn,
-        color = Color(0xFF94A3B8),
-        fontSize = 11.sp,
+        color = colors.onSurfaceVariant,
+        style = MaterialTheme.typography.labelSmall,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
-        lineHeight = 14.sp
+        minLines = 2
       )
 
       Spacer(modifier = Modifier.height(10.dp))
 
-      // 5. Ornate Golden Sparkle "Preview" Button (Identical to reference screenshot)
-      Box(
+      Button(
+        onClick = onPreviewClick,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = if (isEquipped) Color(0xFF059669)
+          else if (isOwned) colors.primaryContainer
+          else colors.primary,
+          contentColor = if (isEquipped) Color.White
+          else if (isOwned) colors.onPrimaryContainer
+          else colors.onPrimary
+        ),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         modifier = Modifier
           .fillMaxWidth()
-          .height(34.dp)
-          .clip(RoundedCornerShape(6.dp))
-          .background(
-            if (isEquipped) {
-              Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF10B981)))
-            } else {
-              Brush.horizontalGradient(
-                listOf(
-                  Color(0xFFD97706),
-                  Color(0xFFF59E0B),
-                  Color(0xFFFDE68A),
-                  Color(0xFFF59E0B),
-                  Color(0xFFD97706)
-                )
-              )
-            }
-          )
-          .clickable(onClick = onPreviewClick),
-        contentAlignment = Alignment.Center
+          .height(38.dp)
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          if (isEquipped) {
-            Icon(
-              imageVector = Icons.Default.Check,
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-              text = strings.equipped,
-              color = Color.White,
-              fontWeight = FontWeight.Bold,
-              fontSize = 12.sp
-            )
-          } else {
-            Text(
-              text = "✦  ${strings.preview}  ✦",
-              color = Color(0xFF78350F),
-              fontWeight = FontWeight.ExtraBold,
-              fontSize = 12.sp,
-              letterSpacing = 0.5.sp
-            )
-          }
+        if (isEquipped) {
+          Icon(
+            imageVector = Icons.Default.Check,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp)
+          )
+          Spacer(modifier = Modifier.width(4.dp))
+          Text(
+            text = strings.equipped,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false
+          )
+        } else {
+          Text(
+            text = if (isOwned) strings.equip else strings.preview,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false
+          )
         }
       }
     }
@@ -789,41 +784,42 @@ private fun DecorationItemCard(
 @Composable
 private fun BuyCoinsTabContent(onBuyPack: (Int) -> Unit) {
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   Column(
     modifier = Modifier
       .fillMaxSize()
+      .verticalScroll(rememberScrollState())
       .padding(16.dp),
-    verticalArrangement = Arrangement.spacedBy(14.dp)
+    verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
     Text(
       text = strings.buyCoinsDesc,
-      color = Color(0xFF94A3B8),
-      fontSize = 13.sp
+      color = colors.onSurfaceVariant,
+      style = MaterialTheme.typography.bodyMedium
     )
 
     CoinPackCard(
       title = strings.packStarter,
       coins = 500,
-      badge = "Starter",
-      gradient = listOf(Color(0xFF3B82F6), Color(0xFF1E3A8A)),
+      gradient = listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8)),
       onBuy = { onBuyPack(500) }
     )
 
     CoinPackCard(
       title = strings.packPopular,
       coins = 2000,
-      badge = "Best Value",
-      gradient = listOf(Color(0xFF8B5CF6), Color(0xFF4C1D95)),
+      gradient = listOf(Color(0xFF8B5CF6), Color(0xFF5B21B6)),
       onBuy = { onBuyPack(2000) }
     )
 
     CoinPackCard(
       title = strings.packElite,
       coins = 5000,
-      badge = "Elite",
-      gradient = listOf(Color(0xFFF59E0B), Color(0xFF78350F)),
+      gradient = listOf(Color(0xFFF59E0B), Color(0xFFB45309)),
       onBuy = { onBuyPack(5000) }
     )
+
+    Spacer(modifier = Modifier.height(16.dp))
   }
 }
 
@@ -831,25 +827,31 @@ private fun BuyCoinsTabContent(onBuyPack: (Int) -> Unit) {
 private fun CoinPackCard(
   title: String,
   coins: Int,
-  badge: String,
   gradient: List<Color>,
   onBuy: () -> Unit
 ) {
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  val buttonColor = gradient.first()
+  val buttonFg = if (buttonColor.luminance() > 0.52f) Color(0xFF0B0F19) else Color.White
+
   Card(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(RoundedCornerShape(14.dp))
-      .border(1.dp, gradient.first().copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
-    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+    modifier = Modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(16.dp),
+    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f)),
+    colors = CardDefaults.cardColors(containerColor = colors.surface),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .padding(16.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween
+      verticalAlignment = Alignment.CenterVertically
     ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.weight(1f)
+      ) {
         Box(
           modifier = Modifier
             .size(46.dp)
@@ -861,22 +863,48 @@ private fun CoinPackCard(
             imageVector = Icons.Default.MonetizationOn,
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(24.dp)
           )
         }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column {
-          Text(text = title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-          Text(text = "$coins Coins", color = Color(0xFFFBBF24), fontSize = 13.sp)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = title,
+            color = colors.onSurface,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = "$coins ${strings.coinsUnit}",
+            color = Color(0xFFF59E0B),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+          )
         }
       }
 
+      Spacer(modifier = Modifier.width(12.dp))
+
       Button(
         onClick = onBuy,
-        colors = ButtonDefaults.buttonColors(containerColor = gradient.first()),
-        shape = RoundedCornerShape(10.dp)
+        colors = ButtonDefaults.buttonColors(
+          containerColor = buttonColor,
+          contentColor = buttonFg
+        ),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.defaultMinSize(minWidth = 72.dp, minHeight = 42.dp)
       ) {
-        Text("Get", fontWeight = FontWeight.Bold, color = Color.White)
+        Text(
+          text = strings.getPack,
+          fontWeight = FontWeight.Bold,
+          maxLines = 1,
+          softWrap = false
+        )
       }
     }
   }
@@ -888,41 +916,43 @@ private fun EarnCoinsTabContent(
   onClaimDaily: () -> Unit
 ) {
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   Column(
     modifier = Modifier
       .fillMaxSize()
+      .verticalScroll(rememberScrollState())
       .padding(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
     Card(
-      modifier = Modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(14.dp))
-        .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
-      colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(16.dp),
+      border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.45f)),
+      colors = CardDefaults.cardColors(containerColor = colors.surface),
+      elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
       Column(modifier = Modifier.padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
           Icon(
             imageVector = Icons.Default.AutoAwesome,
             contentDescription = null,
-            tint = Color(0xFF34D399),
+            tint = Color(0xFF10B981),
             modifier = Modifier.size(24.dp)
           )
           Spacer(modifier = Modifier.width(10.dp))
           Text(
             text = strings.dailyCheckIn,
-            color = Color.White,
+            color = colors.onSurface,
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp
+            style = MaterialTheme.typography.titleMedium
           )
         }
 
         Spacer(modifier = Modifier.height(6.dp))
         Text(
           text = strings.dailyCheckInDesc,
-          color = Color(0xFF94A3B8),
-          fontSize = 13.sp
+          color = colors.onSurfaceVariant,
+          style = MaterialTheme.typography.bodySmall
         )
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -930,14 +960,16 @@ private fun EarnCoinsTabContent(
         Button(
           onClick = onClaimDaily,
           enabled = !dailyClaimed,
-          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-          modifier = Modifier.fillMaxWidth().height(42.dp),
-          shape = RoundedCornerShape(10.dp)
+          colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF059669),
+            contentColor = Color.White
+          ),
+          modifier = Modifier.fillMaxWidth().height(46.dp),
+          shape = RoundedCornerShape(12.dp)
         ) {
           Text(
             text = if (dailyClaimed) strings.coinsClaimed else strings.claimCoins,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            fontWeight = FontWeight.Bold
           )
         }
       }

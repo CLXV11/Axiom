@@ -24,11 +24,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.DiscordTextMuted
 import com.example.ui.theme.KoraTheme
 import com.example.ui.theme.StatusOnline
 
@@ -45,17 +44,18 @@ fun KoraTopBar(
   actions: @Composable () -> Unit = {}
 ) {
   val spacing = KoraTheme.spacing
+  val colors = KoraTheme.colors
 
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .background(KoraTheme.colors.surface)
+      .background(colors.surface)
       .statusBarsPadding()
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(56.dp)
+        .height(58.dp)
         .padding(horizontal = spacing.small),
       verticalAlignment = Alignment.CenterVertically
     ) {
@@ -64,19 +64,18 @@ fun KoraTopBar(
           Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = "Back",
-            tint = KoraTheme.colors.onSurface
+            tint = colors.onSurface
           )
         }
       } else {
         Spacer(modifier = Modifier.width(spacing.small))
       }
 
-      // Discord Channel Prefix (# or @)
       if (prefixType == "channel") {
         Icon(
           imageVector = Icons.Default.Numbers,
           contentDescription = "Channel",
-          tint = DiscordTextMuted,
+          tint = colors.onSurfaceVariant,
           modifier = Modifier
             .padding(end = 6.dp)
             .size(20.dp)
@@ -84,7 +83,7 @@ fun KoraTopBar(
       } else if (prefixType == "dm") {
         Text(
           text = "@",
-          color = DiscordTextMuted,
+          color = colors.onSurfaceVariant,
           fontWeight = FontWeight.Bold,
           fontSize = 19.sp,
           modifier = Modifier.padding(end = 4.dp)
@@ -96,9 +95,10 @@ fun KoraTopBar(
           Text(
             text = title,
             style = KoraTheme.typography.titleMedium,
-            color = KoraTheme.colors.onSurface,
+            color = colors.onSurface,
             fontWeight = FontWeight.Bold,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
           )
           if (isVerified) {
             Spacer(modifier = Modifier.width(6.dp))
@@ -122,8 +122,9 @@ fun KoraTopBar(
             Text(
               text = subtitle,
               style = KoraTheme.typography.labelSmall,
-              color = DiscordTextMuted,
-              maxLines = 1
+              color = colors.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
         }
@@ -134,7 +135,7 @@ fun KoraTopBar(
           Icon(
             imageVector = Icons.Default.Translate,
             contentDescription = "Switch Language",
-            tint = KoraTheme.colors.onSurfaceVariant
+            tint = colors.onSurfaceVariant
           )
         }
       }
@@ -144,7 +145,7 @@ fun KoraTopBar(
 
     HorizontalDivider(
       thickness = 1.dp,
-      color = Color(0x33000000)
+      color = colors.outlineVariant.copy(alpha = 0.45f)
     )
   }
 }

@@ -62,7 +62,7 @@ fun ThemePreviewCard(
     modifier = modifier.fillMaxWidth()
   ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-      // Mock Discord Channel Top Bar
+      // Kora Channel Top Bar
       Row(
         modifier = Modifier
           .fillMaxWidth()
@@ -125,7 +125,7 @@ fun ThemePreviewCard(
           Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
               Text(
-                text = "Alex Kora",
+                text = strings.appName,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = colorScheme.primary
@@ -139,7 +139,7 @@ fun ThemePreviewCard(
               )
               Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = "Today at 4:20 PM",
+                text = "16:20",
                 fontSize = 10.sp,
                 color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
               )
@@ -189,13 +189,13 @@ fun ThemePreviewCard(
             modifier = Modifier
               .size(24.dp)
               .clip(CircleShape)
-              .background(Color(0xFF4E5058)),
+              .background(colorScheme.outlineVariant),
             contentAlignment = Alignment.Center
           ) {
             Icon(
               imageVector = Icons.Default.Add,
               contentDescription = null,
-              tint = Color.White,
+              tint = colorScheme.onSurface,
               modifier = Modifier.size(14.dp)
             )
           }
@@ -203,9 +203,9 @@ fun ThemePreviewCard(
           Spacer(modifier = Modifier.width(8.dp))
 
           Text(
-            text = "Message #${strings.livePreviewChannel}",
+            text = strings.typeMessage,
             fontSize = 11.sp,
-            color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            color = colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier.weight(1f)
           )
 

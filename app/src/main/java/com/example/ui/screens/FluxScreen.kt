@@ -127,6 +127,7 @@ import com.example.ui.theme.DiscordTextNormal
 import com.example.ui.theme.DiscordTextPrimary
 import com.example.ui.theme.KoraTheme
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -480,7 +481,7 @@ private fun FluxItemPage(
         }
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-          text = video.authorHandle,
+          text = formatHandleForDisplay(video.authorHandle),
           style = KoraTheme.typography.bodySmall,
           color = DiscordTextMuted
         )

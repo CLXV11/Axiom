@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -21,13 +23,11 @@ import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DynamicFeed
 import androidx.compose.material.icons.outlined.PersonOutline
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -40,11 +40,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.DiscordBlurple
-import com.example.ui.theme.DiscordDarkDeepest
-import com.example.ui.theme.DiscordTextMuted
-import com.example.ui.theme.DiscordTextPrimary
 import com.example.ui.theme.KoraTheme
 import com.example.ui.util.LocalAppStrings
 
@@ -69,18 +66,18 @@ fun KoraBottomNav(
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .background(DiscordDarkDeepest)
+      .background(KoraTheme.colors.surface)
       .windowInsetsPadding(WindowInsets.navigationBars)
   ) {
     HorizontalDivider(
       thickness = 1.dp,
-      color = Color(0x33000000)
+      color = KoraTheme.colors.outlineVariant.copy(alpha = 0.45f)
     )
 
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(64.dp)
+        .height(68.dp)
         .padding(horizontal = spacing.compact),
       horizontalArrangement = Arrangement.SpaceAround,
       verticalAlignment = Alignment.CenterVertically
@@ -137,17 +134,18 @@ private fun NavItem(
   onClick: () -> Unit
 ) {
   val interactionSource = remember { MutableInteractionSource() }
-  val spacing = KoraTheme.spacing
+  val colors = KoraTheme.colors
 
   Column(
     modifier = Modifier
+      .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
       .clip(RoundedCornerShape(16.dp))
       .clickable(
         interactionSource = interactionSource,
         indication = ripple(bounded = true, radius = 28.dp),
         onClick = onClick
       )
-      .padding(horizontal = spacing.compact, vertical = 4.dp),
+      .padding(horizontal = 6.dp, vertical = 4.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center
   ) {
@@ -156,7 +154,7 @@ private fun NavItem(
         .size(width = 48.dp, height = 28.dp)
         .clip(RoundedCornerShape(14.dp))
         .background(
-          if (isSelected) DiscordBlurple
+          if (isSelected) colors.primary
           else Color.Transparent
         ),
       contentAlignment = Alignment.Center
@@ -165,15 +163,20 @@ private fun NavItem(
         imageVector = if (isSelected) selectedIcon else unselectedIcon,
         contentDescription = label,
         modifier = Modifier.size(20.dp),
-        tint = if (isSelected) Color.White else DiscordTextMuted
+        tint = if (isSelected) colors.onPrimary else colors.onSurfaceVariant
       )
     }
+
+    Spacer(modifier = Modifier.height(2.dp))
 
     Text(
       text = label,
       style = KoraTheme.typography.labelSmall,
-      color = if (isSelected) DiscordTextPrimary else DiscordTextMuted,
-      fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+      color = if (isSelected) colors.primary else colors.onSurfaceVariant,
+      fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+      maxLines = 1,
+      softWrap = false,
+      overflow = TextOverflow.Ellipsis
     )
   }
 }

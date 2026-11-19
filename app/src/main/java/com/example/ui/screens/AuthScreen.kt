@@ -2,7 +2,9 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -223,10 +227,25 @@ fun AuthScreen(
     }
   }
 
+  val primaryColor = MaterialTheme.colorScheme.primary
+  val secondaryColor = MaterialTheme.colorScheme.secondary
+  val bgColor = MaterialTheme.colorScheme.background
+
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(MaterialTheme.colorScheme.background)
+      .background(bgColor)
+      .background(
+        Brush.radialGradient(
+          colors = listOf(
+            primaryColor.copy(alpha = 0.16f),
+            secondaryColor.copy(alpha = 0.05f),
+            bgColor
+          ),
+          center = Offset(500f, 350f),
+          radius = 1100f
+        )
+      )
       .imePadding()
       .verticalScroll(rememberScrollState())
       .padding(horizontal = 24.dp, vertical = 32.dp),
@@ -235,29 +254,38 @@ fun AuthScreen(
     Surface(
       modifier = Modifier
         .fillMaxWidth()
-        .widthIn(max = 520.dp)
-        .clip(RoundedCornerShape(24.dp)),
+        .widthIn(max = 480.dp),
+      shape = RoundedCornerShape(24.dp),
       color = MaterialTheme.colorScheme.surface,
-      tonalElevation = 2.dp
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+      tonalElevation = 0.dp
     ) {
       Column(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(32.dp),
+          .padding(horizontal = 24.dp, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         // Monogram Brand Icon
         Box(
           modifier = Modifier
-            .size(64.dp)
+            .size(68.dp)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primaryContainer),
+            .background(
+              Brush.linearGradient(
+                listOf(
+                  primaryColor.copy(alpha = 0.25f),
+                  secondaryColor.copy(alpha = 0.18f)
+                )
+              )
+            )
+            .border(1.dp, primaryColor.copy(alpha = 0.4f), CircleShape),
           contentAlignment = Alignment.Center
         ) {
           Icon(
             imageVector = Icons.Default.Forum,
             contentDescription = "Kora",
-            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            tint = primaryColor,
             modifier = Modifier.size(32.dp)
           )
         }

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -94,9 +95,10 @@ fun MemoryVaultScreen(
           )
         },
         singleLine = true,
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 8.dp)
+          .padding(horizontal = 16.dp, vertical = 10.dp)
           .testTag("search_memory_input")
       )
 
@@ -133,10 +135,12 @@ private fun SavedMemoryCard(
   memory: SavedMemory,
   onDelete: () -> Unit
 ) {
+  val strings = LocalAppStrings.current
   Card(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth()
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
@@ -145,7 +149,7 @@ private fun SavedMemoryCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
           Icon(
             imageVector = Icons.Default.FormatQuote,
             contentDescription = null,
@@ -153,7 +157,7 @@ private fun SavedMemoryCard(
             modifier = Modifier.size(18.dp)
           )
           Text(
-            text = "From ${memory.senderName}",
+            text = "${strings.fromLabel} ${memory.senderName}",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
@@ -198,7 +202,7 @@ private fun SavedMemoryCard(
           )
           Column(modifier = Modifier.padding(start = 8.dp)) {
             Text(
-              text = "Private Note",
+              text = strings.privateNoteLabel,
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.primary

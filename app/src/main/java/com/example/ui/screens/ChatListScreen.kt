@@ -133,7 +133,7 @@ fun ChatListScreen(
     topBar = {
       KoraTopBar(
         title = strings.conversations,
-        subtitle = if (conversations.size == 1) strings.aiAssistantSubtitle else "${conversations.size} active",
+        subtitle = if (conversations.size <= 1) strings.aiAssistantSubtitle else String.format(strings.activeChatsCount, conversations.size),
         onLanguageToggle = onLanguageToggle,
         actions = {
           IconButton(
@@ -401,7 +401,7 @@ private fun ConversationRow(
           Icon(
             imageVector = Icons.Default.AutoAwesome,
             contentDescription = title,
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(22.dp)
           )
         }
@@ -423,7 +423,10 @@ private fun ConversationRow(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f, fill = false)
+          ) {
             if (isPinned && !isAiChatbot) {
               Icon(
                 imageVector = Icons.Default.PushPin,

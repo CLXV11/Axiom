@@ -32,9 +32,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -49,20 +49,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AccentColorChoice
 import com.example.ui.theme.AppThemePreset
-import com.example.ui.theme.DiscordBlurple
-import com.example.ui.theme.DiscordBorder
-import com.example.ui.theme.DiscordDarkDeepest
-import com.example.ui.theme.DiscordDarkInput
-import com.example.ui.theme.DiscordDarkSecondary
-import com.example.ui.theme.DiscordTextMuted
-import com.example.ui.theme.DiscordTextNormal
-import com.example.ui.theme.DiscordTextPrimary
 import com.example.ui.theme.KoraTheme
 import com.example.ui.util.AppLanguage
 import com.example.ui.util.LocalAppLanguage
@@ -81,6 +75,7 @@ fun ThemeSwitcherSheet(
   val strings = LocalAppStrings.current
   val currentLanguage = LocalAppLanguage.current
   val isArabic = currentLanguage == AppLanguage.AR
+  val colors = MaterialTheme.colorScheme
 
   var selectedPreset by remember { mutableStateOf(currentPreset) }
   var isAmoled by remember { mutableStateOf(currentAmoled) }
@@ -89,8 +84,8 @@ fun ThemeSwitcherSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
-    containerColor = DiscordDarkSecondary,
-    contentColor = DiscordTextPrimary,
+    containerColor = colors.surface,
+    contentColor = colors.onSurface,
     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
   ) {
     Column(
@@ -107,39 +102,46 @@ fun ThemeSwitcherSheet(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.weight(1f)
+        ) {
           Box(
             modifier = Modifier
-              .size(36.dp)
+              .size(38.dp)
               .clip(CircleShape)
-              .background(DiscordBlurple.copy(alpha = 0.2f)),
+              .background(colors.primaryContainer),
             contentAlignment = Alignment.Center
           ) {
             Icon(
               imageVector = Icons.Default.Palette,
               contentDescription = null,
-              tint = DiscordBlurple,
+              tint = colors.primary,
               modifier = Modifier.size(20.dp)
             )
           }
-          Spacer(modifier = Modifier.width(10.dp))
+          Spacer(modifier = Modifier.width(12.dp))
           Column {
             Text(
               text = strings.themeSwitcherTitle,
               style = KoraTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
-              color = DiscordTextPrimary
+              color = colors.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
             Text(
               text = if (isArabic) selectedPreset.subtitleAr else selectedPreset.subtitleEn,
               style = KoraTheme.typography.labelSmall,
-              color = DiscordTextMuted
+              color = colors.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
             )
           }
         }
 
         IconButton(onClick = onDismiss) {
-          Icon(Icons.Default.Close, contentDescription = "Close", tint = DiscordTextMuted)
+          Icon(Icons.Default.Close, contentDescription = strings.cancel, tint = colors.onSurfaceVariant)
         }
       }
 
@@ -149,7 +151,7 @@ fun ThemeSwitcherSheet(
       Text(
         text = strings.themePreview,
         style = KoraTheme.typography.labelMedium,
-        color = DiscordTextMuted,
+        color = colors.onSurfaceVariant,
         fontWeight = FontWeight.Bold
       )
       Spacer(modifier = Modifier.height(6.dp))
@@ -165,7 +167,7 @@ fun ThemeSwitcherSheet(
       Text(
         text = strings.themePresets,
         style = KoraTheme.typography.titleSmall,
-        color = DiscordTextPrimary,
+        color = colors.onSurface,
         fontWeight = FontWeight.Bold
       )
       Spacer(modifier = Modifier.height(10.dp))
@@ -174,13 +176,13 @@ fun ThemeSwitcherSheet(
         AppThemePreset.entries.forEach { preset ->
           val isSelected = selectedPreset == preset
           Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(
-              containerColor = if (isSelected) DiscordBlurple.copy(alpha = 0.15f) else DiscordDarkInput
+              containerColor = if (isSelected) colors.primary.copy(alpha = 0.14f) else colors.surfaceVariant.copy(alpha = 0.65f)
             ),
             border = androidx.compose.foundation.BorderStroke(
-              width = if (isSelected) 2.dp else 1.dp,
-              color = if (isSelected) DiscordBlurple else DiscordBorder
+              width = if (isSelected) 1.5.dp else 1.dp,
+              color = if (isSelected) colors.primary else colors.outlineVariant.copy(alpha = 0.55f)
             ),
             modifier = Modifier
               .fillMaxWidth()
@@ -196,13 +198,12 @@ fun ThemeSwitcherSheet(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
               verticalAlignment = Alignment.CenterVertically
             ) {
-              // Dual-color palette preview badge
               Box(
                 modifier = Modifier
                   .size(36.dp)
                   .clip(CircleShape)
                   .background(preset.backgroundColor)
-                  .border(1.5.dp, DiscordBorder, CircleShape),
+                  .border(1.5.dp, colors.outline, CircleShape),
                 contentAlignment = Alignment.Center
               ) {
                 Box(
@@ -220,12 +221,12 @@ fun ThemeSwitcherSheet(
                   text = if (isArabic) preset.nameAr else preset.nameEn,
                   style = KoraTheme.typography.bodyMedium,
                   fontWeight = FontWeight.Bold,
-                  color = if (isSelected) DiscordBlurple else DiscordTextPrimary
+                  color = if (isSelected) colors.primary else colors.onSurface
                 )
                 Text(
                   text = if (isArabic) preset.subtitleAr else preset.subtitleEn,
                   style = KoraTheme.typography.labelSmall,
-                  color = DiscordTextMuted
+                  color = colors.onSurfaceVariant
                 )
               }
 
@@ -234,13 +235,13 @@ fun ThemeSwitcherSheet(
                   modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(DiscordBlurple),
+                    .background(colors.primary),
                   contentAlignment = Alignment.Center
                 ) {
                   Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
-                    tint = Color.White,
+                    tint = colors.onPrimary,
                     modifier = Modifier.size(16.dp)
                   )
                 }
@@ -256,7 +257,7 @@ fun ThemeSwitcherSheet(
       Text(
         text = strings.customAccentColor,
         style = KoraTheme.typography.titleSmall,
-        color = DiscordTextPrimary,
+        color = colors.onSurface,
         fontWeight = FontWeight.Bold
       )
       Spacer(modifier = Modifier.height(8.dp))
@@ -268,6 +269,7 @@ fun ThemeSwitcherSheet(
         items(AccentColorChoice.entries) { choice ->
           val isSelected = selectedAccent == choice
           val chipColor = if (choice == AccentColorChoice.DEFAULT) selectedPreset.primaryColor else choice.color
+          val checkTint = if (chipColor.luminance() > 0.52f) Color(0xFF0B0F19) else Color.White
 
           Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -284,8 +286,8 @@ fun ThemeSwitcherSheet(
                 .clip(CircleShape)
                 .background(chipColor)
                 .border(
-                  width = if (isSelected) 3.dp else 1.dp,
-                  color = if (isSelected) Color.White else DiscordBorder,
+                  width = if (isSelected) 2.5.dp else 1.dp,
+                  color = if (isSelected) colors.onSurface else colors.outline,
                   shape = CircleShape
                 ),
               contentAlignment = Alignment.Center
@@ -294,17 +296,19 @@ fun ThemeSwitcherSheet(
                 Icon(
                   imageVector = Icons.Default.Check,
                   contentDescription = "Selected",
-                  tint = Color.White,
+                  tint = checkTint,
                   modifier = Modifier.size(20.dp)
                 )
               }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-              text = if (isArabic) choice.nameAr.take(10) else choice.nameEn.take(10),
+              text = if (isArabic) choice.nameAr else choice.nameEn,
               style = KoraTheme.typography.labelSmall.copy(fontSize = 10.sp),
-              color = if (isSelected) DiscordTextPrimary else DiscordTextMuted,
-              fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+              color = if (isSelected) colors.onSurface else colors.onSurfaceVariant,
+              fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+              maxLines = 1,
+              softWrap = false
             )
           }
         }
@@ -316,8 +320,8 @@ fun ThemeSwitcherSheet(
       if (selectedPreset.isDark) {
         Card(
           shape = RoundedCornerShape(14.dp),
-          colors = CardDefaults.cardColors(containerColor = DiscordDarkInput),
-          border = androidx.compose.foundation.BorderStroke(1.dp, DiscordBorder),
+          colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant.copy(alpha = 0.65f)),
+          border = androidx.compose.foundation.BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.55f)),
           modifier = Modifier.fillMaxWidth()
         ) {
           Row(
@@ -331,13 +335,13 @@ fun ThemeSwitcherSheet(
                 .size(36.dp)
                 .clip(CircleShape)
                 .background(Color.Black)
-                .border(1.dp, DiscordBorder, CircleShape),
+                .border(1.dp, colors.outline, CircleShape),
               contentAlignment = Alignment.Center
             ) {
               Icon(
                 imageVector = Icons.Default.DarkMode,
                 contentDescription = null,
-                tint = DiscordBlurple,
+                tint = colors.primary,
                 modifier = Modifier.size(20.dp)
               )
             }
@@ -349,12 +353,12 @@ fun ThemeSwitcherSheet(
                 text = strings.amoledMode,
                 style = KoraTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = DiscordTextPrimary
+                color = colors.onSurface
               )
               Text(
                 text = strings.amoledModeDesc,
                 style = KoraTheme.typography.labelSmall,
-                color = DiscordTextMuted
+                color = colors.onSurfaceVariant
               )
             }
 
@@ -365,10 +369,10 @@ fun ThemeSwitcherSheet(
                 onThemeChanged(selectedPreset, checked, selectedAccent)
               },
               colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = DiscordBlurple,
-                uncheckedThumbColor = DiscordTextMuted,
-                uncheckedTrackColor = DiscordDarkDeepest
+                checkedThumbColor = colors.onPrimary,
+                checkedTrackColor = colors.primary,
+                uncheckedThumbColor = colors.onSurfaceVariant,
+                uncheckedTrackColor = colors.background
               )
             )
           }
@@ -380,13 +384,16 @@ fun ThemeSwitcherSheet(
       // Close / Confirm Button
       Button(
         onClick = onDismiss,
-        colors = ButtonDefaults.buttonColors(containerColor = DiscordBlurple),
-        shape = RoundedCornerShape(12.dp),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = colors.primary,
+          contentColor = colors.onPrimary
+        ),
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier
           .fillMaxWidth()
           .height(48.dp)
       ) {
-        Text(strings.confirm, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(strings.confirm, fontWeight = FontWeight.Bold)
       }
 
       Spacer(modifier = Modifier.height(16.dp))

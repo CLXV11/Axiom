@@ -2,8 +2,10 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -66,6 +69,7 @@ import com.example.ui.components.KoraTopBar
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.theme.SemanticError
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -112,7 +116,7 @@ fun FeedScreen(
       isSubmitting = false
       if (result.isSuccess) {
         newPostContent = ""
-        Toast.makeText(context, "Published", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, strings.publishedSuccess, Toast.LENGTH_SHORT).show()
       } else {
         Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
       }
@@ -141,7 +145,8 @@ fun FeedScreen(
         Card(
           shape = RoundedCornerShape(16.dp),
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-          elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+          elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
           Column(modifier = Modifier.padding(16.dp)) {
@@ -149,6 +154,7 @@ fun FeedScreen(
               value = newPostContent,
               onValueChange = { newPostContent = it },
               placeholder = { Text(strings.whatsOnYourMind) },
+              shape = RoundedCornerShape(14.dp),
               modifier = Modifier
                 .fillMaxWidth()
                 .testTag("new_post_input"),
@@ -159,15 +165,19 @@ fun FeedScreen(
 
             Row(
               modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically
             ) {
               // Audience Selector
-              Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Row(
+                modifier = Modifier
+                  .weight(1f)
+                  .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
                 FilterChip(
                   selected = postAudience == "public",
                   onClick = { postAudience = "public" },
-                  label = { Text(strings.audiencePublic) },
+                  label = { Text(strings.audiencePublic, maxLines = 1, softWrap = false) },
                   leadingIcon = {
                     Icon(
                       imageVector = Icons.Default.Public,
@@ -179,7 +189,7 @@ fun FeedScreen(
                 FilterChip(
                   selected = postAudience == "circles",
                   onClick = { postAudience = "circles" },
-                  label = { Text(strings.audienceCircles) },
+                  label = { Text(strings.audienceCircles, maxLines = 1, softWrap = false) },
                   leadingIcon = {
                     Icon(
                       imageVector = Icons.Default.Group,
@@ -190,12 +200,15 @@ fun FeedScreen(
                 )
               }
 
+              Spacer(modifier = Modifier.width(12.dp))
+
               Button(
                 onClick = { publishPost() },
                 enabled = newPostContent.isNotBlank() && !isSubmitting,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.testTag("publish_post_button")
               ) {
-                Text(strings.publish, fontWeight = FontWeight.SemiBold)
+                Text(strings.publish, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
               }
             }
           }
@@ -280,7 +293,8 @@ private fun PostCard(
   Card(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     modifier = Modifier.fillMaxWidth()
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
@@ -301,7 +315,7 @@ private fun PostCard(
             }
           }
           Text(
-            text = post.authorHandle,
+            text = formatHandleForDisplay(post.authorHandle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -467,7 +481,7 @@ private fun ContextThreadCommentItem(comment: PostComment, avatarUrl: String? = 
         }
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-          text = comment.authorHandle,
+          text = formatHandleForDisplay(comment.authorHandle),
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )

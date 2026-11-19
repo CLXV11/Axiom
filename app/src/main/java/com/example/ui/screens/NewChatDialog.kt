@@ -50,8 +50,8 @@ import com.example.ui.components.ContactDirectoryHeader
 import com.example.ui.components.DefaultProfessionCategories
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.components.VerifiedProfessionalBadge
-import com.example.ui.theme.DiscordBlurple
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -180,8 +180,9 @@ fun NewChatDialog(
           OutlinedTextField(
             value = groupTitleInput,
             onValueChange = { groupTitleInput = it },
-            label = { Text("Group Name") },
+            label = { Text(strings.groupNameLabel) },
             singleLine = true,
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth().testTag("group_title_input")
           )
           Spacer(modifier = Modifier.height(10.dp))
@@ -249,14 +250,14 @@ fun NewChatDialog(
                       Icon(
                         imageVector = Icons.Default.WorkOutline,
                         contentDescription = null,
-                        tint = if (user.isProfessionalVerified) androidx.compose.ui.graphics.Color(0xFF38BDF8) else DiscordBlurple,
+                        tint = if (user.isProfessionalVerified) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(10.dp)
                       )
                       Spacer(modifier = Modifier.width(3.dp))
                       Text(
                         text = user.profession,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (user.isProfessionalVerified) androidx.compose.ui.graphics.Color(0xFF38BDF8) else DiscordBlurple,
+                        color = if (user.isProfessionalVerified) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
                         fontWeight = if (user.isProfessionalVerified) FontWeight.Bold else FontWeight.Medium,
                         fontSize = 10.5.sp
                       )
@@ -265,7 +266,7 @@ fun NewChatDialog(
                         Text(
                           text = "• PRO",
                           style = MaterialTheme.typography.labelSmall,
-                          color = androidx.compose.ui.graphics.Color(0xFF38BDF8),
+                          color = MaterialTheme.colorScheme.secondary,
                           fontWeight = FontWeight.ExtraBold,
                           fontSize = 9.sp
                         )
@@ -274,7 +275,7 @@ fun NewChatDialog(
                   }
 
                   Text(
-                    text = user.handle,
+                    text = formatHandleForDisplay(user.handle),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp
@@ -282,7 +283,7 @@ fun NewChatDialog(
                 }
                 if (isSelected) {
                   Text(
-                    text = "Selected",
+                    text = strings.selectedLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
