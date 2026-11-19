@@ -74,10 +74,12 @@ test("User can create, discover peers, and update own profile while ghost/admin/
   // Bob can discover Alice in directory
   await assertSucceeds(bobDb.collection("users").limit(50).get());
 
-  // Owner can update allowed profile fields
+  // Owner can update allowed profile fields including verification & PLATINUM tier
   await assertSucceeds(
     aliceDb.collection("users").doc(ALICE_UID).update({
       profession: "Staff Engineer",
+      isVerified: true,
+      verifiedTier: "PLATINUM",
       updatedAt: new Date(),
     })
   );
@@ -316,4 +318,306 @@ test("Posts, likes, comments, and Flux clips enforce author ownership and valid 
       likesCount: 1,
     })
   );
+  await assertSucceeds(
+    bobDb.collection("flux_videos").doc("flux_1").update({
+      savedBy: [BOB_UID],
+    })
+  );
 });
+
+test("Store wallet enforces 500 starting coins, cooldowns, 1-time milestones, exact prices, and owner isolation", async () => {
+  const rutPath = require.resolve("@firebase/rules-unit-testing");
+  const firebaseCompat = require(require.resolve("firebase/compat/app", { paths: [rutPath] })).default;
+  require(require.resolve("firebase/compat/firestore", { paths: [rutPath] }));
+  const serverTimestamp = () => firebaseCompat.firestore.FieldValue.serverTimestamp();
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const aliceWallet = aliceDb.collection("users").doc(ALICE_UID).collection("wallet").doc("state");
+  const bobViewAliceWallet = bobDb.collection("users").doc(ALICE_UID).collection("wallet").doc("state");
+
+  // Inflated starting balance must be rejected
+  await assertFails(
+    aliceWallet.set({
+      coinBalance: 99999,
+      ownedItemIds: [],
+      claimedMilestones: [],
+      lastDailyClaimAt: null,
+      equippedFrame: null,
+      equippedNameplate: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Legitimate initial wallet with 500 coins succeeds
+  await assertSucceeds(
+    aliceWallet.set({
+      coinBalance: 500,
+      ownedItemIds: [],
+      claimedMilestones: [],
+      lastDailyClaimAt: null,
+      equippedFrame: null,
+      equippedNameplate: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Bob cannot read or modify Alice's wallet
+  await assertFails(bobViewAliceWallet.get());
+  await assertFails(bobViewAliceWallet.update({ coinBalance: 1000 }));
+
+  // Alice can claim daily +250 coins once
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 750,
+      lastDailyClaimAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Immediate repeat daily claim within 24h is rejected
+  await assertFails(
+    aliceWallet.update({
+      coinBalance: 1000,
+      lastDailyClaimAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Alice can claim one-time milestone 'm_flux' (+250)
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 1000,
+      claimedMilestones: ["m_flux"],
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Duplicate claim of 'm_flux' or arbitrary coin inflation fails
+  await assertFails(
+    aliceWallet.update({
+      coinBalance: 1250,
+      claimedMilestones: ["m_flux"],
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertFails(
+    aliceWallet.update({
+      coinBalance: 5000,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Alice buys 'cat_bell' (exact price 200 -> 800 coins left)
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 800,
+      ownedItemIds: ["cat_bell"],
+      equippedFrame: "cat_bell",
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Underpaying for 'imperial_gold' (costs 400, paying 100) fails
+  await assertFails(
+    aliceWallet.update({
+      coinBalance: 700,
+      ownedItemIds: ["cat_bell", "imperial_gold"],
+      equippedFrame: "imperial_gold",
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  // Alice can unequip owned frame, but cannot equip unowned frame
+  await assertSucceeds(
+    aliceWallet.update({
+      equippedFrame: null,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertFails(
+    aliceWallet.update({
+      equippedFrame: "celestial_wings",
+      updatedAt: serverTimestamp(),
+    })
+  );
+});
+
+test("Conversation media chunks and media messages enforce participant isolation, immutable chunks, and size caps", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_media").set({
+      type: "direct",
+      title: "Bob",
+      isVerified: false,
+      verifiedTier: "BLUE",
+      participantIds: [ALICE_UID, BOB_UID],
+      lastMessageText: "",
+      lastMessageSenderId: "",
+      pinnedBy: [],
+      archivedBy: [],
+      mutedBy: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Alice uploads a media chunk for Bob
+  const chunkRef = aliceDb
+    .collection("conversations")
+    .doc("convo_media")
+    .collection("media")
+    .doc("m_hdvideo1")
+    .collection("chunks")
+    .doc("chunk_0");
+
+  await assertSucceeds(
+    chunkRef.set({
+      mediaId: "m_hdvideo1",
+      senderId: ALICE_UID,
+      index: 0,
+      data: "AAAAIGZ0eXBtcDQyAAAAAG1wNDJpc29t",
+      createdAt: new Date(),
+    })
+  );
+
+  // Alice sends the accompanying HD video message
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_media").collection("messages").doc("msg_video").set({
+      conversationId: "convo_media",
+      senderId: ALICE_UID,
+      senderName: "Alice",
+      isSenderVerified: false,
+      senderVerifiedTier: "BLUE",
+      content: "🎬 demo_hd.mp4",
+      mediaType: "video",
+      mediaId: "m_hdvideo1",
+      mediaFileName: "demo_hd.mp4",
+      mediaMimeType: "video/mp4",
+      mediaSizeBytes: 1048576,
+      mediaChunkCount: 3,
+      mediaDurationMs: 12000,
+      status: "sent",
+      readBy: [ALICE_UID],
+      isEdited: false,
+      isDeleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Bob (participant) can read the media chunk
+  await assertSucceeds(
+    bobDb
+      .collection("conversations")
+      .doc("convo_media")
+      .collection("media")
+      .doc("m_hdvideo1")
+      .collection("chunks")
+      .doc("chunk_0")
+      .get()
+  );
+
+  // Media chunks are immutable
+  await assertFails(chunkRef.update({ data: "tampered" }));
+  await assertFails(chunkRef.delete());
+
+  // Eve (non-participant) cannot read or upload chunks
+  await assertFails(
+    eveDb
+      .collection("conversations")
+      .doc("convo_media")
+      .collection("media")
+      .doc("m_hdvideo1")
+      .collection("chunks")
+      .doc("chunk_0")
+      .get()
+  );
+  await assertFails(
+    eveDb
+      .collection("conversations")
+      .doc("convo_media")
+      .collection("media")
+      .doc("m_hdvideo1")
+      .collection("chunks")
+      .doc("chunk_1")
+      .set({
+        mediaId: "m_hdvideo1",
+        senderId: EVE_UID,
+        index: 1,
+        data: "ZmFrZQ==",
+        createdAt: new Date(),
+      })
+  );
+});
+
+test("Voice call signaling isolates calls and ICE candidates strictly to the two participants", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+
+  const aliceCallRef = aliceDb.collection("calls").doc("call_101");
+  await assertSucceeds(
+    aliceCallRef.set({
+      conversationId: "convo_media",
+      callerId: ALICE_UID,
+      callerName: "Alice",
+      calleeId: BOB_UID,
+      calleeName: "Bob",
+      participantIds: [ALICE_UID, BOB_UID],
+      status: "ringing",
+      offerSdp: "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Bob can query incoming calls and answer
+  await assertSucceeds(
+    bobDb.collection("calls").where("participantIds", "array-contains", BOB_UID).get()
+  );
+  await assertSucceeds(
+    bobDb.collection("calls").doc("call_101").update({
+      answerSdp: "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\n",
+      status: "connecting",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Participants can exchange ICE candidates
+  await assertSucceeds(
+    aliceCallRef.collection("candidates").doc("ice_1").set({
+      senderId: ALICE_UID,
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+      candidate: "candidate:1 1 UDP 2122252543 192.168.1.5 5000 typ host",
+      createdAt: new Date(),
+    })
+  );
+  await assertSucceeds(
+    bobDb.collection("calls").doc("call_101").collection("candidates").get()
+  );
+
+  // Eve cannot read call, hijack status, or inject ICE candidates
+  await assertFails(eveDb.collection("calls").doc("call_101").get());
+  await assertFails(
+    eveDb.collection("calls").doc("call_101").update({
+      status: "ended",
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(
+    eveDb.collection("calls").doc("call_101").collection("candidates").doc("ice_eve").set({
+      senderId: EVE_UID,
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+      candidate: "candidate:evil",
+      createdAt: new Date(),
+    })
+  );
+});
+

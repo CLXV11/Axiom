@@ -50,7 +50,7 @@ class UserRepository(
     val quiet = prefsManager?.guestQuietMode ?: false
     val readReceipts = prefsManager?.guestReadReceipts ?: true
     val isVerified = prefsManager?.guestIsVerified ?: false
-    val verifiedTier = prefsManager?.guestVerifiedTier ?: "GOLD"
+    val verifiedTier = prefsManager?.guestVerifiedTier ?: "BLUE"
     val avatar = prefsManager?.guestAvatarUrl ?: ""
 
     localUserProfileFlow.value = UserProfile(
@@ -64,6 +64,10 @@ class UserRepository(
       quietMode = quiet,
       readReceiptsEnabled = readReceipts
     )
+  }
+
+  companion object {
+    val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
   }
 
   fun isSignedIn(): Boolean = auth.currentUser != null
@@ -85,6 +89,7 @@ class UserRepository(
         .map { snapshot ->
           if (snapshot.exists()) {
             snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
+              localUserProfileFlow.value = it
               prefsManager?.saveCachedProfile(it)
             }
           } else {
@@ -96,7 +101,7 @@ class UserRepository(
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.GET, docRef.path, auth)
-          emit(prefsManager?.getCachedProfile(userId))
+          emit(prefsManager?.getCachedProfile(userId) ?: localUserProfileFlow.value)
         }
     } else {
       return localUserProfileFlow.asStateFlow()
@@ -110,7 +115,10 @@ class UserRepository(
         val snapshot = docRef.get().await()
         if (snapshot.exists()) {
           snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
-            prefsManager?.saveCachedProfile(it)
+            if (userId == auth.currentUser?.uid) {
+              localUserProfileFlow.value = it
+              prefsManager?.saveCachedProfile(it)
+            }
           }
         } else {
           null
@@ -129,10 +137,10 @@ class UserRepository(
       .let { if (it.startsWith("@")) it else "@$it" }
       .take(40)
     val cleanName = profile.displayName.trim().ifBlank { "Kora Member" }.take(60)
-    val validTier = if (profile.verifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
+    val validTier = if (profile.verifiedTier in VALID_TIERS) {
       profile.verifiedTier
     } else {
-      "GOLD"
+      "BLUE"
     }
 
     val normalizedProfile = profile.copy(
@@ -150,7 +158,7 @@ class UserRepository(
       return try {
         val existing = docRef.get().await()
         if (!existing.exists()) {
-          val payload = mapOf(
+          val payload = hashMapOf<String, Any?>(
             "displayName" to normalizedProfile.displayName,
             "handle" to normalizedProfile.handle,
             "bio" to normalizedProfile.bio,
@@ -161,6 +169,8 @@ class UserRepository(
             "avatarUrl" to normalizedProfile.avatarUrl,
             "isVerified" to normalizedProfile.isVerified,
             "verifiedTier" to normalizedProfile.verifiedTier,
+            "equippedFrame" to normalizedProfile.equippedFrame,
+            "equippedNameplate" to normalizedProfile.equippedNameplate,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -169,7 +179,7 @@ class UserRepository(
           )
           docRef.set(payload).await()
         } else {
-          val payload = mapOf(
+          val payload = hashMapOf<String, Any?>(
             "displayName" to normalizedProfile.displayName,
             "handle" to normalizedProfile.handle,
             "bio" to normalizedProfile.bio,
@@ -179,6 +189,8 @@ class UserRepository(
             "avatarUrl" to normalizedProfile.avatarUrl,
             "isVerified" to normalizedProfile.isVerified,
             "verifiedTier" to normalizedProfile.verifiedTier,
+            "equippedFrame" to normalizedProfile.equippedFrame,
+            "equippedNameplate" to normalizedProfile.equippedNameplate,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -211,7 +223,10 @@ class UserRepository(
 
   private suspend fun loadCurrentOrFallbackProfile(uid: String): UserProfile {
     return if (auth.currentUser != null) {
-      runCatching { getUserProfile(uid) }.getOrNull() ?: localUserProfileFlow.value ?: UserProfile(id = uid)
+      runCatching { getUserProfile(uid) }.getOrNull()
+        ?: prefsManager?.getCachedProfile(uid)
+        ?: localUserProfileFlow.value
+        ?: UserProfile(id = uid)
     } else {
       localUserProfileFlow.value ?: UserProfile(id = uid)
     }
@@ -223,19 +238,26 @@ class UserRepository(
     return createOrUpdateProfile(current.copy(avatarUrl = avatarUrl))
   }
 
+  suspend fun setVerificationStatus(enabled: Boolean): Result<Boolean> {
+    val uid = requireUserId()
+    val current = loadCurrentOrFallbackProfile(uid)
+    val resolvedTier = if (current.verifiedTier in VALID_TIERS) current.verifiedTier else "BLUE"
+    val updated = current.copy(isVerified = enabled, verifiedTier = resolvedTier)
+    val res = createOrUpdateProfile(updated)
+    return if (res.isSuccess) Result.success(enabled) else Result.failure(res.exceptionOrNull()!!)
+  }
+
   suspend fun toggleVerificationStatus(): Result<Boolean> {
     val uid = requireUserId()
     val current = loadCurrentOrFallbackProfile(uid)
-    val newStatus = !current.isVerified
-    val updated = current.copy(isVerified = newStatus)
-    val res = createOrUpdateProfile(updated)
-    return if (res.isSuccess) Result.success(newStatus) else Result.failure(res.exceptionOrNull()!!)
+    return setVerificationStatus(!current.isVerified)
   }
 
   suspend fun setVerificationTier(tier: String): Result<Unit> {
     val uid = requireUserId()
     val current = loadCurrentOrFallbackProfile(uid)
-    val updated = current.copy(verifiedTier = tier, isVerified = true)
+    val validTier = if (tier in VALID_TIERS) tier else "BLUE"
+    val updated = current.copy(verifiedTier = validTier, isVerified = true)
     return createOrUpdateProfile(updated)
   }
 
@@ -262,7 +284,7 @@ class UserRepository(
   fun observeDirectoryUsers(): Flow<List<UserProfile>> {
     if (auth.currentUser == null) return flowOf(emptyList())
     return db.collection("users")
-      .limit(50)
+      .limit(200)
       .snapshots()
       .map { snapshot ->
         val list = snapshot.toObjects(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
@@ -279,7 +301,7 @@ class UserRepository(
     if (auth.currentUser != null) {
       try {
         val snapshot = db.collection("users")
-          .limit(50)
+          .limit(200)
           .get()
           .await()
         cachedFirestoreDirectoryUsers = snapshot.toObjects(

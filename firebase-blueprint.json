@@ -14,7 +14,9 @@
         "openToNetworking": { "type": "boolean" },
         "avatarUrl": { "type": "string" },
         "isVerified": { "type": "boolean" },
-        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX"] },
+        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM"] },
+        "equippedFrame": { "type": "string" },
+        "equippedNameplate": { "type": "string" },
         "quietMode": { "type": "boolean" },
         "readReceiptsEnabled": { "type": "boolean" },
         "lastSeen": { "type": "string", "format": "date-time" },
@@ -31,7 +33,7 @@
         "type": { "type": "string", "enum": ["direct", "group"] },
         "title": { "type": "string" },
         "isVerified": { "type": "boolean" },
-        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX"] },
+        "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM"] },
         "participantIds": { "type": "array" },
         "lastMessageText": { "type": "string" },
         "lastMessageSenderId": { "type": "string" },
@@ -55,6 +57,13 @@
         "isSenderVerified": { "type": "boolean" },
         "senderVerifiedTier": { "type": "string" },
         "content": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["text", "image", "video", "file"] },
+        "mediaId": { "type": "string" },
+        "mediaFileName": { "type": "string" },
+        "mediaMimeType": { "type": "string" },
+        "mediaSizeBytes": { "type": "integer" },
+        "mediaChunkCount": { "type": "integer" },
+        "mediaDurationMs": { "type": "integer" },
         "replyToId": { "type": "string" },
         "replyToSender": { "type": "string" },
         "replyToText": { "type": "string" },
@@ -156,12 +165,80 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["fluxId", "authorId", "authorName", "content", "createdAt"]
+    },
+    "StoreWallet": {
+      "title": "StoreWallet",
+      "description": "Server-validated user economy wallet, owned decorations, milestones, and daily reward cooldown",
+      "type": "object",
+      "properties": {
+        "coinBalance": { "type": "integer" },
+        "ownedItemIds": { "type": "array" },
+        "claimedMilestones": { "type": "array" },
+        "lastDailyClaimAt": { "type": "string", "format": "date-time" },
+        "equippedFrame": { "type": "string" },
+        "equippedNameplate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coinBalance", "ownedItemIds", "claimedMilestones", "createdAt", "updatedAt"]
+    },
+    "MediaChunk": {
+      "title": "MediaChunk",
+      "description": "Chunked high-quality media payload belonging to a conversation",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "index": { "type": "integer" },
+        "data": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mediaId", "senderId", "index", "data", "createdAt"]
+    },
+    "VoiceCall": {
+      "title": "VoiceCall",
+      "description": "Two-party WebRTC voice call signaling session",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "callerAvatarUrl": { "type": "string" },
+        "calleeId": { "type": "string" },
+        "calleeName": { "type": "string" },
+        "calleeAvatarUrl": { "type": "string" },
+        "participantIds": { "type": "array" },
+        "status": { "type": "string", "enum": ["ringing", "connecting", "connected", "ended", "declined", "missed"] },
+        "offerSdp": { "type": "string" },
+        "answerSdp": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "endedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversationId", "callerId", "callerName", "calleeId", "participantIds", "status", "createdAt", "updatedAt"]
+    },
+    "CallCandidate": {
+      "title": "CallCandidate",
+      "description": "ICE candidate for an active WebRTC voice call",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "sdpMid": { "type": "string" },
+        "sdpMLineIndex": { "type": "integer" },
+        "candidate": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "sdpMid", "sdpMLineIndex", "candidate", "createdAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User directory profiles and presence status"
+    },
+    "/users/{userId}/wallet/{walletId}": {
+      "schema": "StoreWallet",
+      "description": "Server-authoritative coin wallet and owned store decorations"
     },
     "/conversations/{conversationId}": {
       "schema": "Conversation",
@@ -170,6 +247,18 @@
     "/conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages inside conversation"
+    },
+    "/conversations/{conversationId}/media/{mediaId}/chunks/{chunkId}": {
+      "schema": "MediaChunk",
+      "description": "Binary media chunks for high-quality photos, videos, and files"
+    },
+    "/calls/{callId}": {
+      "schema": "VoiceCall",
+      "description": "Active and recent 2-party voice call sessions"
+    },
+    "/calls/{callId}/candidates/{candidateId}": {
+      "schema": "CallCandidate",
+      "description": "WebRTC ICE signaling candidates"
     },
     "/posts/{postId}": {
       "schema": "Post",

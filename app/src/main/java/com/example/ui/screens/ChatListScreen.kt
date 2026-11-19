@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -55,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,6 +86,7 @@ fun ChatListScreen(
   onLanguageToggle: () -> Unit,
   onOpenStore: () -> Unit = {}
 ) {
+  val context = LocalContext.current
   val strings = LocalAppStrings.current
   val coroutineScope = rememberCoroutineScope()
   val currentUid = userRepository.requireUserId()
@@ -90,9 +94,30 @@ fun ChatListScreen(
   val directoryUsers by userRepository.observeDirectoryUsers()
     .collectAsState(initial = userRepository.getDirectoryUsers())
   val usersById = remember(directoryUsers) { directoryUsers.associateBy { it.id } }
+  var extraPeers by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
 
   LaunchedEffect(Unit) {
     userRepository.fetchDirectoryUsers()
+  }
+
+  LaunchedEffect(conversations, usersById) {
+    val missingPeerIds = conversations
+      .filter { !chatRepository.isAiChatbotConversation(it.id) && it.type == "direct" }
+      .mapNotNull { convo -> convo.participantIds.firstOrNull { it != currentUid } }
+      .distinct()
+      .filter { usersById[it] == null && extraPeers[it] == null }
+    if (missingPeerIds.isNotEmpty()) {
+      val fetched = mutableMapOf<String, UserProfile>()
+      for (peerId in missingPeerIds) {
+        val loaded = runCatching { userRepository.getUserProfile(peerId) }.getOrNull()
+        if (loaded != null) {
+          fetched[peerId] = loaded
+        }
+      }
+      if (fetched.isNotEmpty()) {
+        extraPeers = extraPeers + fetched
+      }
+    }
   }
 
   var searchQuery by remember { mutableStateOf("") }
@@ -102,7 +127,7 @@ fun ChatListScreen(
   fun resolvePeer(convo: Conversation): UserProfile? {
     if (chatRepository.isAiChatbotConversation(convo.id) || convo.type != "direct") return null
     val peerId = convo.participantIds.firstOrNull { it != currentUid } ?: return null
-    return usersById[peerId]
+    return usersById[peerId] ?: extraPeers[peerId]
   }
 
   val filteredConversations = conversations.filter { convo ->
@@ -168,11 +193,17 @@ fun ChatListScreen(
       }
     }
   ) { paddingValues ->
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(MaterialTheme.colorScheme.background)
+        .background(MaterialTheme.colorScheme.background),
+      contentAlignment = Alignment.TopCenter
+    ) {
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .widthIn(max = 840.dp)
     ) {
       // Soft Search Bar Capsule
       OutlinedTextField(
@@ -291,6 +322,7 @@ fun ChatListScreen(
         }
       }
     }
+    }
   }
 
   // Contact Directory Sheet
@@ -319,6 +351,12 @@ fun ChatListScreen(
                 participantIds = listOf(currentUid, user.id)
               )
             onOpenConversation(convo)
+          } else {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
           }
         }
       }

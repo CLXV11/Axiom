@@ -1,7 +1,12 @@
 package com.example.data.repository
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import com.example.R
 import com.example.data.model.FluxComment
 import com.example.data.model.FluxVideo
@@ -15,31 +20,37 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.snapshots
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.UUID
 
 class FluxRepository(
   private val db: FirebaseFirestore?,
   private val prefs: SharedPreferences?,
-  private val auth: FirebaseAuth? = null
+  private val auth: FirebaseAuth? = null,
+  private val appContext: Context? = null
 ) {
   constructor(context: Context) : this(
     resolveFirestore(context),
     context.applicationContext.getSharedPreferences("flux_storage_prefs", Context.MODE_PRIVATE),
-    resolveAuth()
+    resolveAuth(),
+    context.applicationContext
   )
 
   private companion object {
+    val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
+
     fun resolveFirestore(context: Context): FirebaseFirestore? = try {
       FirebaseFirestore.getInstance(
         context.applicationContext.getString(R.string.firestore_database_id)
@@ -54,8 +65,6 @@ class FluxRepository(
       null
     }
   }
-
-  private val scope = CoroutineScope(Dispatchers.IO)
 
   private val _videos = MutableStateFlow<List<FluxVideo>>(emptyList())
   val videos: Flow<List<FluxVideo>> = _videos.asStateFlow()
@@ -84,7 +93,7 @@ class FluxRepository(
       authorId = authorId,
       authorName = getString("authorName") ?: "Creator",
       authorHandle = getString("authorHandle") ?: "@creator",
-      authorVerifiedTier = getString("authorVerifiedTier") ?: "GOLD",
+      authorVerifiedTier = getString("authorVerifiedTier") ?: "BLUE",
       isAuthorVerified = getBoolean("isAuthorVerified") ?: false,
       caption = getString("caption") ?: "",
       videoUri = getString("videoUri"),
@@ -125,7 +134,10 @@ class FluxRepository(
         .limit(50)
         .snapshots()
         .map { snapshot ->
-          snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }
+          snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }.also { serverList ->
+            _videos.value = serverList
+            saveVideosToPrefs(serverList)
+          }
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "flux_videos", auth)
@@ -143,7 +155,9 @@ class FluxRepository(
         .orderBy("createdAt", Query.Direction.ASCENDING)
         .snapshots()
         .map { snapshot ->
-          snapshot.documents.mapNotNull { it.toFluxCommentOrNull() }
+          snapshot.documents.mapNotNull { it.toFluxCommentOrNull() }.also { list ->
+            _comments.value = _comments.value + (fluxId to list)
+          }
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "flux_videos/$fluxId/comments", auth)
@@ -157,7 +171,33 @@ class FluxRepository(
     }
   }
 
-  fun publishFlux(
+  private suspend fun persistPickedVideoLocally(fluxId: String, videoUri: String?): String? {
+    if (videoUri.isNullOrBlank()) return null
+    val context = appContext ?: return videoUri
+    if (!videoUri.startsWith("content://")) return videoUri
+    return withContext(Dispatchers.IO) {
+      try {
+        val parsed = Uri.parse(videoUri)
+        val inputStream = context.contentResolver.openInputStream(parsed) ?: return@withContext videoUri
+        val dir = File(context.filesDir, "flux_media").apply { mkdirs() }
+        val destFile = File(dir, "$fluxId.mp4")
+        var bytesWritten = 0L
+        inputStream.use { input ->
+          FileOutputStream(destFile).use { output ->
+            bytesWritten = input.copyTo(output)
+          }
+        }
+        if (bytesWritten > 0L) Uri.fromFile(destFile).toString() else {
+          destFile.delete()
+          videoUri
+        }
+      } catch (_: Exception) {
+        videoUri
+      }
+    }
+  }
+
+  suspend fun publishFlux(
     authorId: String,
     authorName: String,
     authorHandle: String,
@@ -169,12 +209,11 @@ class FluxRepository(
     gradientTheme: String = "BLURPLE"
   ): FluxVideo {
     val fluxId = "flux_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
+    val persistedUri = persistPickedVideoLocally(fluxId, videoUri)
     val extractedTags = Regex("#\\w+").findAll(caption).map { it.value }.take(15).toList()
     val tags = extractedTags.ifEmpty { listOf("#flux") }
     val cleanAudio = audioTitle.ifBlank { "Original Audio - $authorName" }.take(120)
-    val validTier = if (authorVerifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
-      authorVerifiedTier
-    } else "GOLD"
+    val validTier = if (authorVerifiedTier in VALID_TIERS) authorVerifiedTier else "BLUE"
     val validTheme = if (gradientTheme in listOf("BLURPLE", "NITRO", "EMERALD", "SOLAR", "CYBER")) {
       gradientTheme
     } else "BLURPLE"
@@ -186,8 +225,8 @@ class FluxRepository(
       authorHandle = authorHandle,
       authorVerifiedTier = validTier,
       isAuthorVerified = isAuthorVerified,
-      caption = caption.trim(),
-      videoUri = videoUri,
+      caption = caption.trim().ifBlank { "#flux" },
+      videoUri = persistedUri,
       audioTitle = cleanAudio,
       likesCount = 0,
       likedBy = emptyList(),
@@ -199,7 +238,8 @@ class FluxRepository(
       createdAt = System.currentTimeMillis()
     )
 
-    val updatedList = listOf(newVideo) + _videos.value
+    val previousList = _videos.value
+    val updatedList = listOf(newVideo) + previousList
     _videos.value = updatedList
     saveVideosToPrefs(updatedList)
 
@@ -212,9 +252,9 @@ class FluxRepository(
         put("authorHandle", authorHandle.ifBlank { "@creator" }.take(50))
         put("isAuthorVerified", isAuthorVerified)
         put("authorVerifiedTier", validTier)
-        put("caption", caption.trim().ifBlank { "#flux" }.take(2000))
-        if (!videoUri.isNullOrBlank()) {
-          put("videoUri", videoUri.take(1000))
+        put("caption", newVideo.caption.take(2000))
+        if (!persistedUri.isNullOrBlank()) {
+          put("videoUri", persistedUri.take(1000))
         }
         put("audioTitle", cleanAudio)
         put("likesCount", 0)
@@ -226,21 +266,25 @@ class FluxRepository(
         put("gradientTheme", validTheme)
         put("createdAt", FieldValue.serverTimestamp())
       }
-      scope.launch {
-        try {
-          fluxRef.set(payload).await()
-        } catch (e: Exception) {
-          handleFirestoreError(e, OperationType.CREATE, fluxRef.path, auth)
-        }
+      try {
+        fluxRef.set(payload).await()
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.CREATE, fluxRef.path, auth)
+        throw e
       }
     }
 
     return newVideo
   }
 
-  fun toggleLike(fluxId: String, userId: String) {
-    val current = _videos.value
-    val updated = current.map { video ->
+  suspend fun toggleLike(fluxId: String, userId: String): Result<Boolean> {
+    val previousList = _videos.value
+    val target = previousList.find { it.id == fluxId }
+    val optimisticNowLiked = target?.let { !it.likedBy.contains(userId) } ?: true
+
+    val updated = previousList.map { video ->
       if (video.id == fluxId) {
         val alreadyLiked = video.likedBy.contains(userId)
         val newLikedBy = if (alreadyLiked) video.likedBy - userId else video.likedBy + userId
@@ -254,28 +298,40 @@ class FluxRepository(
     if (isSignedIn()) {
       val uid = auth!!.currentUser!!.uid
       val fluxRef = db!!.collection("flux_videos").document(fluxId)
-      scope.launch {
-        try {
-          val snap = fluxRef.get().await()
-          val existing = snap.toFluxVideoOrNull() ?: return@launch
+      return try {
+        val serverNowLiked = db.runTransaction { transaction ->
+          val snap = transaction.get(fluxRef)
+          val existing = snap.toFluxVideoOrNull()
+            ?: throw IllegalStateException("Flux video not found")
           val alreadyLiked = existing.likedBy.contains(uid)
           val newLikedBy = if (alreadyLiked) existing.likedBy - uid else existing.likedBy + uid
-          fluxRef.update(
+          transaction.update(
+            fluxRef,
             mapOf(
               "likedBy" to newLikedBy,
               "likesCount" to newLikedBy.size
             )
-          ).await()
-        } catch (e: Exception) {
-          handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
-        }
+          )
+          !alreadyLiked
+        }.await()
+        Result.success(serverNowLiked)
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+        Result.failure(e)
       }
     }
+
+    return Result.success(optimisticNowLiked)
   }
 
-  fun toggleSave(fluxId: String, userId: String) {
-    val current = _videos.value
-    val updated = current.map { video ->
+  suspend fun toggleSave(fluxId: String, userId: String): Result<Boolean> {
+    val previousList = _videos.value
+    val target = previousList.find { it.id == fluxId }
+    val optimisticNowSaved = target?.let { !it.savedBy.contains(userId) } ?: true
+
+    val updated = previousList.map { video ->
       if (video.id == fluxId) {
         val alreadySaved = video.savedBy.contains(userId)
         val newSavedBy = if (alreadySaved) video.savedBy - userId else video.savedBy + userId
@@ -288,21 +344,92 @@ class FluxRepository(
     if (isSignedIn()) {
       val uid = auth!!.currentUser!!.uid
       val fluxRef = db!!.collection("flux_videos").document(fluxId)
-      scope.launch {
-        try {
-          val snap = fluxRef.get().await()
-          val existing = snap.toFluxVideoOrNull() ?: return@launch
+      return try {
+        val serverNowSaved = db.runTransaction { transaction ->
+          val snap = transaction.get(fluxRef)
+          val existing = snap.toFluxVideoOrNull()
+            ?: throw IllegalStateException("Flux video not found")
           val alreadySaved = existing.savedBy.contains(uid)
           val newSavedBy = if (alreadySaved) existing.savedBy - uid else existing.savedBy + uid
-          fluxRef.update("savedBy", newSavedBy).await()
-        } catch (e: Exception) {
-          handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+          transaction.update(fluxRef, "savedBy", newSavedBy)
+          !alreadySaved
+        }.await()
+        Result.success(serverNowSaved)
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    return Result.success(optimisticNowSaved)
+  }
+
+  suspend fun saveVideoToGallery(context: Context, video: FluxVideo): Result<Unit> = withContext(Dispatchers.IO) {
+    val rawUri = video.videoUri
+    if (rawUri.isNullOrBlank()) {
+      return@withContext Result.failure(IllegalStateException("No downloadable video file attached"))
+    }
+    val parsed = Uri.parse(rawUri)
+    val resolver = context.applicationContext.contentResolver
+
+    fun openSourceStream(): java.io.InputStream? {
+      return when (parsed.scheme) {
+        "file" -> {
+          val filePath = parsed.path ?: return null
+          val file = File(filePath)
+          if (file.exists() && file.canRead()) FileInputStream(file) else null
+        }
+        else -> resolver.openInputStream(parsed)
+      }
+    }
+
+    val sourceStream = openSourceStream()
+      ?: return@withContext Result.failure(IllegalStateException("Video file unavailable on this device"))
+
+    val fileName = "Kora_Flux_${video.id}.mp4"
+    return@withContext try {
+      val values = ContentValues().apply {
+        put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/Kora")
+          put(MediaStore.Video.Media.IS_PENDING, 1)
         }
       }
+      val collectionUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+      } else {
+        MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+      }
+      val itemUri = resolver.insert(collectionUri, values)
+        ?: return@withContext Result.failure(IllegalStateException("Could not create MediaStore video entry"))
+
+      try {
+        sourceStream.use { input ->
+          resolver.openOutputStream(itemUri)?.use { output ->
+            input.copyTo(output)
+          } ?: throw IllegalStateException("Could not open MediaStore output stream")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          val doneValues = ContentValues().apply {
+            put(MediaStore.Video.Media.IS_PENDING, 0)
+          }
+          resolver.update(itemUri, doneValues, null, null)
+        }
+        Result.success(Unit)
+      } catch (e: Exception) {
+        runCatching { resolver.delete(itemUri, null, null) }
+        Result.failure(e)
+      }
+    } catch (e: Exception) {
+      runCatching { sourceStream.close() }
+      Result.failure(e)
     }
   }
 
-  fun incrementShare(fluxId: String) {
+  suspend fun incrementShare(fluxId: String): Result<Unit> {
     val current = _videos.value
     val updated = current.map { video ->
       if (video.id == fluxId) video.copy(sharesCount = video.sharesCount + 1) else video
@@ -312,17 +439,20 @@ class FluxRepository(
 
     if (isSignedIn()) {
       val fluxRef = db!!.collection("flux_videos").document(fluxId)
-      scope.launch {
-        try {
-          fluxRef.update("sharesCount", FieldValue.increment(1L)).await()
-        } catch (e: Exception) {
-          handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
-        }
+      return try {
+        fluxRef.update("sharesCount", FieldValue.increment(1L)).await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        _videos.value = current
+        saveVideosToPrefs(current)
+        handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+        Result.failure(e)
       }
     }
+    return Result.success(Unit)
   }
 
-  fun addComment(
+  suspend fun addComment(
     fluxId: String,
     authorId: String,
     authorName: String,
@@ -332,9 +462,7 @@ class FluxRepository(
     content: String
   ): FluxComment {
     val commentId = UUID.randomUUID().toString()
-    val validTier = if (authorVerifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
-      authorVerifiedTier
-    } else "BLUE"
+    val validTier = if (authorVerifiedTier in VALID_TIERS) authorVerifiedTier else "BLUE"
 
     val newComment = FluxComment(
       id = commentId,
@@ -348,11 +476,12 @@ class FluxRepository(
       timestamp = System.currentTimeMillis()
     )
 
-    val currentComments = _comments.value[fluxId] ?: emptyList()
-    _comments.value = _comments.value + (fluxId to (currentComments + newComment))
+    val previousCommentsMap = _comments.value
+    val currentComments = previousCommentsMap[fluxId] ?: emptyList()
+    _comments.value = previousCommentsMap + (fluxId to (currentComments + newComment))
 
-    val currentVideos = _videos.value
-    val updatedVideos = currentVideos.map { v ->
+    val previousVideos = _videos.value
+    val updatedVideos = previousVideos.map { v ->
       if (v.id == fluxId) v.copy(commentsCount = v.commentsCount + 1) else v
     }
     _videos.value = updatedVideos
@@ -372,15 +501,17 @@ class FluxRepository(
         "content" to content.trim().take(2000),
         "createdAt" to FieldValue.serverTimestamp()
       )
-      scope.launch {
-        try {
-          val batch = db.batch()
-          batch.set(commentRef, payload)
-          batch.update(fluxRef, "commentsCount", FieldValue.increment(1L))
-          batch.commit().await()
-        } catch (e: Exception) {
-          handleFirestoreError(e, OperationType.CREATE, commentRef.path, auth)
-        }
+      try {
+        val batch = db.batch()
+        batch.set(commentRef, payload)
+        batch.update(fluxRef, "commentsCount", FieldValue.increment(1L))
+        batch.commit().await()
+      } catch (e: Exception) {
+        _comments.value = previousCommentsMap
+        _videos.value = previousVideos
+        saveVideosToPrefs(previousVideos)
+        handleFirestoreError(e, OperationType.CREATE, commentRef.path, auth)
+        throw e
       }
     }
 
@@ -420,7 +551,7 @@ class FluxRepository(
               authorId = obj.optString("authorId", "user_1"),
               authorName = obj.optString("authorName", "Creator"),
               authorHandle = obj.optString("authorHandle", "@creator"),
-              authorVerifiedTier = obj.optString("authorVerifiedTier", "GOLD"),
+              authorVerifiedTier = obj.optString("authorVerifiedTier", "BLUE"),
               isAuthorVerified = obj.optBoolean("isAuthorVerified", false),
               caption = obj.optString("caption", ""),
               videoUri = if (obj.has("videoUri") && !obj.isNull("videoUri")) obj.getString("videoUri") else null,

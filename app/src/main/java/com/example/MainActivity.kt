@@ -1,10 +1,15 @@
 package com.example
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,6 +39,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,14 +56,23 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
 import com.example.data.model.Conversation
 import com.example.data.model.UserProfile
+import com.example.data.repository.ChatMediaRepository
 import com.example.data.repository.ChatRepository
 import com.example.data.repository.FluxRepository
 import com.example.data.repository.PostRepository
 import com.example.data.repository.StoreRepository
 import com.example.data.repository.UserRepository
+import com.example.data.repository.VoiceCallRepository
+import com.example.notifications.IncomingMessageAlert
+import com.example.notifications.KoraMessageNotificationManager
 import com.example.ui.components.KoraMainScaffold
+import com.example.ui.components.LuxurySplashScreen
 import com.example.ui.components.NavigationTab
+import com.example.ui.components.NewMessageBanner
 import com.example.ui.components.ThemeSwitcherSheet
+import com.example.ui.components.VoiceCallController
+import com.example.ui.components.VoiceCallOverlay
+import com.example.ui.components.VoiceCallUiPhase
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatDetailScreen
 import com.example.ui.screens.ChatListScreen
@@ -87,7 +103,9 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -110,11 +128,24 @@ private sealed interface ProfileLoadState {
 }
 
 class MainActivity : ComponentActivity() {
+  private val pendingNotificationConvoId = MutableStateFlow<String?>(null)
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    intent.getStringExtra(KoraMessageNotificationManager.EXTRA_CONVERSATION_ID)
+      ?.takeIf { it.isNotBlank() }
+      ?.let { pendingNotificationConvoId.value = it }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     // Configure Firebase App Check with launch intent before any UI, ViewModels, or Firebase operations
     configureAppCheck(this, intent)
+    intent?.getStringExtra(KoraMessageNotificationManager.EXTRA_CONVERSATION_ID)
+      ?.takeIf { it.isNotBlank() }
+      ?.let { pendingNotificationConvoId.value = it }
 
     enableEdgeToEdge()
 
@@ -125,11 +156,28 @@ class MainActivity : ComponentActivity() {
     val prefs = PreferencesManager(this)
 
     setContent {
+      val openConvoIdFromNotification by pendingNotificationConvoId.collectAsState()
       var currentLanguage by remember { mutableStateOf(prefs.language) }
       var currentPreset by remember { mutableStateOf(prefs.themePreset) }
       var isAmoled by remember { mutableStateOf(prefs.amoledPureBlack) }
       var currentAccent by remember { mutableStateOf(prefs.accentChoice) }
       var themeMode by remember { mutableStateOf(prefs.themeMode) }
+      var showLuxuryIntro by remember { mutableStateOf(true) }
+
+      val toggleAuthLanguage: () -> Unit = {
+        val next = if (currentLanguage == AppLanguage.EN) AppLanguage.AR else AppLanguage.EN
+        currentLanguage = next
+        prefs.language = next
+      }
+
+      val applyAuthTheme: (AppThemePreset, Boolean, AccentColorChoice) -> Unit = { newPreset, newAmoled, newAccent ->
+        currentPreset = newPreset
+        isAmoled = newAmoled
+        currentAccent = newAccent
+        prefs.themePreset = newPreset
+        prefs.amoledPureBlack = newAmoled
+        prefs.accentChoice = newAccent
+      }
 
       val strings = if (currentLanguage == AppLanguage.AR) ArabicStrings else EnglishStrings
 
@@ -143,13 +191,10 @@ class MainActivity : ComponentActivity() {
           amoledPureBlack = isAmoled,
           accentChoice = currentAccent
         ) {
+          Box(modifier = Modifier.fillMaxSize()) {
           if (!isFirebaseReady || userRepository == null || chatRepository == null || postRepository == null) {
             MissingFirebaseConfigScreen(
-              onLanguageToggle = {
-                val next = if (currentLanguage == AppLanguage.EN) AppLanguage.AR else AppLanguage.EN
-                currentLanguage = next
-                prefs.language = next
-              }
+              onLanguageToggle = toggleAuthLanguage
             )
           } else {
             val credentialManager = remember { CredentialManager.create(this@MainActivity) }
@@ -196,7 +241,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val signOutAction: () -> Unit = {
-              prefs.clearCachedProfile()
+              prefs.clearAllSessionCaches(this@MainActivity)
               coroutineScope.launch {
                 withContext(NonCancellable) {
                   runCatching {
@@ -214,7 +259,12 @@ class MainActivity : ComponentActivity() {
                 onAuthSuccess = { saved ->
                   prefs.saveCachedProfile(saved)
                 },
-                isCheckingAutoSignIn = false
+                isCheckingAutoSignIn = false,
+                currentPreset = currentPreset,
+                currentAmoled = isAmoled,
+                currentAccent = currentAccent,
+                onThemeChanged = applyAuthTheme,
+                onLanguageToggle = toggleAuthLanguage
               )
             } else {
             key(signedInUser.uid) {
@@ -331,6 +381,11 @@ class MainActivity : ComponentActivity() {
                       prefs.saveCachedProfile(saved)
                       profileState = ProfileLoadState.Ready(saved)
                     },
+                    currentPreset = currentPreset,
+                    currentAmoled = isAmoled,
+                    currentAccent = currentAccent,
+                    onThemeChanged = applyAuthTheme,
+                    onLanguageToggle = toggleAuthLanguage,
                     onSwitchAccount = signOutAction
                   )
                 }
@@ -340,6 +395,8 @@ class MainActivity : ComponentActivity() {
                     userRepository = userRepository,
                     chatRepository = chatRepository,
                     postRepository = postRepository,
+                    pendingOpenConversationId = openConvoIdFromNotification,
+                    onConsumePendingConversationId = { pendingNotificationConvoId.value = null },
                     currentLanguage = currentLanguage,
                     onLanguageChanged = { newLang ->
                       currentLanguage = newLang
@@ -349,14 +406,7 @@ class MainActivity : ComponentActivity() {
                     currentPreset = currentPreset,
                     currentAmoled = isAmoled,
                     currentAccent = currentAccent,
-                    onThemeChanged = { newPreset, newAmoled, newAccent ->
-                      currentPreset = newPreset
-                      isAmoled = newAmoled
-                      currentAccent = newAccent
-                      prefs.themePreset = newPreset
-                      prefs.amoledPureBlack = newAmoled
-                      prefs.accentChoice = newAccent
-                    },
+                    onThemeChanged = applyAuthTheme,
                     onThemeModeChanged = { newMode ->
                       themeMode = newMode
                       prefs.themeMode = newMode
@@ -367,6 +417,12 @@ class MainActivity : ComponentActivity() {
               }
             }
             }
+          }
+
+          LuxurySplashScreen(
+            visible = showLuxuryIntro,
+            onFinished = { showLuxuryIntro = false }
+          )
           }
         }
       }
@@ -379,6 +435,8 @@ fun KoraAppRoot(
   userRepository: UserRepository,
   chatRepository: ChatRepository,
   postRepository: PostRepository,
+  pendingOpenConversationId: String? = null,
+  onConsumePendingConversationId: () -> Unit = {},
   currentLanguage: AppLanguage,
   onLanguageChanged: (AppLanguage) -> Unit,
   themeMode: String,
@@ -390,18 +448,145 @@ fun KoraAppRoot(
   onSignOut: () -> Unit = {}
 ) {
   val context = LocalContext.current
-  val storeRepository = remember { StoreRepository(context) }
-  val fluxRepository = remember { FluxRepository(context) }
+  val strings = LocalAppStrings.current
+  val currentUid = userRepository.requireUserId()
+  val storeRepository = remember(currentUid) { StoreRepository(context) }
+  val fluxRepository = remember(currentUid) { FluxRepository(context) }
+  val chatMediaRepository = remember(currentUid) { ChatMediaRepository(context) }
+  val voiceCallRepository = remember(currentUid) { VoiceCallRepository(context) }
+  val callScope = rememberCoroutineScope()
+
+  val cachedProfile = remember(currentUid) { userRepository.getCachedProfile(currentUid) }
+  val currentUserProfile by userRepository.observeUserProfile(currentUid)
+    .collectAsState(initial = cachedProfile)
+
+  val voiceCallController = remember(currentUid) {
+    VoiceCallController(
+      context = context,
+      currentUid = currentUid,
+      currentUserNameProvider = {
+        currentUserProfile?.displayName?.takeIf { it.isNotBlank() } ?: "Member"
+      },
+      currentAvatarUrlProvider = { currentUserProfile?.avatarUrl },
+      repository = voiceCallRepository,
+      scope = callScope
+    )
+  }
+  val voiceCallState by voiceCallController.uiState.collectAsState()
+
+  DisposableEffect(storeRepository, voiceCallController) {
+    onDispose {
+      storeRepository.close()
+      voiceCallController.release()
+    }
+  }
 
   var currentTab by remember { mutableStateOf(NavigationTab.CHATS) }
   var activeConversation by remember { mutableStateOf<Conversation?>(null) }
   var showNewChatDialog by remember { mutableStateOf(false) }
   var showStore by remember { mutableStateOf(false) }
   var showQuickThemeSheet by remember { mutableStateOf(false) }
+  var inAppMessageAlert by remember { mutableStateOf<IncomingMessageAlert?>(null) }
 
-  // Heartbeat update
-  LaunchedEffect(Unit) {
+  // Request Android 13+ POST_NOTIFICATIONS runtime permission once cleanly
+  val notificationPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { /* handled gracefully if denied */ }
+
+  LaunchedEffect(currentUid) {
+    KoraMessageNotificationManager.ensureNotificationChannel(context, strings)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      !KoraMessageNotificationManager.hasNotificationPermission(context)
+    ) {
+      notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
+
+  val conversations by chatRepository.observeConversations().collectAsState(initial = emptyList())
+  val directoryUsers by userRepository.observeDirectoryUsers()
+    .collectAsState(initial = userRepository.getDirectoryUsers())
+
+  // Open target conversation when user taps a system message notification
+  LaunchedEffect(pendingOpenConversationId, conversations) {
+    val targetId = pendingOpenConversationId ?: return@LaunchedEffect
+    val matched = conversations.firstOrNull { it.id == targetId }
+    if (matched != null) {
+      showStore = false
+      currentTab = NavigationTab.CHATS
+      activeConversation = matched
+      onConsumePendingConversationId()
+    }
+  }
+
+  // Dismiss OS notification and in-app banner whenever user enters that conversation
+  LaunchedEffect(activeConversation?.id) {
+    activeConversation?.id?.let { openedId ->
+      KoraMessageNotificationManager.cancelNotificationForConversation(context, openedId)
+      if (inAppMessageAlert?.conversation?.id == openedId) {
+        inAppMessageAlert = null
+      }
+    }
+  }
+
+  // Real-time incoming message detector -> System Notification + In-App Alert Banner
+  val latestActiveConvoId by androidx.compose.runtime.rememberUpdatedState(activeConversation?.id)
+  val latestStrings by androidx.compose.runtime.rememberUpdatedState(strings)
+  val latestDirectory by androidx.compose.runtime.rememberUpdatedState(directoryUsers)
+
+  LaunchedEffect(currentUid, chatRepository) {
+    var baselineInitialized = false
+    val lastSeenTimestamps = mutableMapOf<String, Long>()
+    val lastSeenSignatures = mutableMapOf<String, String>()
+
+    chatRepository.observeConversations().collect { convoList ->
+      val newIncoming = KoraMessageNotificationManager.detectNewIncomingMessages(
+        currentUid = currentUid,
+        activeConversationId = latestActiveConvoId,
+        baselineInitialized = baselineInitialized,
+        lastSeenTimestamps = lastSeenTimestamps,
+        lastSeenSignatures = lastSeenSignatures,
+        conversations = convoList,
+        aiConversationId = ChatRepository.AI_CHATBOT_CONVO_ID
+      )
+      baselineInitialized = true
+
+      for (convo in newIncoming) {
+        val senderProfile = latestDirectory.find { it.id == convo.lastMessageSenderId }
+          ?: runCatching { userRepository.getUserProfile(convo.lastMessageSenderId) }.getOrNull()
+        val senderName = senderProfile?.displayName?.takeIf { it.isNotBlank() }
+          ?: convo.title.takeIf { it.isNotBlank() && convo.type == "direct" }
+          ?: ""
+        val preview = convo.lastMessageText.ifBlank { latestStrings.newMessageNotificationTitle }
+
+        KoraMessageNotificationManager.postNewMessageNotification(
+          context = context,
+          conversationId = convo.id,
+          senderName = senderName,
+          messagePreview = preview,
+          strings = latestStrings
+        )
+
+        inAppMessageAlert = IncomingMessageAlert(
+          conversation = convo,
+          senderName = senderName,
+          senderAvatarUrl = senderProfile?.avatarUrl,
+          messagePreview = preview
+        )
+      }
+    }
+  }
+
+  LaunchedEffect(inAppMessageAlert) {
+    if (inAppMessageAlert != null) {
+      delay(4800L)
+      inAppMessageAlert = null
+    }
+  }
+
+  // Heartbeat update & server wallet initialization
+  LaunchedEffect(currentUid, storeRepository) {
     userRepository.updateLastSeen()
+    storeRepository.initializeWalletIfNeeded()
   }
 
   fun toggleLanguage() {
@@ -409,11 +594,13 @@ fun KoraAppRoot(
     onLanguageChanged(next)
   }
 
+  Box(modifier = Modifier.fillMaxSize()) {
   if (showStore) {
     BackHandler { showStore = false }
     DecorationStoreScreen(
       storeRepository = storeRepository,
       userRepository = userRepository,
+      fluxRepository = fluxRepository,
       onBack = { showStore = false }
     )
   } else if (activeConversation != null) {
@@ -421,8 +608,19 @@ fun KoraAppRoot(
     ChatDetailScreen(
       conversation = activeConversation!!,
       chatRepository = chatRepository,
+      chatMediaRepository = chatMediaRepository,
       postRepository = postRepository,
       userRepository = userRepository,
+      onStartVoiceCall = { peerId, peerName, peerAvatarUrl, peerVerified, peerVerifiedTier ->
+        voiceCallController.startOutgoingCall(
+          conversationId = activeConversation!!.id,
+          peerId = peerId,
+          peerName = peerName,
+          peerAvatarUrl = peerAvatarUrl,
+          peerVerified = peerVerified,
+          peerVerifiedTier = peerVerifiedTier
+        )
+      },
       onBack = { activeConversation = null }
     )
   } else {
@@ -503,5 +701,22 @@ fun KoraAppRoot(
         )
       }
     }
+  }
+
+  // In-app Floating New Message Notification Banner (hidden during active call UI)
+  NewMessageBanner(
+    alert = inAppMessageAlert,
+    visible = inAppMessageAlert != null && voiceCallState.phase == VoiceCallUiPhase.IDLE,
+    onOpenChat = { alert ->
+      inAppMessageAlert = null
+      showStore = false
+      currentTab = NavigationTab.CHATS
+      activeConversation = alert.conversation
+    },
+    onDismiss = { inAppMessageAlert = null }
+  )
+
+  // Persistent App-Wide Voice Call Overlay (Incoming Banner, Minimized Pill, Fullscreen Call)
+  VoiceCallOverlay(controller = voiceCallController)
   }
 }

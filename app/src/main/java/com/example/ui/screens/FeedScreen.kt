@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -103,7 +104,7 @@ fun FeedScreen(
       val authorName = userProfile?.displayName ?: "User"
       val authorHandle = userProfile?.handle ?: "@user"
       val isVerified = userProfile?.isVerified ?: false
-      val verifiedTier = userProfile?.verifiedTier ?: "GOLD"
+      val verifiedTier = userProfile?.verifiedTier ?: "BLUE"
 
       val result = postRepository.createPost(
         content = content,
@@ -138,7 +139,8 @@ fun FeedScreen(
         .padding(paddingValues)
         .background(MaterialTheme.colorScheme.background),
       contentPadding = PaddingValues(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+      horizontalAlignment = Alignment.CenterHorizontally
     ) {
       // Post Creator
       item {
@@ -147,7 +149,9 @@ fun FeedScreen(
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
           border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
           elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-          modifier = Modifier.fillMaxWidth()
+          modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 760.dp)
         ) {
           Column(modifier = Modifier.padding(16.dp)) {
             OutlinedTextField(
@@ -218,7 +222,9 @@ fun FeedScreen(
       // Feed Filter Row
       item {
         Row(
-          modifier = Modifier.fillMaxWidth(),
+          modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 760.dp),
           horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
           FilterChip(
@@ -290,28 +296,36 @@ private fun PostCard(
     }
   }
 
+  val authorProfile = usersById[post.authorId]
+  val liveAuthorName = authorProfile?.displayName?.takeIf { it.isNotBlank() } ?: post.authorName
+  val liveAvatarUrl = authorProfile?.avatarUrl ?: authorAvatarUrl
+  val liveIsVerified = authorProfile?.isVerified ?: post.isAuthorVerified
+  val liveVerifiedTier = authorProfile?.verifiedTier?.takeIf { it.isNotBlank() } ?: post.authorVerifiedTier
+
   Card(
     shape = RoundedCornerShape(16.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    modifier = Modifier.fillMaxWidth()
+    modifier = Modifier
+      .fillMaxWidth()
+      .widthIn(max = 760.dp)
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
       // Author Header
       Row(verticalAlignment = Alignment.CenterVertically) {
-        AvatarView(name = post.authorName, avatarUrl = authorAvatarUrl, size = 40.dp)
+        AvatarView(name = liveAuthorName, avatarUrl = liveAvatarUrl, size = 40.dp)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-              text = post.authorName,
+              text = liveAuthorName,
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.SemiBold
             )
-            if (post.isAuthorVerified) {
+            if (liveIsVerified) {
               Spacer(modifier = Modifier.width(6.dp))
-              VerifiedBadge(size = 15.dp, tierKey = post.authorVerifiedTier, showDialogOnClick = true)
+              VerifiedBadge(size = 15.dp, tierKey = liveVerifiedTier, showDialogOnClick = true)
             }
           }
           Text(
@@ -416,9 +430,12 @@ private fun PostCard(
           Spacer(modifier = Modifier.height(8.dp))
 
           comments.forEach { comment ->
+            val commentAuthor = usersById[comment.authorId]
             ContextThreadCommentItem(
               comment = comment,
-              avatarUrl = usersById[comment.authorId]?.avatarUrl
+              avatarUrl = commentAuthor?.avatarUrl,
+              liveVerified = commentAuthor?.isVerified ?: comment.isAuthorVerified,
+              liveVerifiedTier = commentAuthor?.verifiedTier ?: "BLUE"
             )
             Spacer(modifier = Modifier.height(8.dp))
           }
@@ -458,7 +475,12 @@ private fun PostCard(
 }
 
 @Composable
-private fun ContextThreadCommentItem(comment: PostComment, avatarUrl: String? = null) {
+private fun ContextThreadCommentItem(
+  comment: PostComment,
+  avatarUrl: String? = null,
+  liveVerified: Boolean = comment.isAuthorVerified,
+  liveVerifiedTier: String = "BLUE"
+) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -475,9 +497,9 @@ private fun ContextThreadCommentItem(comment: PostComment, avatarUrl: String? = 
           style = MaterialTheme.typography.labelMedium,
           fontWeight = FontWeight.Bold
         )
-        if (comment.isAuthorVerified) {
+        if (liveVerified) {
           Spacer(modifier = Modifier.width(4.dp))
-          VerifiedBadge(size = 13.dp, showDialogOnClick = true)
+          VerifiedBadge(size = 13.dp, tierKey = liveVerifiedTier, showDialogOnClick = true)
         }
         Spacer(modifier = Modifier.width(6.dp))
         Text(

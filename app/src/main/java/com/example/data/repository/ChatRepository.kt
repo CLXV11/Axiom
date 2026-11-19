@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.example.R
 import com.example.data.model.Conversation
@@ -56,11 +57,27 @@ class ChatRepository(
     const val AI_CHATBOT_SENDER_ID = "kora_ai_bot"
     const val AI_CHATBOT_NAME = "Kora AI"
     private const val TAG = "ChatRepository"
+    val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
+
+    fun canonicalDirectConversationId(uidA: String, uidB: String): String {
+      val sorted = listOf(uidA.trim(), uidB.trim()).sorted()
+      val raw = "dm_${sorted[0]}_${sorted[1]}"
+      val sanitized = raw.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+      return if (sanitized.length <= 128) {
+        sanitized
+      } else {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+          .digest(raw.toByteArray())
+          .joinToString("") { "%02x".format(it) }
+        "dm_${digest.take(40)}"
+      }
+    }
   }
 
   private val repositoryScope = CoroutineScope(Dispatchers.Main.immediate)
 
   private val localConversations = MutableStateFlow<List<Conversation>>(emptyList())
+  private var cachedFirestoreConversations: List<Conversation> = emptyList()
   private val localMessages = mutableMapOf<String, MutableStateFlow<List<Message>>>()
   private val localTypingUsers = mutableMapOf<String, MutableStateFlow<List<String>>>()
   private val aiStates = mutableMapOf<String, MutableStateFlow<AiConversationState>>()
@@ -137,7 +154,9 @@ class ChatRepository(
           ).sortedByDescending {
             it.lastMessageTimestamp ?: it.createdAt
           }
+          cachedFirestoreConversations = firestoreList
           val aiConvo = localConversations.value.find { it.id == AI_CHATBOT_CONVO_ID }
+            ?.copy(participantIds = listOf(uid, AI_CHATBOT_SENDER_ID), pinnedBy = listOf(uid))
             ?: createAiChatbotConversation(uid)
           val others = firestoreList.filterNot { it.id == AI_CHATBOT_CONVO_ID }
           listOf(aiConvo) + others
@@ -145,8 +164,10 @@ class ChatRepository(
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "conversations", auth)
           val aiConvo = localConversations.value.find { it.id == AI_CHATBOT_CONVO_ID }
+            ?.copy(participantIds = listOf(uid, AI_CHATBOT_SENDER_ID), pinnedBy = listOf(uid))
             ?: createAiChatbotConversation(uid)
-          emit(listOf(aiConvo))
+          val others = cachedFirestoreConversations.filterNot { it.id == AI_CHATBOT_CONVO_ID }
+          emit(listOf(aiConvo) + others)
         }
     } else {
       return localConversations.asStateFlow()
@@ -160,26 +181,60 @@ class ChatRepository(
     verifiedTier: String = "BLUE"
   ): Result<String> {
     val uid = getEffectiveUserId()
+    val canonicalId = canonicalDirectConversationId(uid, targetUserId)
+
     if (auth.currentUser != null) {
       try {
         val existingSnap = db.collection("conversations")
           .whereArrayContains("participantIds", uid)
           .get()
           .await()
-        val existing = existingSnap.toObjects(
+        val existingList = existingSnap.toObjects(
           Conversation::class.java,
           DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-        ).firstOrNull { convo ->
+        )
+        val canonicalExisting = existingList.firstOrNull { it.id == canonicalId }
+        if (canonicalExisting != null) {
+          return Result.success(canonicalExisting.id)
+        }
+        val legacyExisting = existingList.firstOrNull { convo ->
           convo.type == "direct" &&
             convo.participantIds.contains(targetUserId) &&
             convo.participantIds.size == 2
         }
-        if (existing != null) {
-          return Result.success(existing.id)
+        if (legacyExisting != null) {
+          return Result.success(legacyExisting.id)
         }
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.LIST, "conversations", auth)
+        return Result.failure(e)
       }
+
+      val createResult = createConversationWithId(
+        convoId = canonicalId,
+        type = "direct",
+        targetUserIds = listOf(targetUserId),
+        title = title,
+        isVerified = isVerified,
+        verifiedTier = verifiedTier
+      )
+      if (createResult.isSuccess) return createResult
+
+      // Recover cleanly if peer created canonicalId concurrently
+      val retrySnap = runCatching {
+        db.collection("conversations")
+          .whereArrayContains("participantIds", uid)
+          .get()
+          .await()
+      }.getOrNull()
+      val concurrent = retrySnap?.toObjects(
+        Conversation::class.java,
+        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+      )?.firstOrNull { convo ->
+        convo.id == canonicalId ||
+          (convo.type == "direct" && convo.participantIds.contains(targetUserId) && convo.participantIds.size == 2)
+      }
+      return if (concurrent != null) Result.success(concurrent.id) else createResult
     } else {
       val existing = localConversations.value.firstOrNull { convo ->
         convo.type == "direct" &&
@@ -187,15 +242,15 @@ class ChatRepository(
           convo.participantIds.contains(uid)
       }
       if (existing != null) return Result.success(existing.id)
+      return createConversationWithId(
+        convoId = canonicalId,
+        type = "direct",
+        targetUserIds = listOf(targetUserId),
+        title = title,
+        isVerified = isVerified,
+        verifiedTier = verifiedTier
+      )
     }
-
-    return createConversation(
-      type = "direct",
-      targetUserIds = listOf(targetUserId),
-      title = title,
-      isVerified = isVerified,
-      verifiedTier = verifiedTier
-    )
   }
 
   suspend fun createConversation(
@@ -206,13 +261,32 @@ class ChatRepository(
     verifiedTier: String = "BLUE"
   ): Result<String> {
     val uid = getEffectiveUserId()
-    val allParticipants = (targetUserIds + uid).distinct()
-    val convoId = UUID.randomUUID().toString()
-    val validTier = if (verifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
-      verifiedTier
+    val convoId = if (type == "direct" && targetUserIds.size == 1) {
+      canonicalDirectConversationId(uid, targetUserIds.first())
     } else {
-      "BLUE"
+      UUID.randomUUID().toString()
     }
+    return createConversationWithId(
+      convoId = convoId,
+      type = type,
+      targetUserIds = targetUserIds,
+      title = title,
+      isVerified = isVerified,
+      verifiedTier = verifiedTier
+    )
+  }
+
+  private suspend fun createConversationWithId(
+    convoId: String,
+    type: String,
+    targetUserIds: List<String>,
+    title: String? = null,
+    isVerified: Boolean = false,
+    verifiedTier: String = "BLUE"
+  ): Result<String> {
+    val uid = getEffectiveUserId()
+    val allParticipants = (targetUserIds + uid).distinct()
+    val validTier = if (verifiedTier in VALID_TIERS) verifiedTier else "BLUE"
 
     if (auth.currentUser != null) {
       val convoRef = db.collection("conversations").document(convoId)
@@ -272,11 +346,13 @@ class ChatRepository(
           snapshot.toObjects(
             Message::class.java,
             DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-          )
+          ).also { msgs ->
+            localFlow.value = msgs
+          }
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "conversations/$conversationId/messages", auth)
-          emit(emptyList())
+          emit(localFlow.value)
         }
     } else {
       return localFlow.asStateFlow()
@@ -289,15 +365,11 @@ class ChatRepository(
     senderName: String,
     replyTo: Message? = null,
     isSenderVerified: Boolean = false,
-    senderVerifiedTier: String = "GOLD"
+    senderVerifiedTier: String = "BLUE"
   ): Result<Unit> {
     val uid = getEffectiveUserId()
     val messageId = UUID.randomUUID().toString()
-    val validTier = if (senderVerifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
-      senderVerifiedTier
-    } else {
-      "GOLD"
-    }
+    val validTier = if (senderVerifiedTier in VALID_TIERS) senderVerifiedTier else "BLUE"
 
     if (isAiChatbotConversation(conversationId)) {
       val now = Timestamp.now()
@@ -412,6 +484,119 @@ class ChatRepository(
       if (convo.id == conversationId) {
         convo.copy(
           lastMessageText = content.take(150),
+          lastMessageSenderId = uid,
+          lastMessageTimestamp = now
+        )
+      } else convo
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun sendMediaMessage(
+    conversationId: String,
+    media: PreparedMediaMetadata,
+    caption: String,
+    senderName: String,
+    replyTo: Message? = null,
+    isSenderVerified: Boolean = false,
+    senderVerifiedTier: String = "BLUE"
+  ): Result<Unit> {
+    val uid = getEffectiveUserId()
+    val messageId = UUID.randomUUID().toString()
+    val validTier = if (senderVerifiedTier in VALID_TIERS) senderVerifiedTier else "BLUE"
+    val previewLabel = when (media.mediaType) {
+      "image" -> "📷 ${caption.ifBlank { media.fileName }}"
+      "video" -> "🎬 ${caption.ifBlank { media.fileName }}"
+      else -> "📎 ${media.fileName}"
+    }
+    val messageContent = caption.trim().ifBlank { previewLabel }
+
+    if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val msgRef = db.collection("conversations")
+        .document(conversationId)
+        .collection("messages")
+        .document(messageId)
+      val convoRef = db.collection("conversations").document(conversationId)
+
+      val payload = buildMap<String, Any> {
+        put("conversationId", conversationId)
+        put("senderId", uid)
+        put("senderName", senderName.ifBlank { "Member" }.take(100))
+        put("isSenderVerified", isSenderVerified)
+        put("senderVerifiedTier", validTier)
+        put("content", messageContent.take(4000))
+        put("mediaType", media.mediaType)
+        put("mediaId", media.mediaId)
+        put("mediaFileName", media.fileName.take(255))
+        put("mediaMimeType", media.mimeType.take(128))
+        put("mediaSizeBytes", media.sizeBytes)
+        put("mediaChunkCount", media.chunkCount)
+        put("mediaDurationMs", media.durationMs)
+        if (replyTo != null) {
+          put("replyToId", replyTo.id)
+          put("replyToSender", replyTo.senderName.take(100))
+          put("replyToText", replyTo.content.take(500))
+        }
+        put("status", "sent")
+        put("readBy", listOf(uid))
+        put("isEdited", false)
+        put("isDeleted", false)
+        put("createdAt", FieldValue.serverTimestamp())
+        put("updatedAt", FieldValue.serverTimestamp())
+      }
+
+      return try {
+        val batch = db.batch()
+        batch.set(msgRef, payload)
+        batch.update(
+          convoRef,
+          mapOf(
+            "lastMessageText" to previewLabel.take(150),
+            "lastMessageSenderId" to uid,
+            "lastMessageTimestamp" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+          )
+        )
+        batch.commit().await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.CREATE, msgRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    val now = Timestamp.now()
+    val newMsg = Message(
+      id = messageId,
+      conversationId = conversationId,
+      senderId = uid,
+      senderName = senderName,
+      isSenderVerified = isSenderVerified,
+      senderVerifiedTier = validTier,
+      content = messageContent,
+      mediaType = media.mediaType,
+      mediaId = media.mediaId,
+      mediaFileName = media.fileName,
+      mediaMimeType = media.mimeType,
+      mediaSizeBytes = media.sizeBytes,
+      mediaChunkCount = media.chunkCount,
+      mediaDurationMs = media.durationMs,
+      localMediaUri = Uri.fromFile(media.localFile).toString(),
+      replyToId = replyTo?.id,
+      replyToSender = replyTo?.senderName,
+      replyToText = replyTo?.content?.take(100),
+      status = "read",
+      readBy = listOf(uid),
+      isEdited = false,
+      isDeleted = false,
+      createdAt = now
+    )
+    val msgFlow = localMessages.getOrPut(conversationId) { MutableStateFlow(emptyList()) }
+    msgFlow.value = msgFlow.value + newMsg
+    localConversations.value = localConversations.value.map { convo ->
+      if (convo.id == conversationId) {
+        convo.copy(
+          lastMessageText = previewLabel.take(150),
           lastMessageSenderId = uid,
           lastMessageTimestamp = now
         )

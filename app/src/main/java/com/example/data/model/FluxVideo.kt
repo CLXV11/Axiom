@@ -1,11 +1,16 @@
 package com.example.data.model
 
+import androidx.annotation.Keep
+import com.google.firebase.firestore.PropertyName
+
+@Keep
 data class FluxVideo(
   val id: String = "",
   val authorId: String = "",
   val authorName: String = "",
   val authorHandle: String = "",
-  val authorVerifiedTier: String = "GOLD",
+  val authorVerifiedTier: String = "BLUE",
+  @get:PropertyName("isAuthorVerified") @PropertyName("isAuthorVerified")
   val isAuthorVerified: Boolean = false,
   val caption: String = "",
   val videoUri: String? = null,
@@ -20,6 +25,7 @@ data class FluxVideo(
   val createdAt: Long = System.currentTimeMillis()
 )
 
+@Keep
 data class FluxComment(
   val id: String = "",
   val fluxId: String = "",
@@ -27,6 +33,7 @@ data class FluxComment(
   val authorName: String = "",
   val authorHandle: String = "",
   val authorVerifiedTier: String = "BLUE",
+  @get:PropertyName("isAuthorVerified") @PropertyName("isAuthorVerified")
   val isAuthorVerified: Boolean = false,
   val content: String = "",
   val timestamp: Long = System.currentTimeMillis()

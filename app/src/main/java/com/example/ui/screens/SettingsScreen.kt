@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -86,15 +87,21 @@ fun SettingsScreen(
       KoraTopBar(title = strings.settingsTitle)
     }
   ) { paddingValues ->
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(MaterialTheme.colorScheme.background)
-        .verticalScroll(rememberScrollState())
-        .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
+        .background(MaterialTheme.colorScheme.background),
+      contentAlignment = Alignment.TopCenter
     ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .widthIn(max = 760.dp)
+          .verticalScroll(rememberScrollState())
+          .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+      ) {
       val colors = MaterialTheme.colorScheme
       val cardShape = RoundedCornerShape(16.dp)
       val cardBorder = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f))
@@ -505,6 +512,7 @@ fun SettingsScreen(
       }
 
       Spacer(modifier = Modifier.height(16.dp))
+    }
     }
 
     // Quick-Access Theme Switcher Bottom Sheet

@@ -1,10 +1,16 @@
 package com.example.ui.screens
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
@@ -23,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,8 +50,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
@@ -52,6 +61,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,6 +70,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -72,6 +83,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -93,10 +105,14 @@ import com.example.data.model.Conversation
 import com.example.data.model.Message
 import com.example.data.model.UserProfile
 import com.example.data.repository.AiConversationState
+import com.example.data.repository.ChatMediaRepository
 import com.example.data.repository.ChatRepository
 import com.example.data.repository.PostRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
+import com.example.ui.components.ChatMediaAttachmentSheet
+import com.example.ui.components.FullscreenVideoPlayerDialog
+import com.example.ui.components.MediaMessageBubbleContent
 import com.example.ui.components.TypingBubble
 import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
@@ -105,6 +121,7 @@ import com.example.ui.theme.StatusOnline
 import com.example.ui.util.LocalAppStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -114,8 +131,16 @@ private typealias UnitCallback = () -> Unit
 fun ChatDetailScreen(
   conversation: Conversation,
   chatRepository: ChatRepository,
+  chatMediaRepository: ChatMediaRepository,
   postRepository: PostRepository,
   userRepository: UserRepository,
+  onStartVoiceCall: (
+    peerId: String,
+    peerName: String,
+    peerAvatarUrl: String?,
+    peerVerified: Boolean,
+    peerVerifiedTier: String?
+  ) -> Unit = { _, _, _, _, _ -> },
   onBack: UnitCallback
 ) {
   BackHandler { onBack() }
@@ -130,14 +155,10 @@ fun ChatDetailScreen(
   }
 
   val currentUid = userRepository.requireUserId()
-  var currentUserName by remember { mutableStateOf("Me") }
-
-  LaunchedEffect(currentUid) {
-    val profile = userRepository.getUserProfile(currentUid)
-    if (profile?.displayName?.isNotBlank() == true) {
-      currentUserName = profile.displayName
-    }
-  }
+  val cachedCurrentProfile = remember(currentUid) { userRepository.getCachedProfile(currentUid) }
+  val currentUserProfile by userRepository.observeUserProfile(currentUid)
+    .collectAsState(initial = cachedCurrentProfile)
+  val currentUserName = currentUserProfile?.displayName?.takeIf { it.isNotBlank() } ?: "Me"
 
   val messages by chatRepository.observeMessages(conversation.id).collectAsState(initial = emptyList())
   val typingUsers by chatRepository.observeTyping(conversation.id).collectAsState(initial = emptyList())
@@ -197,6 +218,96 @@ fun ChatDetailScreen(
   var memoryTargetMessage by remember { mutableStateOf<Message?>(null) }
   var privateNoteInput by remember { mutableStateOf("") }
 
+  // Rich media attachment, upload progress, and inline/fullscreen video playback state
+  var showMediaPickerSheet by remember { mutableStateOf(false) }
+  var isUploadingMedia by remember { mutableStateOf(false) }
+  var uploadProgress by remember { mutableFloatStateOf(0f) }
+  var activeInlineVideoMsgId by remember { mutableStateOf<String?>(null) }
+  var fullscreenVideoItem by remember { mutableStateOf<Triple<File, String?, String?>?>(null) }
+
+  fun uploadAndSendMedia(uri: Uri, mediaType: String) {
+    if (isUploadingMedia) return
+    val pendingReply = replyingToMessage
+    val caption = messageInput.trim()
+    coroutineScope.launch {
+      isUploadingMedia = true
+      uploadProgress = 0.05f
+      val uploadRes = chatMediaRepository.prepareAndUploadMedia(
+        conversationId = conversation.id,
+        sourceUri = uri,
+        mediaType = mediaType,
+        isLocalOnlyChat = isAiChat,
+        onProgress = { uploadProgress = it }
+      )
+      if (uploadRes.isSuccess) {
+        val prepared = uploadRes.getOrThrow()
+        val userProfile = currentUserProfile ?: runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
+        val senderName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUserName
+        val isVerified = userProfile?.isVerified ?: false
+        val verifiedTier = userProfile?.verifiedTier ?: "BLUE"
+        val sendRes = chatRepository.sendMediaMessage(
+          conversationId = conversation.id,
+          media = prepared,
+          caption = caption,
+          senderName = senderName,
+          replyTo = pendingReply,
+          isSenderVerified = isVerified,
+          senderVerifiedTier = verifiedTier
+        )
+        if (sendRes.isSuccess) {
+          messageInput = ""
+          replyingToMessage = null
+        } else {
+          Toast.makeText(
+            context,
+            sendRes.exceptionOrNull()?.localizedMessage ?: strings.chatDeliveryError,
+            Toast.LENGTH_SHORT
+          ).show()
+        }
+      } else {
+        val errMsg = uploadRes.exceptionOrNull()?.message.orEmpty()
+        val displayMsg = if (errMsg.contains("25 MB", ignoreCase = true)) {
+          strings.fileTooLargeLimit
+        } else {
+          uploadRes.exceptionOrNull()?.localizedMessage ?: strings.mediaUploadFailed
+        }
+        Toast.makeText(context, displayMsg, Toast.LENGTH_LONG).show()
+      }
+      isUploadingMedia = false
+      uploadProgress = 0f
+    }
+  }
+
+  val photoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    if (uri != null) uploadAndSendMedia(uri, "image")
+  }
+
+  val videoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri ->
+    if (uri != null) uploadAndSendMedia(uri, "video")
+  }
+
+  val filePickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    if (uri != null) uploadAndSendMedia(uri, "file")
+  }
+
+  var pendingCallTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
+  val micPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { granted ->
+    if (granted) {
+      pendingCallTrigger?.invoke()
+    } else {
+      Toast.makeText(context, strings.micPermissionRequired, Toast.LENGTH_LONG).show()
+    }
+    pendingCallTrigger = null
+  }
+
   // Auto-scroll smoothly as messages or streaming chunks arrive
   val lastContentLength = messages.lastOrNull()?.content?.length ?: 0
   LaunchedEffect(messages.size, lastContentLength, peerTypingUsers.size, aiState.errorMessage) {
@@ -216,10 +327,10 @@ fun ChatDetailScreen(
     chatRepository.setTyping(conversation.id, currentUserName, false)
 
     coroutineScope.launch {
-      val userProfile = runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
-      val senderName = userProfile?.displayName ?: currentUserName
+      val userProfile = currentUserProfile ?: runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
+      val senderName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUserName
       val isVerified = userProfile?.isVerified ?: false
-      val verifiedTier = userProfile?.verifiedTier ?: "GOLD"
+      val verifiedTier = userProfile?.verifiedTier ?: "BLUE"
 
       if (editingMessage != null) {
         val res = chatRepository.editMessage(conversation.id, editingMessage!!.id, text)
@@ -227,7 +338,11 @@ fun ChatDetailScreen(
           editingMessage = null
           messageInput = ""
         } else {
-          Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+          Toast.makeText(
+            context,
+            res.exceptionOrNull()?.localizedMessage ?: strings.chatDeliveryError,
+            Toast.LENGTH_SHORT
+          ).show()
         }
       } else {
         val pendingReply = replyingToMessage
@@ -244,7 +359,11 @@ fun ChatDetailScreen(
         if (res.isFailure) {
           messageInput = text
           replyingToMessage = pendingReply
-          Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+          Toast.makeText(
+            context,
+            res.exceptionOrNull()?.localizedMessage ?: strings.chatDeliveryError,
+            Toast.LENGTH_SHORT
+          ).show()
         }
       }
     }
@@ -322,6 +441,29 @@ fun ChatDetailScreen(
         verifiedTier = peerUser?.verifiedTier ?: conversation.verifiedTier,
         isThinkingOrTyping = aiState.isGenerating || peerTypingUsers.isNotEmpty(),
         canClearAiChat = isAiChat && messages.isNotEmpty(),
+        canStartVoiceCall = !isAiChat && !isGroup && !peerId.isNullOrBlank(),
+        onStartVoiceCall = {
+          val targetId = peerId ?: return@PolishedChatTopBar
+          val invokeCall = {
+            onStartVoiceCall(
+              targetId,
+              convoTitle,
+              peerUser?.avatarUrl,
+              peerUser?.isVerified ?: conversation.isVerified,
+              peerUser?.verifiedTier ?: conversation.verifiedTier
+            )
+          }
+          val hasMic = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+          ) == PackageManager.PERMISSION_GRANTED
+          if (hasMic) {
+            invokeCall()
+          } else {
+            pendingCallTrigger = invokeCall
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+          }
+        },
         onClearAiChat = { chatRepository.clearAiConversation() },
         onBackClick = onBack
       )
@@ -332,13 +474,15 @@ fun ChatDetailScreen(
         .fillMaxSize()
         .padding(paddingValues)
         .background(calmBackdrop)
-        .imePadding()
+        .imePadding(),
+      horizontalAlignment = Alignment.CenterHorizontally
     ) {
       // Message Stream or Calm AI Welcome Canvas
       Box(
         modifier = Modifier
           .weight(1f)
           .fillMaxWidth()
+          .widthIn(max = 840.dp)
       ) {
         if (isAiChat && messages.isEmpty() && aiState.errorMessage == null) {
           AiWelcomeHero(
@@ -359,12 +503,39 @@ fun ChatDetailScreen(
             items(messages, key = { it.id }) { msg ->
               val isMe = msg.senderId == currentUid
               val isBotMsg = msg.senderId == ChatRepository.AI_CHATBOT_SENDER_ID
-              val senderAvatarUrl = directoryUsers.find { it.id == msg.senderId }?.avatarUrl
+              val senderProfile = directoryUsers.find { it.id == msg.senderId }
+                ?: if (msg.senderId == peerId) peerUser else null
+              val liveVerified = when {
+                isBotMsg -> msg.isSenderVerified
+                isMe -> currentUserProfile?.isVerified ?: msg.isSenderVerified
+                else -> senderProfile?.isVerified ?: msg.isSenderVerified
+              }
+              val liveVerifiedTier = when {
+                isBotMsg -> msg.senderVerifiedTier
+                isMe -> currentUserProfile?.verifiedTier ?: msg.senderVerifiedTier
+                else -> senderProfile?.verifiedTier ?: msg.senderVerifiedTier
+              }
               PolishedMessageBubble(
-                message = msg,
+                conversationId = conversation.id,
+                message = msg.copy(
+                  isSenderVerified = liveVerified,
+                  senderVerifiedTier = liveVerifiedTier
+                ),
                 isMe = isMe,
                 isAiMessage = isBotMsg,
-                senderAvatarUrl = senderAvatarUrl,
+                senderAvatarUrl = senderProfile?.avatarUrl,
+                chatMediaRepository = chatMediaRepository,
+                isInlineVideoPlaying = activeInlineVideoMsgId == msg.id,
+                onPlayInlineVideo = { activeInlineVideoMsgId = msg.id },
+                onStopInlineVideo = {
+                  if (activeInlineVideoMsgId == msg.id) {
+                    activeInlineVideoMsgId = null
+                  }
+                },
+                onOpenFullscreenVideo = { file ->
+                  activeInlineVideoMsgId = null
+                  fullscreenVideoItem = Triple(file, msg.mediaFileName, msg.mediaMimeType)
+                },
                 onReply = {
                   replyingToMessage = msg
                   editingMessage = null
@@ -449,15 +620,78 @@ fun ChatDetailScreen(
         }
       }
 
+      // Media upload progress bar
+      AnimatedVisibility(
+        visible = isUploadingMedia,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically()
+      ) {
+        Surface(
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+          shape = RoundedCornerShape(14.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 840.dp)
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+              text = String.format(strings.uploadingMediaProgress, (uploadProgress * 100).toInt().coerceIn(1, 99)),
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            LinearProgressIndicator(
+              progress = { uploadProgress.coerceIn(0.05f, 1f) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+            )
+          }
+        }
+      }
+
       // Floating Soft Pill Composer
-      PolishedMessageComposer(
-        value = messageInput,
-        onValueChange = { messageInput = it },
-        placeholder = strings.typeMessage,
-        isSendEnabled = messageInput.isNotBlank() && !(isAiChat && aiState.isGenerating),
-        onSend = { sendText(messageInput) }
-      )
+      Box(modifier = Modifier.fillMaxWidth().widthIn(max = 840.dp)) {
+        PolishedMessageComposer(
+          value = messageInput,
+          onValueChange = { messageInput = it },
+          placeholder = strings.typeMessage,
+          isSendEnabled = messageInput.isNotBlank() && !(isAiChat && aiState.isGenerating) && !isUploadingMedia,
+          showAttachButton = !isAiChat && editingMessage == null,
+          isAttachEnabled = !isUploadingMedia,
+          onAttachClick = { showMediaPickerSheet = true },
+          onSend = { sendText(messageInput) }
+        )
+      }
     }
+  }
+
+  if (showMediaPickerSheet) {
+    ChatMediaAttachmentSheet(
+      onDismiss = { showMediaPickerSheet = false },
+      onPickPhoto = {
+        photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+      },
+      onPickVideo = {
+        videoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+      },
+      onPickFile = {
+        filePickerLauncher.launch(arrayOf("*/*"))
+      }
+    )
+  }
+
+  fullscreenVideoItem?.let { (file, name, mime) ->
+    FullscreenVideoPlayerDialog(
+      file = file,
+      fileName = name,
+      mimeType = mime,
+      chatMediaRepository = chatMediaRepository,
+      onDismiss = { fullscreenVideoItem = null }
+    )
   }
 
   // Save to Memory Dialog
@@ -514,6 +748,8 @@ private fun PolishedChatTopBar(
   verifiedTier: String?,
   isThinkingOrTyping: Boolean,
   canClearAiChat: Boolean,
+  canStartVoiceCall: Boolean,
+  onStartVoiceCall: () -> Unit,
   onClearAiChat: () -> Unit,
   onBackClick: () -> Unit
 ) {
@@ -528,8 +764,8 @@ private fun PolishedChatTopBar(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .height(64.dp)
-          .padding(horizontal = 8.dp),
+          .defaultMinSize(minHeight = 64.dp)
+          .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
         IconButton(
@@ -630,7 +866,8 @@ private fun PolishedChatTopBar(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Medium,
-                maxLines = 1
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
               )
             } else {
               Box(
@@ -644,9 +881,25 @@ private fun PolishedChatTopBar(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
               )
             }
+          }
+        }
+
+        if (canStartVoiceCall) {
+          IconButton(
+            onClick = onStartVoiceCall,
+            modifier = Modifier
+              .size(48.dp)
+              .testTag("start_voice_call_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Call,
+              contentDescription = strings.startVoiceCall,
+              tint = MaterialTheme.colorScheme.primary
+            )
           }
         }
 
@@ -786,10 +1039,16 @@ private fun AiWelcomeHero(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PolishedMessageBubble(
+  conversationId: String,
   message: Message,
   isMe: Boolean,
   isAiMessage: Boolean,
   senderAvatarUrl: String?,
+  chatMediaRepository: ChatMediaRepository,
+  isInlineVideoPlaying: Boolean,
+  onPlayInlineVideo: () -> Unit,
+  onStopInlineVideo: () -> Unit,
+  onOpenFullscreenVideo: (File) -> Unit,
   onReply: () -> Unit,
   onCopy: () -> Unit,
   onEdit: () -> Unit,
@@ -944,15 +1203,35 @@ private fun PolishedMessageBubble(
             }
           }
 
-          // Message Text
-          Text(
-            text = message.content,
-            style = MaterialTheme.typography.bodyMedium.copy(
-              fontSize = 15.sp,
-              lineHeight = 23.sp
-            ),
-            color = MaterialTheme.colorScheme.onSurface
-          )
+          // Embedded Media Content (Photo / Inline ExoPlayer Video / File Card)
+          if (message.hasMediaAttachment() && !message.isDeleted) {
+            MediaMessageBubbleContent(
+              conversationId = conversationId,
+              message = message,
+              chatMediaRepository = chatMediaRepository,
+              isInlineVideoPlaying = isInlineVideoPlaying,
+              onPlayInlineVideo = onPlayInlineVideo,
+              onStopInlineVideo = onStopInlineVideo,
+              onOpenFullscreenVideo = onOpenFullscreenVideo
+            )
+          }
+
+          val isSyntheticMediaPlaceholder = message.hasMediaAttachment() &&
+            (message.content.startsWith("📷 ") ||
+              message.content.startsWith("🎬 ") ||
+              message.content.startsWith("📎 "))
+
+          // Message Text / Optional Caption
+          if (!isSyntheticMediaPlaceholder && message.content.isNotBlank()) {
+            Text(
+              text = message.content,
+              style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                lineHeight = 23.sp
+              ),
+              color = MaterialTheme.colorScheme.onSurface
+            )
+          }
 
           Spacer(modifier = Modifier.height(4.dp))
 
@@ -1184,6 +1463,9 @@ private fun PolishedMessageComposer(
   onValueChange: (String) -> Unit,
   placeholder: String,
   isSendEnabled: Boolean,
+  showAttachButton: Boolean,
+  isAttachEnabled: Boolean,
+  onAttachClick: () -> Unit,
   onSend: () -> Unit
 ) {
   val strings = LocalAppStrings.current
@@ -1223,9 +1505,31 @@ private fun PolishedMessageComposer(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+          .padding(
+            start = if (showAttachButton) 6.dp else 18.dp,
+            end = 6.dp,
+            top = 6.dp,
+            bottom = 6.dp
+          ),
         verticalAlignment = Alignment.CenterVertically
       ) {
+        if (showAttachButton) {
+          IconButton(
+            onClick = onAttachClick,
+            enabled = isAttachEnabled,
+            modifier = Modifier
+              .size(48.dp)
+              .testTag("chat_attach_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.AttachFile,
+              contentDescription = strings.attachMedia,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(22.dp)
+            )
+          }
+        }
+
         BasicTextField(
           value = value,
           onValueChange = onValueChange,

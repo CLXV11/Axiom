@@ -19,659 +19,953 @@ fun formatHandleForDisplay(handle: String?): String {
   return "\u2066$normalized\u2069"
 }
 
-data class KoraStrings(
+interface KoraStrings {
   // Brand & Welcome
-  val appName: String,
-  val tagline: String,
-  val signInWithGoogle: String,
-  val welcomeBack: String,
-  val createProfile: String,
-  val enterDisplayName: String,
-  val enterHandle: String,
-  val enterBio: String,
-  val saveProfile: String,
-  val signingIn: String,
+  val appName: String
+  val tagline: String
+  val signInWithGoogle: String
+  val welcomeBack: String
+  val createProfile: String
+  val enterDisplayName: String
+  val enterHandle: String
+  val enterBio: String
+  val saveProfile: String
+  val signingIn: String
 
   // Navigation
-  val navChats: String,
-  val navFeed: String,
-  val navMemory: String,
-  val navProfile: String,
-  val navSettings: String,
+  val navChats: String
+  val navFeed: String
+  val navMemory: String
+  val navProfile: String
+  val navSettings: String
 
   // Chats
-  val conversations: String,
-  val searchChats: String,
-  val directChats: String,
-  val groupChats: String,
-  val newChat: String,
-  val newGroup: String,
-  val noChatsYet: String,
-  val startFirstConversation: String,
-  val typeMessage: String,
-  val send: String,
-  val reply: String,
-  val replyingTo: String,
-  val edit: String,
-  val delete: String,
-  val copy: String,
-  val messageCopied: String,
-  val saveToMemory: String,
-  val pinChat: String,
-  val unpinChat: String,
-  val archiveChat: String,
-  val unarchiveChat: String,
-  val muteChat: String,
-  val unmuteChat: String,
-  val edited: String,
-  val messageDeleted: String,
+  val conversations: String
+  val searchChats: String
+  val directChats: String
+  val groupChats: String
+  val newChat: String
+  val newGroup: String
+  val noChatsYet: String
+  val startFirstConversation: String
+  val typeMessage: String
+  val send: String
+  val reply: String
+  val replyingTo: String
+  val edit: String
+  val delete: String
+  val copy: String
+  val messageCopied: String
+  val saveToMemory: String
+  val pinChat: String
+  val unpinChat: String
+  val archiveChat: String
+  val unarchiveChat: String
+  val muteChat: String
+  val unmuteChat: String
+  val edited: String
+  val messageDeleted: String
 
   // Social Feed
-  val feedTitle: String,
-  val whatsOnYourMind: String,
-  val publish: String,
-  val audiencePublic: String,
-  val audienceCircles: String,
-  val filterAll: String,
-  val filterCircles: String,
-  val contextThreads: String,
-  val viewThread: String,
-  val writeAComment: String,
-  val noPostsYet: String,
-  val beTheFirstToShare: String,
-  val likes: String,
-  val comments: String,
+  val feedTitle: String
+  val whatsOnYourMind: String
+  val publish: String
+  val audiencePublic: String
+  val audienceCircles: String
+  val filterAll: String
+  val filterCircles: String
+  val contextThreads: String
+  val viewThread: String
+  val writeAComment: String
+  val noPostsYet: String
+  val beTheFirstToShare: String
+  val likes: String
+  val comments: String
 
   // Personal Memory Vault
-  val memoryTitle: String,
-  val memorySubtitle: String,
-  val noSavedMemories: String,
-  val memoryTip: String,
-  val searchMemory: String,
-  val addPrivateNote: String,
-  val notePlaceholder: String,
-  val saveNote: String,
-  val memorySaved: String,
+  val memoryTitle: String
+  val memorySubtitle: String
+  val noSavedMemories: String
+  val memoryTip: String
+  val searchMemory: String
+  val addPrivateNote: String
+  val notePlaceholder: String
+  val saveNote: String
+  val memorySaved: String
 
   // Profile & Presence
-  val profileTitle: String,
-  val quietPresence: String,
-  val quietModeDesc: String,
-  val online: String,
-  val quietMode: String,
-  val invisible: String,
-  val readReceipts: String,
-  val readReceiptsDesc: String,
-  val signOut: String,
+  val profileTitle: String
+  val quietPresence: String
+  val quietModeDesc: String
+  val online: String
+  val quietMode: String
+  val invisible: String
+  val readReceipts: String
+  val readReceiptsDesc: String
+  val signOut: String
 
   // Settings
-  val settingsTitle: String,
-  val appearance: String,
-  val themeLight: String,
-  val themeDark: String,
-  val themeSystem: String,
-  val language: String,
-  val english: String,
-  val arabic: String,
-  val cancel: String,
-  val confirm: String,
-  val ok: String,
-  val errorOccurred: String,
-  val retry: String,
+  val settingsTitle: String
+  val appearance: String
+  val themeLight: String
+  val themeDark: String
+  val themeSystem: String
+  val language: String
+  val english: String
+  val arabic: String
+  val cancel: String
+  val confirm: String
+  val ok: String
+  val errorOccurred: String
+  val retry: String
 
   // Decoration Store
-  val storeTitle: String,
-  val customDecoration: String,
-  val buyCoins: String,
-  val earnCoins: String,
-  val avatarFrames: String,
-  val roleNameplates: String,
-  val chatBubbles: String,
-  val allCategories: String,
-  val preview: String,
-  val equip: String,
-  val equipped: String,
-  val unequip: String,
-  val buyFor: String,
-  val notEnoughCoins: String,
-  val purchasedSuccess: String,
-  val dailyCheckIn: String,
-  val dailyCheckInDesc: String,
-  val claimCoins: String,
-  val coinsClaimed: String,
-  val shopBannerText: String,
-  val buyCoinsDesc: String,
-  val packStarter: String,
-  val packPopular: String,
-  val packElite: String,
+  val storeTitle: String
+  val customDecoration: String
+  val buyCoins: String
+  val earnCoins: String
+  val avatarFrames: String
+  val roleNameplates: String
+  val chatBubbles: String
+  val allCategories: String
+  val preview: String
+  val equip: String
+  val equipped: String
+  val unequip: String
+  val buyFor: String
+  val notEnoughCoins: String
+  val purchasedSuccess: String
+  val dailyCheckIn: String
+  val dailyCheckInDesc: String
+  val claimCoins: String
+  val coinsClaimed: String
+  val shopBannerText: String
+  val buyCoinsDesc: String
+  val packStarter: String
+  val packPopular: String
+  val packElite: String
 
   // Verification Badge
-  val verifiedAccount: String,
-  val verificationBadge: String,
-  val verifiedBadgeSubtitle: String,
-  val verifiedStatusActive: String,
-  val verifiedStatusInactive: String,
-  val toggleVerification: String,
-  val verificationDetails: String,
-  val verifiedDialogTitle: String,
-  val verifiedDialogMessage: String,
+  val verifiedAccount: String
+  val verificationBadge: String
+  val verifiedBadgeSubtitle: String
+  val verifiedStatusActive: String
+  val verifiedStatusInactive: String
+  val toggleVerification: String
+  val verificationDetails: String
+  val verifiedDialogTitle: String
+  val verifiedDialogMessage: String
 
   // Typing Indicator
-  val isTyping: String,
-  val typingSingle: String,
-  val typingMultiple: String,
+  val isTyping: String
+  val typingSingle: String
+  val typingMultiple: String
 
   // Flux Short Videos
-  val navFlux: String,
-  val fluxTitle: String,
-  val fluxSubtitle: String,
-  val newFlux: String,
-  val publishFlux: String,
-  val selectVideo: String,
-  val fluxCaptionPlaceholder: String,
-  val fluxAudioPlaceholder: String,
-  val noFluxYet: String,
-  val beFirstToPublishFlux: String,
-  val fluxPublished: String,
-  val fluxCommentsTitle: String,
-  val addFluxComment: String,
+  val navFlux: String
+  val fluxTitle: String
+  val fluxSubtitle: String
+  val newFlux: String
+  val publishFlux: String
+  val selectVideo: String
+  val fluxCaptionPlaceholder: String
+  val fluxAudioPlaceholder: String
+  val noFluxYet: String
+  val beFirstToPublishFlux: String
+  val fluxPublished: String
+  val fluxCommentsTitle: String
+  val addFluxComment: String
 
   // Professional Theme Switcher
-  val themeSwitcherTitle: String,
-  val themePresets: String,
-  val customAccentColor: String,
-  val amoledMode: String,
-  val amoledModeDesc: String,
-  val themePreview: String,
-  val livePreviewChannel: String,
-  val livePreviewSampleMessage: String,
-  val quickThemeSwitcher: String,
+  val themeSwitcherTitle: String
+  val themePresets: String
+  val customAccentColor: String
+  val amoledMode: String
+  val amoledModeDesc: String
+  val themePreview: String
+  val livePreviewChannel: String
+  val livePreviewSampleMessage: String
+  val quickThemeSwitcher: String
 
   // Profile Avatar Customization
-  val changeAvatarTitle: String,
-  val changeAvatarSubtitle: String,
-  val chooseFromGallery: String,
-  val curatedAvatars: String,
-  val customImageUrl: String,
-  val enterImageUrlPlaceholder: String,
-  val applyUrl: String,
-  val resetToInitial: String,
-  val avatarUpdatedSuccess: String,
-  val previewAvatar: String,
+  val changeAvatarTitle: String
+  val changeAvatarSubtitle: String
+  val chooseFromGallery: String
+  val curatedAvatars: String
+  val customImageUrl: String
+  val enterImageUrlPlaceholder: String
+  val applyUrl: String
+  val resetToInitial: String
+  val avatarUpdatedSuccess: String
+  val previewAvatar: String
 
   // Searchable Contact Directory
-  val contactDirectoryTitle: String,
-  val contactDirectorySubtitle: String,
-  val searchByNameOrProfession: String,
-  val allProfessions: String,
-  val contactsCount: String,
-  val clearSearch: String,
-  val noContactsFound: String,
-  val noContactsFoundDesc: String,
+  val contactDirectoryTitle: String
+  val contactDirectorySubtitle: String
+  val searchByNameOrProfession: String
+  val allProfessions: String
+  val contactsCount: String
+  val clearSearch: String
+  val noContactsFound: String
+  val noContactsFoundDesc: String
 
   // Verified Professional Networking
-  val verifiedProTitle: String,
-  val verifiedProBadge: String,
-  val verifiedProSubtitle: String,
-  val openToNetworking: String,
-  val professionalCredentialsTitle: String,
-  val verifiedProDialogDesc: String,
-  val filterVerifiedProOnly: String,
+  val verifiedProTitle: String
+  val verifiedProBadge: String
+  val verifiedProSubtitle: String
+  val openToNetworking: String
+  val professionalCredentialsTitle: String
+  val verifiedProDialogDesc: String
+  val filterVerifiedProOnly: String
 
   // Single AI Assistant Chatbot
-  val aiAssistantName: String,
-  val aiAssistantSubtitle: String,
-  val aiWelcomeTitle: String,
-  val aiWelcomeDesc: String,
-  val aiPromptOne: String,
-  val aiPromptTwo: String,
-  val aiPromptThree: String,
-  val aiClearChat: String,
-  val aiBotBadge: String,
-  val aiThinking: String,
-  val aiErrorBannerTitle: String,
+  val aiAssistantName: String
+  val aiAssistantSubtitle: String
+  val aiWelcomeTitle: String
+  val aiWelcomeDesc: String
+  val aiPromptOne: String
+  val aiPromptTwo: String
+  val aiPromptThree: String
+  val aiClearChat: String
+  val aiBotBadge: String
+  val aiThinking: String
+  val aiErrorBannerTitle: String
 
   // Multi-user Cloud Session & Profile Fields
-  val enterProfession: String,
-  val checkingAccount: String,
-  val syncingProfile: String,
-  val openToNetworkingToggle: String,
-  val profileUpdated: String,
+  val enterProfession: String
+  val checkingAccount: String
+  val syncingProfile: String
+  val openToNetworkingToggle: String
+  val profileUpdated: String
 
   // Additional UI polish labels
-  val editProfile: String,
-  val quietFocusActive: String,
-  val standardAlerts: String,
-  val getPack: String,
-  val coinsUnit: String,
-  val fromLabel: String,
-  val privateNoteLabel: String,
-  val loading: String,
-  val aboutKoraTitle: String,
-  val aboutKoraDesc: String,
-  val activeChatsCount: String,
-  val publishedSuccess: String,
-  val groupNameLabel: String,
+  val editProfile: String
+  val quietFocusActive: String
+  val standardAlerts: String
+  val getPack: String
+  val coinsUnit: String
+  val fromLabel: String
+  val privateNoteLabel: String
+  val loading: String
+  val aboutKoraTitle: String
+  val aboutKoraDesc: String
+  val activeChatsCount: String
+  val publishedSuccess: String
+  val groupNameLabel: String
   val selectedLabel: String
-)
 
-val EnglishStrings = KoraStrings(
-  appName = "Kora",
-  tagline = "Editorial communication & thoughtful social network",
-  signInWithGoogle = "Sign in with Google",
-  welcomeBack = "Welcome to Kora",
-  createProfile = "Complete Profile",
-  enterDisplayName = "Display Name",
-  enterHandle = "Unique Handle (e.g. @sarah)",
-  enterBio = "Bio or current focus",
-  saveProfile = "Continue",
-  signingIn = "Signing in...",
-  navChats = "Messages",
-  navFeed = "Feed",
-  navMemory = "Memory",
-  navProfile = "Profile",
-  navSettings = "Settings",
-  conversations = "Conversations",
-  searchChats = "Search conversations...",
-  directChats = "Direct",
-  groupChats = "Groups",
-  newChat = "New Message",
-  newGroup = "New Group",
-  noChatsYet = "No conversations yet",
-  startFirstConversation = "Search for a user by handle to start an exchange.",
-  typeMessage = "Type a message...",
-  send = "Send",
-  reply = "Reply",
-  replyingTo = "Replying to",
-  edit = "Edit",
-  delete = "Delete",
-  copy = "Copy text",
-  messageCopied = "Message copied to clipboard",
-  saveToMemory = "Save to Memory",
-  pinChat = "Pin Chat",
-  unpinChat = "Unpin Chat",
-  archiveChat = "Archive Chat",
-  unarchiveChat = "Unarchive",
-  muteChat = "Mute",
-  unmuteChat = "Unmute",
-  edited = "(edited)",
-  messageDeleted = "This message was deleted",
-  feedTitle = "Social Feed",
-  whatsOnYourMind = "Share a thought, inquiry, or update...",
-  publish = "Publish",
-  audiencePublic = "Public",
-  audienceCircles = "Circles Only",
-  filterAll = "All Feed",
-  filterCircles = "Close Circles",
-  contextThreads = "Context Thread",
-  viewThread = "View Thread",
-  writeAComment = "Add to discussion...",
-  noPostsYet = "No publications in this circle",
-  beTheFirstToShare = "Write a thoughtful post to start the timeline.",
-  likes = "Likes",
-  comments = "Threads",
-  memoryTitle = "Personal Memory",
-  memorySubtitle = "Saved insights, references & private notes",
-  noSavedMemories = "Your memory vault is empty",
-  memoryTip = "Long-press any message in a chat and select 'Save to Memory'.",
-  searchMemory = "Search your saved knowledge...",
-  addPrivateNote = "Add Private Note",
-  notePlaceholder = "Personal thoughts, takeaways, or reminders (only visible to you)...",
-  saveNote = "Save Note",
-  memorySaved = "Saved to personal memory",
-  profileTitle = "Identity & Presence",
-  quietPresence = "Quiet Presence",
-  quietModeDesc = "Signal focus to peers while keeping notifications subdued",
-  online = "Active",
-  quietMode = "Quiet Mode",
-  invisible = "Invisible",
-  readReceipts = "Read Receipts",
-  readReceiptsDesc = "Allow others to see when you have read messages",
-  signOut = "Sign Out",
-  settingsTitle = "Preferences",
-  appearance = "Appearance",
-  themeLight = "Light Mode",
-  themeDark = "Dark Mode",
-  themeSystem = "System Default",
-  language = "Language",
-  english = "English",
-  arabic = "العربية (Arabic)",
-  cancel = "Cancel",
-  confirm = "Confirm",
-  ok = "OK",
-  errorOccurred = "An unexpected error occurred",
-  retry = "Retry",
-  storeTitle = "Custom Decorations",
-  customDecoration = "Custom Decoration",
-  buyCoins = "Buy Coins",
-  earnCoins = "Earn Coins",
-  avatarFrames = "Avatar Frames",
-  roleNameplates = "Role Nameplates",
-  chatBubbles = "Chat Bubbles",
-  allCategories = "All",
-  preview = "Preview",
-  equip = "Equip",
-  equipped = "Equipped",
-  unequip = "Unequip",
-  buyFor = "Buy for",
-  notEnoughCoins = "Insufficient coins balance",
-  purchasedSuccess = "Item acquired and equipped!",
-  dailyCheckIn = "Daily Check-In",
-  dailyCheckInDesc = "Collect daily coins to unlock bespoke aesthetic frames",
-  claimCoins = "Claim +250 Coins",
-  coinsClaimed = "Claimed Today",
-  shopBannerText = "Show your identity with style",
-  buyCoinsDesc = "Instant coin top-ups for luxury avatar frames and badges",
-  packStarter = "Novice Cache (500 Coins)",
-  packPopular = "Artisan Vault (2,000 Coins)",
-  packElite = "Imperial Hoard (5,000 Coins)",
-  verifiedAccount = "Verified Account",
-  verificationBadge = "Blue Verification Badge",
-  verifiedBadgeSubtitle = "Official identity verification & trust",
-  verifiedStatusActive = "Verified Account",
-  verifiedStatusInactive = "Unverified",
-  toggleVerification = "Enable Blue Verification Badge",
-  verificationDetails = "The blue badge authenticates notable creators and verified members, granting distinct visual trust and priority across Kora.",
-  verifiedDialogTitle = "Official Verification",
-  verifiedDialogMessage = "This account is officially verified by Kora. Its authentic identity has been validated according to high community standards.",
-  isTyping = "is typing...",
-  typingSingle = "%s is typing...",
-  typingMultiple = "Several members are typing...",
-  navFlux = "Flux",
-  fluxTitle = "Flux",
-  fluxSubtitle = "Short videos & community clips",
-  newFlux = "Post Flux",
-  publishFlux = "Publish Flux",
-  selectVideo = "Choose Video",
-  fluxCaptionPlaceholder = "Write a caption & tags... #kora #flux #design",
-  fluxAudioPlaceholder = "Soundtrack or original audio name",
-  noFluxYet = "No Flux Videos Yet",
-  beFirstToPublishFlux = "Be the first to share an inspiring Flux clip!",
-  fluxPublished = "Flux clip published successfully!",
-  fluxCommentsTitle = "Flux Comments",
-  addFluxComment = "Add a comment...",
-  themeSwitcherTitle = "Theme Studio",
-  themePresets = "Theme Presets",
-  customAccentColor = "Custom Accent Color",
-  amoledMode = "AMOLED Pure Black",
-  amoledModeDesc = "Pure pitch black for deeper contrast and OLED battery savings",
-  themePreview = "Live Theme Preview",
-  livePreviewChannel = "kora-lounge",
-  livePreviewSampleMessage = "This is how your Kora conversations, headers, and badges look!",
-  quickThemeSwitcher = "Themes",
+  // Store Quests & Server Wallet
+  val questsTab: String
+  val questsSubtitle: String
+  val claimQuest: String
+  val questClaimed: String
+  val questProfileTitle: String
+  val questProfileDesc: String
+  val questVerifiedTitle: String
+  val questVerifiedDesc: String
+  val questFluxTitle: String
+  val questFluxDesc: String
+  val questAvatarTitle: String
+  val questAvatarDesc: String
+  val dailyCooldownFormat: String
 
-  // Profile Avatar Customization
-  changeAvatarTitle = "Change Avatar",
-  changeAvatarSubtitle = "Pick from gallery, Kora curated portraits, or custom URL",
-  chooseFromGallery = "Choose from Gallery",
-  curatedAvatars = "Curated Kora Avatars",
-  customImageUrl = "Custom Image URL",
-  enterImageUrlPlaceholder = "https://example.com/avatar.png",
-  applyUrl = "Apply Link",
-  resetToInitial = "Reset to Default Letter",
-  avatarUpdatedSuccess = "Profile picture updated successfully!",
-  previewAvatar = "Preview Avatar",
+  // Verification, Chat, & Flux Save/Gallery Feedback
+  val verificationEnableSuccess: String
+  val verificationDisableSuccess: String
+  val verificationError: String
+  val chatDeliveryError: String
+  val fluxFilterAll: String
+  val fluxFilterSaved: String
+  val noSavedFluxYet: String
+  val noSavedFluxDesc: String
+  val videoSavedToast: String
+  val videoUnsavedToast: String
+  val saveToGallery: String
+  val savedToGalleryToast: String
+  val gallerySaveFailedToast: String
+  val fluxLinkCopied: String
+  val fluxAmbientStyle: String
+  val videoSelectedDevice: String
+  val tapToChooseVideo: String
+  val noCommentsYet: String
 
-  // Searchable Contact Directory
-  contactDirectoryTitle = "Contact Directory",
-  contactDirectorySubtitle = "Find colleagues and members by name or profession",
-  searchByNameOrProfession = "Search by name or profession...",
-  allProfessions = "All Professions",
-  contactsCount = "%d contacts found",
-  clearSearch = "Clear Search",
-  noContactsFound = "No Contacts Found",
-  noContactsFoundDesc = "Try searching with a different name or profession keyword",
+  // Voice Calls & Rich In-Chat Media / Inline Video Player
+  val startVoiceCall: String
+  val voiceCallLabel: String
+  val callQualityHdBadge: String
+  val callRinging: String
+  val callIncoming: String
+  val callConnecting: String
+  val callActive: String
+  val callEnded: String
+  val callDeclined: String
+  val callBusyOrFailed: String
+  val acceptCall: String
+  val declineCall: String
+  val endCall: String
+  val muteMic: String
+  val unmuteMic: String
+  val speakerOn: String
+  val speakerOff: String
+  val minimizeCall: String
+  val returnToCall: String
+  val micPermissionRequired: String
+  val attachMedia: String
+  val attachPhoto: String
+  val attachHdVideo: String
+  val attachFile: String
+  val uploadingMediaProgress: String
+  val downloadingMedia: String
+  val mediaUploadFailed: String
+  val mediaDownloadFailed: String
+  val fileTooLargeLimit: String
+  val tapToPlayInline: String
+  val hdBadge: String
+  val fullscreenVideo: String
+  val openFileAction: String
+  val saveFileAction: String
+  val savedImageToast: String
+  val savedFileToast: String
+  val noAppToOpenFile: String
 
-  // Verified Professional Networking
-  verifiedProTitle = "Verified Professional",
-  verifiedProBadge = "Verified Pro",
-  verifiedProSubtitle = "Authenticated credentials & domain expertise",
-  openToNetworking = "Open for Networking & Projects",
-  professionalCredentialsTitle = "Verified Professional Status",
-  verifiedProDialogDesc = "This member holds authenticated professional status across the Kora networking directory. Identity, role specialization, and domain competence have been validated for trusted peer networking.",
-  filterVerifiedProOnly = "Verified Pros",
+  // New Message Notifications
+  val newMessageChannelName: String
+  val newMessageChannelDesc: String
+  val newMessageNotificationTitle: String
+  val newMessageFromTitle: String
+  val tapToOpenChat: String
 
-  // Single AI Assistant Chatbot
-  aiAssistantName = "Kora AI",
-  aiAssistantSubtitle = "AI Assistant • Gemini",
-  aiWelcomeTitle = "How can I help you today?",
-  aiWelcomeDesc = "Ask anything, draft messages, brainstorm ideas, or summarize notes in a calm workspace.",
-  aiPromptOne = "Summarize my ideas cleanly",
-  aiPromptTwo = "Draft a polite professional message",
-  aiPromptThree = "Give me 3 creative project ideas",
-  aiClearChat = "New Conversation",
-  aiBotBadge = "AI",
-  aiThinking = "Thinking...",
-  aiErrorBannerTitle = "Could not reach Kora AI",
-  enterProfession = "Profession / Specialty (optional)",
-  checkingAccount = "Checking session...",
-  syncingProfile = "Syncing your cloud profile...",
-  openToNetworkingToggle = "Open for professional networking",
-  profileUpdated = "Profile updated",
-  editProfile = "Edit Profile",
-  quietFocusActive = "Active focus",
-  standardAlerts = "Standard alerts",
-  getPack = "Top Up",
-  coinsUnit = "Coins",
-  fromLabel = "From",
-  privateNoteLabel = "Private Note",
-  loading = "Loading...",
-  aboutKoraTitle = "About Kora",
-  aboutKoraDesc = "Crafted for thoughtful conversations with quiet presence, focused threads, and instant cloud synchronization.",
-  activeChatsCount = "%d active",
-  publishedSuccess = "Published",
-  groupNameLabel = "Group Name",
-  selectedLabel = "Selected"
-)
+  // Luxury Splash & Youthful Onboarding
+  val splashEditorialLine: String
+  val splashTapToSkip: String
+  val welcomeKicker: String
+  val welcomeHeadline: String
+  val welcomeSubheadline: String
+  val pickYourVibe: String
+  val amoledChipLabel: String
+  val featureVoiceHdTitle: String
+  val featureVoiceHdDesc: String
+  val featureCinemaTitle: String
+  val featureCinemaDesc: String
+  val featurePulseTitle: String
+  val featurePulseDesc: String
+  val switchGoogleAccount: String
+  val privacySecureBadge: String
+  val chooseAvatarOptional: String
+  val googlePhotoOption: String
+  val quickRoleLabel: String
+  val quickRoleCreator: String
+  val quickRoleDeveloper: String
+  val quickRoleDesigner: String
+  val quickRoleGamer: String
+  val quickRoleStudent: String
+  val quickRoleFounder: String
+  val startQuietModeToggle: String
+  val startQuietModeDesc: String
+  val setupStepSubtitle: String
+}
 
-val ArabicStrings = KoraStrings(
-  appName = "كورا",
-  tagline = "منصة تواصل راقية وشبكة اجتماعية هادئة",
-  signInWithGoogle = "تسجيل الدخول باستخدام Google",
-  welcomeBack = "مرحبًا بك في كورا",
-  createProfile = "إكمال الملف التعريفي",
-  enterDisplayName = "الاسم الظاهر",
-  enterHandle = "المعرّف الفريد (مثال: @ahmed)",
-  enterBio = "نبذة شخصية أو مجال الاهتمام",
-  saveProfile = "متابعة",
-  signingIn = "جارٍ تسجيل الدخول...",
-  navChats = "الرسائل",
-  navFeed = "الموجز",
-  navMemory = "الذاكرة",
-  navProfile = "الملف",
-  navSettings = "الإعدادات",
-  conversations = "المحادثات",
-  searchChats = "البحث في المحادثات...",
-  directChats = "خاصة",
-  groupChats = "مجموعات",
-  newChat = "محادثة جديدة",
-  newGroup = "مجموعة جديدة",
-  noChatsYet = "لا توجد محادثات حتى الآن",
-  startFirstConversation = "ابحث عن مستخدم عبر المعرّف لبدء تواصل فوري.",
-  typeMessage = "اكتب رسالة...",
-  send = "إرسال",
-  reply = "رد",
-  replyingTo = "ردًا على",
-  edit = "تعديل",
-  delete = "حذف",
-  copy = "نسخ النص",
-  messageCopied = "تم نسخ الرسالة إلى الحافظة",
-  saveToMemory = "حفظ في الذاكرة",
-  pinChat = "تثبيت المحادثة",
-  unpinChat = "إلغاء التثبيت",
-  archiveChat = "أرشفة",
-  unarchiveChat = "إلغاء الأرشفة",
-  muteChat = "كتم التنبيهات",
-  unmuteChat = "إلغاء الكتم",
-  edited = "(معدلة)",
-  messageDeleted = "تم حذف هذه الرسالة",
-  feedTitle = "الموجز الاجتماعي",
-  whatsOnYourMind = "شارك فكرة أو استفسارًا أو ملاحظة...",
-  publish = "نشر",
-  audiencePublic = "عام",
-  audienceCircles = "الدوائر المقربة",
-  filterAll = "الكل",
-  filterCircles = "الدوائر المقربة",
-  contextThreads = "خيوط النقاش",
-  viewThread = "عرض النقاش",
-  writeAComment = "أضف تعليقًا للنقاش...",
-  noPostsYet = "لا توجد منشورات في هذه الدائرة",
-  beTheFirstToShare = "كن أول من يشارك فكرة قيّمة لإثراء الموجز.",
-  likes = "إعجابات",
-  comments = "خيوط",
-  memoryTitle = "ذاكرة الرسائل",
-  memorySubtitle = "الرسائل المحفوظة والملاحظات الشخصية الخاصة",
-  noSavedMemories = "خزينة الذاكرة فارغة",
-  memoryTip = "اضغط مطولًا على أي رسالة في المحادثة واختر 'حفظ في الذاكرة'.",
-  searchMemory = "ابحث في معرفتك المحفوظة...",
-  addPrivateNote = "إضافة ملاحظة خاصة",
-  notePlaceholder = "ملاحظات شخصية واستخلاصات (مرئية لك فقط)...",
-  saveNote = "حفظ الملاحظة",
-  memorySaved = "تم الحفظ في ذاكرتك الخاصة",
-  profileTitle = "الهوية والحضور",
-  quietPresence = "الوضع الهادئ",
-  quietModeDesc = "إشعار زملائك بالتركيز مع كتم التنبيهات المزعجة",
-  online = "نشط",
-  quietMode = "وضع التركيز",
-  invisible = "غير مرئي",
-  readReceipts = "مؤشرات القراءة",
-  readReceiptsDesc = "السماح للآخرين بمعرفة وقت قراءتك للرسائل",
-  signOut = "تسجيل الخروج",
-  settingsTitle = "التفضيلات",
-  appearance = "المظهر",
-  themeLight = "الوضع الفاتح",
-  themeDark = "الوضع الداكن",
-  themeSystem = "تلقائي حسب النظام",
-  language = "اللغة",
-  english = "English (الإنجليزية)",
-  arabic = "العربية",
-  cancel = "إلغاء",
-  confirm = "تأكيد",
-  ok = "حسناً",
-  errorOccurred = "حدث خطأ غير متوقع",
-  retry = "إعادة المحاولة",
-  storeTitle = "متجر الزينة",
-  customDecoration = "الزينة المخصصة",
-  buyCoins = "شراء العملات",
-  earnCoins = "كسب العملات",
-  avatarFrames = "الإطارات",
-  roleNameplates = "لوحات الاسم",
-  chatBubbles = "فقاعات المحادثة",
-  allCategories = "الكل",
-  preview = "معاينة",
-  equip = "تجهيز",
-  equipped = "مجهّز حالياً",
-  unequip = "إلغاء التجهيز",
-  buyFor = "شراء بـ",
-  notEnoughCoins = "رصيد العملات غير كافٍ لهذا العنصر",
-  purchasedSuccess = "تم شراء العنصر وتجهيزه بنجاح!",
-  dailyCheckIn = "تسجيل الدخول اليومي",
-  dailyCheckInDesc = "استلم مكافأتك اليومية المجانية من العملات لفتح إطارات فاخرة",
-  claimCoins = "استلم +250 عملة",
-  coinsClaimed = "تم استلام مكافأة اليوم",
-  shopBannerText = "أبرز هويتك بأسلوبك الراقي والفريد",
-  buyCoinsDesc = "شحن فوري لرصيد العملات لفتح الإطارات واللوحات الفاخرة",
-  packStarter = "باقة المبتدئ (500 عملة)",
-  packPopular = "باقة الحِرفي (2,000 عملة)",
-  packElite = "خزينة الإمبراطور (5,000 عملة)",
-  verifiedAccount = "حساب موثق",
-  verificationBadge = "شارة التوثيق",
-  verifiedBadgeSubtitle = "توثيق رسمي للهوية وموثوقية الحساب",
-  verifiedStatusActive = "حساب موثق رسمياً",
-  verifiedStatusInactive = "غير مفعل",
-  toggleVerification = "تفعيل شارة التوثيق",
-  verificationDetails = "تمنحك شارة التوثيق ظهوراً مميزاً وثقة رسمية وأولوية واضحة في المحادثات وقوائم الموجز على منصة كورا.",
-  verifiedDialogTitle = "توثيق رسمي ومعتمد",
-  verifiedDialogMessage = "هذا الحساب تم التحقق من هويته ومطابقته لمعايير الأمان والإنتاجية العالية في منصة كورا.",
-  isTyping = "يكتب الآن...",
-  typingSingle = "%s يكتب الآن...",
-  typingMultiple = "عدة أشخاص يكتبون الآن...",
-  navFlux = "فلوكس",
-  fluxTitle = "فلوكس",
-  fluxSubtitle = "فيديوهات قصيرة ومقاطع مجتمعية",
-  newFlux = "نشر فلوكس",
-  publishFlux = "نشر مقطع فلوكس",
-  selectVideo = "اختيار فيديو",
-  fluxCaptionPlaceholder = "اكتب وصفاً مع الوسوم... #فلوكس #كورا #تصميم",
-  fluxAudioPlaceholder = "اسم المسار الصوتي أو الصوت الأصلي",
-  noFluxYet = "لا توجد فيديوهات فلوكس بعد",
-  beFirstToPublishFlux = "كن أول من ينشر مقطع فلوكس مميز!",
-  fluxPublished = "تم نشر مقطع الفلوكس بنجاح!",
-  fluxCommentsTitle = "تعليقات فلوكس",
-  addFluxComment = "أضف تعليقاً...",
-  themeSwitcherTitle = "استوديو السمات",
-  themePresets = "السمات الجاهزة",
-  customAccentColor = "لون التمييز المخصص",
-  amoledMode = "سواد AMOLED النقي",
-  amoledModeDesc = "سواد عميق 100% يريح العين ويوفر طاقة البطارية",
-  themePreview = "معاينة السمة الحية",
-  livePreviewChannel = "kora-lounge",
-  livePreviewSampleMessage = "هكذا ستبدو محادثات كورا والعناوين وشارات التوثيق مع هذه السمة!",
-  quickThemeSwitcher = "السمات",
+object EnglishStrings : KoraStrings {
+  override val appName = "Kora"
+  override val tagline = "Editorial communication & thoughtful social network"
+  override val signInWithGoogle = "Sign in with Google"
+  override val welcomeBack = "Welcome to Kora"
+  override val createProfile = "Complete Profile"
+  override val enterDisplayName = "Display Name"
+  override val enterHandle = "Unique Handle (e.g. @sarah)"
+  override val enterBio = "Bio or current focus"
+  override val saveProfile = "Continue"
+  override val signingIn = "Signing in..."
+  override val navChats = "Messages"
+  override val navFeed = "Feed"
+  override val navMemory = "Memory"
+  override val navProfile = "Profile"
+  override val navSettings = "Settings"
+  override val conversations = "Conversations"
+  override val searchChats = "Search conversations..."
+  override val directChats = "Direct"
+  override val groupChats = "Groups"
+  override val newChat = "New Message"
+  override val newGroup = "New Group"
+  override val noChatsYet = "No conversations yet"
+  override val startFirstConversation = "Search for a user by handle to start an exchange."
+  override val typeMessage = "Type a message..."
+  override val send = "Send"
+  override val reply = "Reply"
+  override val replyingTo = "Replying to"
+  override val edit = "Edit"
+  override val delete = "Delete"
+  override val copy = "Copy text"
+  override val messageCopied = "Message copied to clipboard"
+  override val saveToMemory = "Save to Memory"
+  override val pinChat = "Pin Chat"
+  override val unpinChat = "Unpin Chat"
+  override val archiveChat = "Archive Chat"
+  override val unarchiveChat = "Unarchive"
+  override val muteChat = "Mute"
+  override val unmuteChat = "Unmute"
+  override val edited = "(edited)"
+  override val messageDeleted = "This message was deleted"
+  override val feedTitle = "Social Feed"
+  override val whatsOnYourMind = "Share a thought, inquiry, or update..."
+  override val publish = "Publish"
+  override val audiencePublic = "Public"
+  override val audienceCircles = "Circles Only"
+  override val filterAll = "All Feed"
+  override val filterCircles = "Close Circles"
+  override val contextThreads = "Context Thread"
+  override val viewThread = "View Thread"
+  override val writeAComment = "Add to discussion..."
+  override val noPostsYet = "No publications in this circle"
+  override val beTheFirstToShare = "Write a thoughtful post to start the timeline."
+  override val likes = "Likes"
+  override val comments = "Threads"
+  override val memoryTitle = "Personal Memory"
+  override val memorySubtitle = "Saved insights, references & private notes"
+  override val noSavedMemories = "Your memory vault is empty"
+  override val memoryTip = "Long-press any message in a chat and select 'Save to Memory'."
+  override val searchMemory = "Search your saved knowledge..."
+  override val addPrivateNote = "Add Private Note"
+  override val notePlaceholder = "Personal thoughts, takeaways, or reminders (only visible to you)..."
+  override val saveNote = "Save Note"
+  override val memorySaved = "Saved to personal memory"
+  override val profileTitle = "Identity & Presence"
+  override val quietPresence = "Quiet Presence"
+  override val quietModeDesc = "Signal focus to peers while keeping notifications subdued"
+  override val online = "Active"
+  override val quietMode = "Quiet Mode"
+  override val invisible = "Invisible"
+  override val readReceipts = "Read Receipts"
+  override val readReceiptsDesc = "Allow others to see when you have read messages"
+  override val signOut = "Sign Out"
+  override val settingsTitle = "Preferences"
+  override val appearance = "Appearance"
+  override val themeLight = "Light Mode"
+  override val themeDark = "Dark Mode"
+  override val themeSystem = "System Default"
+  override val language = "Language"
+  override val english = "English"
+  override val arabic = "العربية (Arabic)"
+  override val cancel = "Cancel"
+  override val confirm = "Confirm"
+  override val ok = "OK"
+  override val errorOccurred = "An unexpected error occurred"
+  override val retry = "Retry"
+  override val storeTitle = "Custom Decorations"
+  override val customDecoration = "Custom Decoration"
+  override val buyCoins = "Buy Coins"
+  override val earnCoins = "Earn Coins"
+  override val avatarFrames = "Avatar Frames"
+  override val roleNameplates = "Role Nameplates"
+  override val chatBubbles = "Chat Bubbles"
+  override val allCategories = "All"
+  override val preview = "Preview"
+  override val equip = "Equip"
+  override val equipped = "Equipped"
+  override val unequip = "Unequip"
+  override val buyFor = "Buy for"
+  override val notEnoughCoins = "Insufficient coins balance"
+  override val purchasedSuccess = "Item acquired and equipped!"
+  override val dailyCheckIn = "Daily Check-In"
+  override val dailyCheckInDesc = "Collect daily coins to unlock bespoke aesthetic frames"
+  override val claimCoins = "Claim +250 Coins"
+  override val coinsClaimed = "Claimed Today"
+  override val shopBannerText = "Show your identity with style"
+  override val buyCoinsDesc = "Instant coin top-ups for luxury avatar frames and badges"
+  override val packStarter = "Novice Cache (500 Coins)"
+  override val packPopular = "Artisan Vault (2,000 Coins)"
+  override val packElite = "Imperial Hoard (5,000 Coins)"
+  override val verifiedAccount = "Verified Account"
+  override val verificationBadge = "Blue Verification Badge"
+  override val verifiedBadgeSubtitle = "Official identity verification & trust"
+  override val verifiedStatusActive = "Verified Account"
+  override val verifiedStatusInactive = "Unverified"
+  override val toggleVerification = "Enable Blue Verification Badge"
+  override val verificationDetails = "The blue badge authenticates notable creators and verified members, granting distinct visual trust and priority across Kora."
+  override val verifiedDialogTitle = "Official Verification"
+  override val verifiedDialogMessage = "This account is officially verified by Kora. Its authentic identity has been validated according to high community standards."
+  override val isTyping = "is typing..."
+  override val typingSingle = "%s is typing..."
+  override val typingMultiple = "Several members are typing..."
+  override val navFlux = "Flux"
+  override val fluxTitle = "Flux"
+  override val fluxSubtitle = "Short videos & community clips"
+  override val newFlux = "Post Flux"
+  override val publishFlux = "Publish Flux"
+  override val selectVideo = "Choose Video"
+  override val fluxCaptionPlaceholder = "Write a caption & tags... #kora #flux #design"
+  override val fluxAudioPlaceholder = "Soundtrack or original audio name"
+  override val noFluxYet = "No Flux Videos Yet"
+  override val beFirstToPublishFlux = "Be the first to share an inspiring Flux clip!"
+  override val fluxPublished = "Flux clip published successfully!"
+  override val fluxCommentsTitle = "Flux Comments"
+  override val addFluxComment = "Add a comment..."
+  override val themeSwitcherTitle = "Theme Studio"
+  override val themePresets = "Theme Presets"
+  override val customAccentColor = "Custom Accent Color"
+  override val amoledMode = "AMOLED Pure Black"
+  override val amoledModeDesc = "Pure pitch black for deeper contrast and OLED battery savings"
+  override val themePreview = "Live Theme Preview"
+  override val livePreviewChannel = "kora-lounge"
+  override val livePreviewSampleMessage = "This is how your Kora conversations, headers, and badges look!"
+  override val quickThemeSwitcher = "Themes"
+  override val changeAvatarTitle = "Change Avatar"
+  override val changeAvatarSubtitle = "Pick from gallery, Kora curated portraits, or custom URL"
+  override val chooseFromGallery = "Choose from Gallery"
+  override val curatedAvatars = "Curated Kora Avatars"
+  override val customImageUrl = "Custom Image URL"
+  override val enterImageUrlPlaceholder = "https://example.com/avatar.png"
+  override val applyUrl = "Apply Link"
+  override val resetToInitial = "Reset to Default Letter"
+  override val avatarUpdatedSuccess = "Profile picture updated successfully!"
+  override val previewAvatar = "Preview Avatar"
+  override val contactDirectoryTitle = "Contact Directory"
+  override val contactDirectorySubtitle = "Find colleagues and members by name or profession"
+  override val searchByNameOrProfession = "Search by name or profession..."
+  override val allProfessions = "All Professions"
+  override val contactsCount = "%d contacts found"
+  override val clearSearch = "Clear Search"
+  override val noContactsFound = "No Contacts Found"
+  override val noContactsFoundDesc = "Try searching with a different name or profession keyword"
+  override val verifiedProTitle = "Verified Professional"
+  override val verifiedProBadge = "Verified Pro"
+  override val verifiedProSubtitle = "Authenticated credentials & domain expertise"
+  override val openToNetworking = "Open for Networking & Projects"
+  override val professionalCredentialsTitle = "Verified Professional Status"
+  override val verifiedProDialogDesc = "This member holds authenticated professional status across the Kora networking directory. Identity, role specialization, and domain competence have been validated for trusted peer networking."
+  override val filterVerifiedProOnly = "Verified Pros"
+  override val aiAssistantName = "Kora AI"
+  override val aiAssistantSubtitle = "AI Assistant • Gemini"
+  override val aiWelcomeTitle = "How can I help you today?"
+  override val aiWelcomeDesc = "Ask anything, draft messages, brainstorm ideas, or summarize notes in a calm workspace."
+  override val aiPromptOne = "Summarize my ideas cleanly"
+  override val aiPromptTwo = "Draft a polite professional message"
+  override val aiPromptThree = "Give me 3 creative project ideas"
+  override val aiClearChat = "New Conversation"
+  override val aiBotBadge = "AI"
+  override val aiThinking = "Thinking..."
+  override val aiErrorBannerTitle = "Could not reach Kora AI"
+  override val enterProfession = "Profession / Specialty (optional)"
+  override val checkingAccount = "Checking session..."
+  override val syncingProfile = "Syncing your cloud profile..."
+  override val openToNetworkingToggle = "Open for professional networking"
+  override val profileUpdated = "Profile updated"
+  override val editProfile = "Edit Profile"
+  override val quietFocusActive = "Active focus"
+  override val standardAlerts = "Standard alerts"
+  override val getPack = "Top Up"
+  override val coinsUnit = "Coins"
+  override val fromLabel = "From"
+  override val privateNoteLabel = "Private Note"
+  override val loading = "Loading..."
+  override val aboutKoraTitle = "About Kora"
+  override val aboutKoraDesc = "Crafted for thoughtful conversations with quiet presence, focused threads, and instant cloud synchronization."
+  override val activeChatsCount = "%d active"
+  override val publishedSuccess = "Published"
+  override val groupNameLabel = "Group Name"
+  override val selectedLabel = "Selected"
+  override val questsTab = "Quests"
+  override val questsSubtitle = "Complete real profile & community milestones to earn coins"
+  override val claimQuest = "Claim"
+  override val questClaimed = "Claimed"
+  override val questProfileTitle = "Complete Your Profile"
+  override val questProfileDesc = "Add a bio or profession so members can discover you."
+  override val questVerifiedTitle = "Verify Your Identity"
+  override val questVerifiedDesc = "Activate your official verification badge on your profile."
+  override val questFluxTitle = "Publish a Flux Clip"
+  override val questFluxDesc = "Share your first video or ambient clip on Flux."
+  override val questAvatarTitle = "Customize Your Avatar"
+  override val questAvatarDesc = "Set a custom profile photo or curated avatar."
+  override val dailyCooldownFormat = "Available in %s"
+  override val verificationEnableSuccess = "Verification badge activated and synced to your profile"
+  override val verificationDisableSuccess = "Verification badge disabled"
+  override val verificationError = "Could not update verification badge"
+  override val chatDeliveryError = "Could not deliver message"
+  override val fluxFilterAll = "All"
+  override val fluxFilterSaved = "Saved"
+  override val noSavedFluxYet = "No Saved Clips Yet"
+  override val noSavedFluxDesc = "Tap the bookmark button on any Flux clip to save it here."
+  override val videoSavedToast = "Video saved to your collection"
+  override val videoUnsavedToast = "Removed from saved videos"
+  override val saveToGallery = "Save to Gallery"
+  override val savedToGalleryToast = "Video saved to device gallery"
+  override val gallerySaveFailedToast = "Could not export video to gallery"
+  override val fluxLinkCopied = "Flux link copied to clipboard"
+  override val fluxAmbientStyle = "Ambient Visual Style"
+  override val videoSelectedDevice = "Video selected from device"
+  override val tapToChooseVideo = "Tap to choose video from device"
+  override val noCommentsYet = "No comments yet. Be the first!"
+  override val startVoiceCall = "Start voice call"
+  override val voiceCallLabel = "Voice Call"
+  override val callQualityHdBadge = "HD Opus • 48kHz"
+  override val callRinging = "Ringing..."
+  override val callIncoming = "Incoming voice call"
+  override val callConnecting = "Connecting secure audio..."
+  override val callActive = "Connected"
+  override val callEnded = "Call ended"
+  override val callDeclined = "Call declined"
+  override val callBusyOrFailed = "Could not connect call"
+  override val acceptCall = "Accept"
+  override val declineCall = "Decline"
+  override val endCall = "End Call"
+  override val muteMic = "Mute"
+  override val unmuteMic = "Unmute"
+  override val speakerOn = "Speaker"
+  override val speakerOff = "Earpiece"
+  override val minimizeCall = "Minimize"
+  override val returnToCall = "Tap to return to call"
+  override val micPermissionRequired = "Microphone permission is required for voice calls"
+  override val attachMedia = "Send photo, video or file"
+  override val attachPhoto = "Photo"
+  override val attachHdVideo = "HD Video"
+  override val attachFile = "Document / File"
+  override val uploadingMediaProgress = "Sending %d%%"
+  override val downloadingMedia = "Loading media..."
+  override val mediaUploadFailed = "Could not send attachment"
+  override val mediaDownloadFailed = "Could not load attachment"
+  override val fileTooLargeLimit = "Selected file exceeds the 25 MB limit"
+  override val tapToPlayInline = "Play"
+  override val hdBadge = "HD"
+  override val fullscreenVideo = "Fullscreen"
+  override val openFileAction = "Open"
+  override val saveFileAction = "Save"
+  override val savedImageToast = "Photo saved to device gallery"
+  override val savedFileToast = "File saved to Downloads"
+  override val noAppToOpenFile = "No installed app can open this file"
+  override val newMessageChannelName = "New Messages"
+  override val newMessageChannelDesc = "Instant notifications when you receive a new message"
+  override val newMessageNotificationTitle = "You have a new message"
+  override val newMessageFromTitle = "New message from %s"
+  override val tapToOpenChat = "Tap to open chat"
+  override val splashEditorialLine = "Quiet Luxury • Real Connection"
+  override val splashTapToSkip = "Tap to enter"
+  override val welcomeKicker = "VOICE • CINEMA • CIRCLES"
+  override val welcomeHeadline = "Your space, dialed in."
+  override val welcomeSubheadline = "Crystal-clear 48kHz voice calls, inline HD video cinema, and calm social circles in obsidian glass."
+  override val pickYourVibe = "Pick your vibe"
+  override val amoledChipLabel = "OLED Black"
+  override val featureVoiceHdTitle = "HD Voice"
+  override val featureVoiceHdDesc = "48kHz Opus calls with crisp clarity and instant echo cancellation."
+  override val featureCinemaTitle = "In-Chat Cinema"
+  override val featureCinemaDesc = "Watch HD clips, share photos, and exchange files right inside chat."
+  override val featurePulseTitle = "Alerts & Flux"
+  override val featurePulseDesc = "Instant message notifications paired with short-form Flux reels."
+  override val switchGoogleAccount = "Choose another Google account"
+  override val privacySecureBadge = "Secured with Google Identity & Firebase Cloud"
+  override val chooseAvatarOptional = "Choose your look"
+  override val googlePhotoOption = "Default"
+  override val quickRoleLabel = "Quick vibe / Specialty"
+  override val quickRoleCreator = "Creator"
+  override val quickRoleDeveloper = "Developer"
+  override val quickRoleDesigner = "Designer"
+  override val quickRoleGamer = "Gamer"
+  override val quickRoleStudent = "Student"
+  override val quickRoleFounder = "Founder"
+  override val startQuietModeToggle = "Start in Quiet Focus Mode"
+  override val startQuietModeDesc = "Keep alerts soft while you settle into Kora"
+  override val setupStepSubtitle = "Customize your look and vibe before entering"
+}
 
-  // Profile Avatar Customization
-  changeAvatarTitle = "تغيير الصورة",
-  changeAvatarSubtitle = "اختر من معرض الصور أو مجموعة كورا الفاخرة أو رابط خارجي",
-  chooseFromGallery = "اختيار من المعرض",
-  curatedAvatars = "صور كورا الرمزية الفاخرة",
-  customImageUrl = "رابط صورة مخصص",
-  enterImageUrlPlaceholder = "https://example.com/avatar.png",
-  applyUrl = "تطبيق الرابط",
-  resetToInitial = "إعادة تعيين للحرف الافتراضي",
-  avatarUpdatedSuccess = "تم تحديث صورة الملف الشخصي بنجاح!",
-  previewAvatar = "معاينة الصورة",
+object ArabicStrings : KoraStrings {
+  override val appName = "كورا"
+  override val tagline = "منصة تواصل راقية وشبكة اجتماعية هادئة"
+  override val signInWithGoogle = "تسجيل الدخول باستخدام Google"
+  override val welcomeBack = "مرحبًا بك في كورا"
+  override val createProfile = "إكمال الملف التعريفي"
+  override val enterDisplayName = "الاسم الظاهر"
+  override val enterHandle = "المعرّف الفريد (مثال: @ahmed)"
+  override val enterBio = "نبذة شخصية أو مجال الاهتمام"
+  override val saveProfile = "متابعة"
+  override val signingIn = "جارٍ تسجيل الدخول..."
+  override val navChats = "الرسائل"
+  override val navFeed = "الموجز"
+  override val navMemory = "الذاكرة"
+  override val navProfile = "الملف"
+  override val navSettings = "الإعدادات"
+  override val conversations = "المحادثات"
+  override val searchChats = "البحث في المحادثات..."
+  override val directChats = "خاصة"
+  override val groupChats = "مجموعات"
+  override val newChat = "محادثة جديدة"
+  override val newGroup = "مجموعة جديدة"
+  override val noChatsYet = "لا توجد محادثات حتى الآن"
+  override val startFirstConversation = "ابحث عن مستخدم عبر المعرّف لبدء تواصل فوري."
+  override val typeMessage = "اكتب رسالة..."
+  override val send = "إرسال"
+  override val reply = "رد"
+  override val replyingTo = "ردًا على"
+  override val edit = "تعديل"
+  override val delete = "حذف"
+  override val copy = "نسخ النص"
+  override val messageCopied = "تم نسخ الرسالة إلى الحافظة"
+  override val saveToMemory = "حفظ في الذاكرة"
+  override val pinChat = "تثبيت المحادثة"
+  override val unpinChat = "إلغاء التثبيت"
+  override val archiveChat = "أرشفة"
+  override val unarchiveChat = "إلغاء الأرشفة"
+  override val muteChat = "كتم التنبيهات"
+  override val unmuteChat = "إلغاء الكتم"
+  override val edited = "(معدلة)"
+  override val messageDeleted = "تم حذف هذه الرسالة"
+  override val feedTitle = "الموجز الاجتماعي"
+  override val whatsOnYourMind = "شارك فكرة أو استفسارًا أو ملاحظة..."
+  override val publish = "نشر"
+  override val audiencePublic = "عام"
+  override val audienceCircles = "الدوائر المقربة"
+  override val filterAll = "الكل"
+  override val filterCircles = "الدوائر المقربة"
+  override val contextThreads = "خيوط النقاش"
+  override val viewThread = "عرض النقاش"
+  override val writeAComment = "أضف تعليقًا للنقاش..."
+  override val noPostsYet = "لا توجد منشورات في هذه الدائرة"
+  override val beTheFirstToShare = "كن أول من يشارك فكرة قيّمة لإثراء الموجز."
+  override val likes = "إعجابات"
+  override val comments = "خيوط"
+  override val memoryTitle = "ذاكرة الرسائل"
+  override val memorySubtitle = "الرسائل المحفوظة والملاحظات الشخصية الخاصة"
+  override val noSavedMemories = "خزينة الذاكرة فارغة"
+  override val memoryTip = "اضغط مطولًا على أي رسالة في المحادثة واختر 'حفظ في الذاكرة'."
+  override val searchMemory = "ابحث في معرفتك المحفوظة..."
+  override val addPrivateNote = "إضافة ملاحظة خاصة"
+  override val notePlaceholder = "ملاحظات شخصية واستخلاصات (مرئية لك فقط)..."
+  override val saveNote = "حفظ الملاحظة"
+  override val memorySaved = "تم الحفظ في ذاكرتك الخاصة"
+  override val profileTitle = "الهوية والحضور"
+  override val quietPresence = "الوضع الهادئ"
+  override val quietModeDesc = "إشعار زملائك بالتركيز مع كتم التنبيهات المزعجة"
+  override val online = "نشط"
+  override val quietMode = "وضع التركيز"
+  override val invisible = "غير مرئي"
+  override val readReceipts = "مؤشرات القراءة"
+  override val readReceiptsDesc = "السماح للآخرين بمعرفة وقت قراءتك للرسائل"
+  override val signOut = "تسجيل الخروج"
+  override val settingsTitle = "التفضيلات"
+  override val appearance = "المظهر"
+  override val themeLight = "الوضع الفاتح"
+  override val themeDark = "الوضع الداكن"
+  override val themeSystem = "تلقائي حسب النظام"
+  override val language = "اللغة"
+  override val english = "English (الإنجليزية)"
+  override val arabic = "العربية"
+  override val cancel = "إلغاء"
+  override val confirm = "تأكيد"
+  override val ok = "حسناً"
+  override val errorOccurred = "حدث خطأ غير متوقع"
+  override val retry = "إعادة المحاولة"
+  override val storeTitle = "متجر الزينة"
+  override val customDecoration = "الزينة المخصصة"
+  override val buyCoins = "شراء العملات"
+  override val earnCoins = "كسب العملات"
+  override val avatarFrames = "الإطارات"
+  override val roleNameplates = "لوحات الاسم"
+  override val chatBubbles = "فقاعات المحادثة"
+  override val allCategories = "الكل"
+  override val preview = "معاينة"
+  override val equip = "تجهيز"
+  override val equipped = "مجهّز حالياً"
+  override val unequip = "إلغاء التجهيز"
+  override val buyFor = "شراء بـ"
+  override val notEnoughCoins = "رصيد العملات غير كافٍ لهذا العنصر"
+  override val purchasedSuccess = "تم شراء العنصر وتجهيزه بنجاح!"
+  override val dailyCheckIn = "تسجيل الدخول اليومي"
+  override val dailyCheckInDesc = "استلم مكافأتك اليومية المجانية من العملات لفتح إطارات فاخرة"
+  override val claimCoins = "استلم +250 عملة"
+  override val coinsClaimed = "تم استلام مكافأة اليوم"
+  override val shopBannerText = "أبرز هويتك بأسلوبك الراقي والفريد"
+  override val buyCoinsDesc = "شحن فوري لرصيد العملات لفتح الإطارات واللوحات الفاخرة"
+  override val packStarter = "باقة المبتدئ (500 عملة)"
+  override val packPopular = "باقة الحِرفي (2,000 عملة)"
+  override val packElite = "خزينة الإمبراطور (5,000 عملة)"
+  override val verifiedAccount = "حساب موثق"
+  override val verificationBadge = "شارة التوثيق"
+  override val verifiedBadgeSubtitle = "توثيق رسمي للهوية وموثوقية الحساب"
+  override val verifiedStatusActive = "حساب موثق رسمياً"
+  override val verifiedStatusInactive = "غير مفعل"
+  override val toggleVerification = "تفعيل شارة التوثيق"
+  override val verificationDetails = "تمنحك شارة التوثيق ظهوراً مميزاً وثقة رسمية وأولوية واضحة في المحادثات وقوائم الموجز على منصة كورا."
+  override val verifiedDialogTitle = "توثيق رسمي ومعتمد"
+  override val verifiedDialogMessage = "هذا الحساب تم التحقق من هويته ومطابقته لمعايير الأمان والإنتاجية العالية في منصة كورا."
+  override val isTyping = "يكتب الآن..."
+  override val typingSingle = "%s يكتب الآن..."
+  override val typingMultiple = "عدة أشخاص يكتبون الآن..."
+  override val navFlux = "فلوكس"
+  override val fluxTitle = "فلوكس"
+  override val fluxSubtitle = "فيديوهات قصيرة ومقاطع مجتمعية"
+  override val newFlux = "نشر فلوكس"
+  override val publishFlux = "نشر مقطع فلوكس"
+  override val selectVideo = "اختيار فيديو"
+  override val fluxCaptionPlaceholder = "اكتب وصفاً مع الوسوم... #فلوكس #كورا #تصميم"
+  override val fluxAudioPlaceholder = "اسم المسار الصوتي أو الصوت الأصلي"
+  override val noFluxYet = "لا توجد فيديوهات فلوكس بعد"
+  override val beFirstToPublishFlux = "كن أول من ينشر مقطع فلوكس مميز!"
+  override val fluxPublished = "تم نشر مقطع الفلوكس بنجاح!"
+  override val fluxCommentsTitle = "تعليقات فلوكس"
+  override val addFluxComment = "أضف تعليقاً..."
+  override val themeSwitcherTitle = "استوديو السمات"
+  override val themePresets = "السمات الجاهزة"
+  override val customAccentColor = "لون التمييز المخصص"
+  override val amoledMode = "سواد AMOLED النقي"
+  override val amoledModeDesc = "سواد عميق 100% يريح العين ويوفر طاقة البطارية"
+  override val themePreview = "معاينة السمة الحية"
+  override val livePreviewChannel = "kora-lounge"
+  override val livePreviewSampleMessage = "هكذا ستبدو محادثات كورا والعناوين وشارات التوثيق مع هذه السمة!"
+  override val quickThemeSwitcher = "السمات"
+  override val changeAvatarTitle = "تغيير الصورة"
+  override val changeAvatarSubtitle = "اختر من معرض الصور أو مجموعة كورا الفاخرة أو رابط خارجي"
+  override val chooseFromGallery = "اختيار من المعرض"
+  override val curatedAvatars = "صور كورا الرمزية الفاخرة"
+  override val customImageUrl = "رابط صورة مخصص"
+  override val enterImageUrlPlaceholder = "https://example.com/avatar.png"
+  override val applyUrl = "تطبيق الرابط"
+  override val resetToInitial = "إعادة تعيين للحرف الافتراضي"
+  override val avatarUpdatedSuccess = "تم تحديث صورة الملف الشخصي بنجاح!"
+  override val previewAvatar = "معاينة الصورة"
+  override val contactDirectoryTitle = "دليل جهات الاتصال"
+  override val contactDirectorySubtitle = "ابحث عن الأعضاء والزملاء بالاسم أو المهنة والتخصص"
+  override val searchByNameOrProfession = "ابحث بالاسم أو المهنة أو التخصص..."
+  override val allProfessions = "جميع المهن"
+  override val contactsCount = "%d جهات اتصال متطابقة"
+  override val clearSearch = "مسح البحث"
+  override val noContactsFound = "لم يتم العثور على جهات اتصال"
+  override val noContactsFoundDesc = "جرّب البحث باسم آخر أو مسمى مهني مختلف"
+  override val verifiedProTitle = "محترف موثق ومعتمد"
+  override val verifiedProBadge = "محترف موثق"
+  override val verifiedProSubtitle = "خبرة مهنية واعتماد رسمي موثق"
+  override val openToNetworking = "متاح للتواصل المهني وفرص العمل"
+  override val professionalCredentialsTitle = "حالة الاعتماد والتوثيق المهني"
+  override val verifiedProDialogDesc = "يحمل هذا العضو شارة المحترف الموثق في شبكة كورا للتواصل المهني. تم التحقق من هويته ومسماه المهني وتخصصه لضمان شبكة علاقات عمل موثوقة وعالية المستوى."
+  override val filterVerifiedProOnly = "محترفون موثقون"
+  override val aiAssistantName = "مساعد كورا الذكي"
+  override val aiAssistantSubtitle = "مساعد ذكي • Gemini"
+  override val aiWelcomeTitle = "كيف يمكنني مساعدتك اليوم؟"
+  override val aiWelcomeDesc = "اسألني عن أي شيء، أو اطلب صياغة رسائل، أو تلخيص أفكار في مساحة هادئة ومريحة للعين."
+  override val aiPromptOne = "لخّص لي أفكاري بشكل مرتب"
+  override val aiPromptTwo = "اكتب لي رسالة احترافية بأسلوب راقٍ"
+  override val aiPromptThree = "اقترح 3 أفكار إبداعية لمشروعي"
+  override val aiClearChat = "محادثة جديدة"
+  override val aiBotBadge = "AI"
+  override val aiThinking = "يفكر الآن..."
+  override val aiErrorBannerTitle = "تعذر الاتصال بالمساعد الذكي"
+  override val enterProfession = "المهنة أو التخصص (اختياري)"
+  override val checkingAccount = "جارٍ التحقق من الجلسة..."
+  override val syncingProfile = "جارٍ مزامنة ملفك السحابي..."
+  override val openToNetworkingToggle = "الظهور كمتاح للتواصل المهني"
+  override val profileUpdated = "تم تحديث الملف الشخصي"
+  override val editProfile = "تعديل الملف الشخصي"
+  override val quietFocusActive = "التركيز الهادئ نشط"
+  override val standardAlerts = "التنبيهات الاعتيادية"
+  override val getPack = "شحن"
+  override val coinsUnit = "عملة"
+  override val fromLabel = "من"
+  override val privateNoteLabel = "ملاحظة خاصة"
+  override val loading = "جارٍ التحميل..."
+  override val aboutKoraTitle = "عن منصة كورا"
+  override val aboutKoraDesc = "صُممت لتواصل راقٍ وهادئ بخيوط نقاش منظمة ومزامنة سحابية فورية خالية من الضوضاء."
+  override val activeChatsCount = "%d محادثات نشطة"
+  override val publishedSuccess = "تم النشر"
+  override val groupNameLabel = "اسم المجموعة"
+  override val selectedLabel = "محدد"
+  override val questsTab = "المهام"
+  override val questsSubtitle = "أكمل المهام الحقيقية في حسابك والمجتمع لكسب العملات"
+  override val claimQuest = "استلام"
+  override val questClaimed = "تم الاستلام"
+  override val questProfileTitle = "أكمل ملفك الشخصي"
+  override val questProfileDesc = "أضف نبذة شخصية أو تخصصك المهني ليظهر للآخرين."
+  override val questVerifiedTitle = "وثّق حسابك"
+  override val questVerifiedDesc = "فعّل شارة التوثيق الرسمية في شاشة الملف الشخصي."
+  override val questFluxTitle = "انشر مقطع فلوكس"
+  override val questFluxDesc = "شارك أول مقطع لك في تبويب فلوكس."
+  override val questAvatarTitle = "خصّص صورتك الشخصية"
+  override val questAvatarDesc = "اختر صورة مخصصة أو رمزية لحسابك."
+  override val dailyCooldownFormat = "متاح بعد %s"
+  override val verificationEnableSuccess = "تم تفعيل شارة التوثيق ومزامنتها مع حسابك"
+  override val verificationDisableSuccess = "تم إلغاء تفعيل شارة التوثيق"
+  override val verificationError = "تعذر تحديث حالة التوثيق"
+  override val chatDeliveryError = "تعذر إرسال الرسالة"
+  override val fluxFilterAll = "الكل"
+  override val fluxFilterSaved = "المحفوظة"
+  override val noSavedFluxYet = "لا توجد مقاطع محفوظة"
+  override val noSavedFluxDesc = "اضغط على أيقونة الحفظ في أي مقطع فلوكس ليظهر هنا."
+  override val videoSavedToast = "تم حفظ الفيديو في قائمتك"
+  override val videoUnsavedToast = "تمت إزالة الفيديو من المحفوظات"
+  override val saveToGallery = "حفظ بالمعرض"
+  override val savedToGalleryToast = "تم حفظ الفيديو في معرض الجهاز"
+  override val gallerySaveFailedToast = "تعذر حفظ الفيديو في المعرض"
+  override val fluxLinkCopied = "تم نسخ رابط المقطع"
+  override val fluxAmbientStyle = "نسق بصري متفاعل"
+  override val videoSelectedDevice = "تم اختيار الفيديو من الجهاز"
+  override val tapToChooseVideo = "اضغط لاختيار فيديو من الجهاز"
+  override val noCommentsYet = "لا توجد تعليقات بعد. كن أول من يعلّق!"
+  override val startVoiceCall = "بدء مكالمة صوتية"
+  override val voiceCallLabel = "مكالمة صوتية"
+  override val callQualityHdBadge = "صوت نقي HD • 48kHz"
+  override val callRinging = "جاري الرنين..."
+  override val callIncoming = "مكالمة صوتية واردة"
+  override val callConnecting = "جارٍ تأمين الاتصال الصوتي..."
+  override val callActive = "متصل الآن"
+  override val callEnded = "انتهت المكالمة"
+  override val callDeclined = "تم رفض المكالمة"
+  override val callBusyOrFailed = "تعذر إتمام الاتصال"
+  override val acceptCall = "رد"
+  override val declineCall = "رفض"
+  override val endCall = "إنهاء"
+  override val muteMic = "كتم الميكروفون"
+  override val unmuteMic = "إلغاء الكتم"
+  override val speakerOn = "مكبر الصوت"
+  override val speakerOff = "سماعة الأذن"
+  override val minimizeCall = "تصغير"
+  override val returnToCall = "اضغط للعودة إلى المكالمة"
+  override val micPermissionRequired = "يلزم منح صلاحية الميكروفون لإجراء المكالمة الصوتية"
+  override val attachMedia = "إرسال صورة أو فيديو أو ملف"
+  override val attachPhoto = "صورة"
+  override val attachHdVideo = "فيديو عالي الجودة"
+  override val attachFile = "ملف أو مستند"
+  override val uploadingMediaProgress = "جارٍ الإرسال %d%%"
+  override val downloadingMedia = "جارٍ تحميل الوسائط..."
+  override val mediaUploadFailed = "تعذر إرسال المرفق"
+  override val mediaDownloadFailed = "تعذر تحميل المرفق"
+  override val fileTooLargeLimit = "حجم الملف يتجاوز الحد المسموح (25 ميجابايت)"
+  override val tapToPlayInline = "تشغيل"
+  override val hdBadge = "HD"
+  override val fullscreenVideo = "ملء الشاشة"
+  override val openFileAction = "فتح"
+  override val saveFileAction = "حفظ"
+  override val savedImageToast = "تم حفظ الصورة في معرض الجهاز"
+  override val savedFileToast = "تم حفظ الملف في التنزيلات"
+  override val noAppToOpenFile = "لا يوجد تطبيق مثبت لفتح هذا النوع من الملفات"
+  override val newMessageChannelName = "الرسائل الجديدة"
+  override val newMessageChannelDesc = "تنبيهات فورية عند استلام رسالة جديدة من أصدقائك"
+  override val newMessageNotificationTitle = "لديك رسالة جديدة"
+  override val newMessageFromTitle = "لديك رسالة جديدة من %s"
+  override val tapToOpenChat = "اضغط لفتح المحادثة"
+  override val splashEditorialLine = "فخامة هادئة • تواصل حقيقي"
+  override val splashTapToSkip = "اضغط للدخول"
+  override val welcomeKicker = "مكالمات نقية • سينما • دوائر هادئة"
+  override val welcomeHeadline = "مساحتك الخاصة، بأسلوبك."
+  override val welcomeSubheadline = "مكالمات صوتية فائقة النقاء، تشغيل فيديو داخل المحادثة، وتجربة عصرية خالية من الضوضاء."
+  override val pickYourVibe = "اختر جوّك"
+  override val amoledChipLabel = "سواد OLED"
+  override val featureVoiceHdTitle = "مكالمات HD"
+  override val featureVoiceHdDesc = "صوت نقي بتردد 48kHz مع عزل ضوضاء فوري بين الطرفين."
+  override val featureCinemaTitle = "سينما المحادثة"
+  override val featureCinemaDesc = "شغّل الفيديوهات عالية الجودة وأرسل الصور والملفات داخل الدردشة."
+  override val featurePulseTitle = "فلوكس وإشعارات"
+  override val featurePulseDesc = "تنبيهات فورية لكل رسالة جديدة مع مقاطع فلوكس عصرية."
+  override val switchGoogleAccount = "اختر حساب Google آخر"
+  override val privacySecureBadge = "دخول آمن عبر Google والمزامنة السحابية الفورية"
+  override val chooseAvatarOptional = "اختر مظهرك الشخصي"
+  override val googlePhotoOption = "الافتراضي"
+  override val quickRoleLabel = "اهتمامك أو تخصصك (اختيار سريع)"
+  override val quickRoleCreator = "صانع محتوى"
+  override val quickRoleDeveloper = "مطوّر"
+  override val quickRoleDesigner = "مصمم"
+  override val quickRoleGamer = "جيمر"
+  override val quickRoleStudent = "طالب"
+  override val quickRoleFounder = "رائد أعمال"
+  override val startQuietModeToggle = "البدء بوضع التركيز الهادئ"
+  override val startQuietModeDesc = "تخفيف حدة التنبيهات منذ لحظة دخولك"
+  override val setupStepSubtitle = "رتّب هويتك وأسلوبك قبل دخول كورا"
+}
 
-  // Searchable Contact Directory
-  contactDirectoryTitle = "دليل جهات الاتصال",
-  contactDirectorySubtitle = "ابحث عن الأعضاء والزملاء بالاسم أو المهنة والتخصص",
-  searchByNameOrProfession = "ابحث بالاسم أو المهنة أو التخصص...",
-  allProfessions = "جميع المهن",
-  contactsCount = "%d جهات اتصال متطابقة",
-  clearSearch = "مسح البحث",
-  noContactsFound = "لم يتم العثور على جهات اتصال",
-  noContactsFoundDesc = "جرّب البحث باسم آخر أو مسمى مهني مختلف",
-
-  // Verified Professional Networking
-  verifiedProTitle = "محترف موثق ومعتمد",
-  verifiedProBadge = "محترف موثق",
-  verifiedProSubtitle = "خبرة مهنية واعتماد رسمي موثق",
-  openToNetworking = "متاح للتواصل المهني وفرص العمل",
-  professionalCredentialsTitle = "حالة الاعتماد والتوثيق المهني",
-  verifiedProDialogDesc = "يحمل هذا العضو شارة المحترف الموثق في شبكة كورا للتواصل المهني. تم التحقق من هويته ومسماه المهني وتخصصه لضمان شبكة علاقات عمل موثوقة وعالية المستوى.",
-  filterVerifiedProOnly = "محترفون موثقون",
-
-  // Single AI Assistant Chatbot
-  aiAssistantName = "مساعد كورا الذكي",
-  aiAssistantSubtitle = "مساعد ذكي • Gemini",
-  aiWelcomeTitle = "كيف يمكنني مساعدتك اليوم؟",
-  aiWelcomeDesc = "اسألني عن أي شيء، أو اطلب صياغة رسائل، أو تلخيص أفكار في مساحة هادئة ومريحة للعين.",
-  aiPromptOne = "لخّص لي أفكاري بشكل مرتب",
-  aiPromptTwo = "اكتب لي رسالة احترافية بأسلوب راقٍ",
-  aiPromptThree = "اقترح 3 أفكار إبداعية لمشروعي",
-  aiClearChat = "محادثة جديدة",
-  aiBotBadge = "AI",
-  aiThinking = "يفكر الآن...",
-  aiErrorBannerTitle = "تعذر الاتصال بالمساعد الذكي",
-  enterProfession = "المهنة أو التخصص (اختياري)",
-  checkingAccount = "جارٍ التحقق من الجلسة...",
-  syncingProfile = "جارٍ مزامنة ملفك السحابي...",
-  openToNetworkingToggle = "الظهور كمتاح للتواصل المهني",
-  profileUpdated = "تم تحديث الملف الشخصي",
-  editProfile = "تعديل الملف الشخصي",
-  quietFocusActive = "التركيز الهادئ نشط",
-  standardAlerts = "التنبيهات الاعتيادية",
-  getPack = "شحن",
-  coinsUnit = "عملة",
-  fromLabel = "من",
-  privateNoteLabel = "ملاحظة خاصة",
-  loading = "جارٍ التحميل...",
-  aboutKoraTitle = "عن منصة كورا",
-  aboutKoraDesc = "صُممت لتواصل راقٍ وهادئ بخيوط نقاش منظمة ومزامنة سحابية فورية خالية من الضوضاء.",
-  activeChatsCount = "%d محادثات نشطة",
-  publishedSuccess = "تم النشر",
-  groupNameLabel = "اسم المجموعة",
-  selectedLabel = "محدد"
-)
-
-val LocalAppStrings = compositionLocalOf { EnglishStrings }
+val LocalAppStrings = compositionLocalOf<KoraStrings> { EnglishStrings }
 val LocalAppLanguage = compositionLocalOf { AppLanguage.EN }

@@ -1,15 +1,19 @@
 package com.example.data.model
 
+import androidx.annotation.Keep
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.ServerTimestamp
 
+@Keep
 @IgnoreExtraProperties
 data class Conversation(
   @DocumentId val id: String = "",
   val type: String = "direct", // "direct" or "group"
   val title: String = "",
+  @get:PropertyName("isVerified") @PropertyName("isVerified")
   val isVerified: Boolean = false,
   val verifiedTier: String = "BLUE",
   val participantIds: List<String> = emptyList(),

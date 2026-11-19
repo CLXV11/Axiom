@@ -66,6 +66,8 @@ class PreferencesManager(context: Context) {
       put("avatarUrl", profile.avatarUrl)
       put("isVerified", profile.isVerified)
       put("verifiedTier", profile.verifiedTier)
+      put("equippedFrame", profile.equippedFrame ?: "")
+      put("equippedNameplate", profile.equippedNameplate ?: "")
       put("quietMode", profile.quietMode)
       put("readReceiptsEnabled", profile.readReceiptsEnabled)
     }
@@ -78,6 +80,8 @@ class PreferencesManager(context: Context) {
     return try {
       val json = JSONObject(raw)
       if (json.optString("id") != uid) return null
+      val frame = json.optString("equippedFrame", "").ifBlank { null }
+      val nameplate = json.optString("equippedNameplate", "").ifBlank { null }
       UserProfile(
         id = uid,
         displayName = json.optString("displayName", ""),
@@ -89,7 +93,9 @@ class PreferencesManager(context: Context) {
         openToNetworking = json.optBoolean("openToNetworking", true),
         avatarUrl = json.optString("avatarUrl", ""),
         isVerified = json.optBoolean("isVerified", false),
-        verifiedTier = json.optString("verifiedTier", "GOLD"),
+        verifiedTier = json.optString("verifiedTier", "BLUE"),
+        equippedFrame = frame,
+        equippedNameplate = nameplate,
         quietMode = json.optBoolean("quietMode", false),
         readReceiptsEnabled = json.optBoolean("readReceiptsEnabled", true)
       )
@@ -100,6 +106,20 @@ class PreferencesManager(context: Context) {
 
   fun clearCachedProfile() {
     prefs.edit().remove("key_cached_profile_json").apply()
+  }
+
+  fun clearAllSessionCaches(context: Context) {
+    clearCachedProfile()
+    context.applicationContext
+      .getSharedPreferences("kora_store_prefs", Context.MODE_PRIVATE)
+      .edit()
+      .clear()
+      .apply()
+    context.applicationContext
+      .getSharedPreferences("flux_storage_prefs", Context.MODE_PRIVATE)
+      .edit()
+      .clear()
+      .apply()
   }
 
   fun getOrCreateGuestUserId(): String {
@@ -142,13 +162,13 @@ class PreferencesManager(context: Context) {
     }
 
   var guestIsVerified: Boolean
-    get() = prefs.getBoolean("key_guest_is_verified", true)
+    get() = prefs.getBoolean("key_guest_is_verified", false)
     set(value) {
       prefs.edit().putBoolean("key_guest_is_verified", value).apply()
     }
 
   var guestVerifiedTier: String
-    get() = prefs.getString("key_guest_verified_tier", "GOLD") ?: "GOLD"
+    get() = prefs.getString("key_guest_verified_tier", "BLUE") ?: "BLUE"
     set(value) {
       prefs.edit().putString("key_guest_verified_tier", value).apply()
     }

@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -55,8 +55,8 @@ fun KoraTopBar(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(58.dp)
-        .padding(horizontal = spacing.small),
+        .defaultMinSize(minHeight = 60.dp)
+        .padding(horizontal = spacing.small, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
       if (onBackClick != null) {
@@ -123,7 +123,7 @@ fun KoraTopBar(
               text = subtitle,
               style = KoraTheme.typography.labelSmall,
               color = colors.onSurfaceVariant,
-              maxLines = 1,
+              maxLines = 2,
               overflow = TextOverflow.Ellipsis
             )
           }

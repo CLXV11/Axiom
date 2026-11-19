@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -105,8 +106,10 @@ fun ProfileScreen(
 
   val cachedInitialProfile = remember(uid) { userRepository.getCachedProfile(uid) }
   val profile by userRepository.observeUserProfile(uid).collectAsState(initial = cachedInitialProfile)
-  val equippedFrame by storeRepository.equippedFrame.collectAsState()
-  val equippedNameplate by storeRepository.equippedNameplate.collectAsState()
+  val storeFrame by storeRepository.equippedFrame.collectAsState()
+  val storeNameplate by storeRepository.equippedNameplate.collectAsState()
+  val equippedFrame = storeFrame ?: profile?.equippedFrame
+  val equippedNameplate = storeNameplate ?: profile?.equippedNameplate
   val coins by storeRepository.coinBalance.collectAsState()
 
   var showEditDialog by remember { mutableStateOf(false) }
@@ -163,11 +166,17 @@ fun ProfileScreen(
   ) { paddingValues ->
     val scrollState = rememberScrollState()
 
-    Column(
+    Box(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(MaterialTheme.colorScheme.background)
+        .background(MaterialTheme.colorScheme.background),
+      contentAlignment = Alignment.TopCenter
+    ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .widthIn(max = 760.dp)
         .verticalScroll(scrollState)
         .padding(16.dp)
     ) {
@@ -546,12 +555,20 @@ fun ProfileScreen(
 
             Switch(
               checked = profile?.isVerified == true,
-              onCheckedChange = {
+              onCheckedChange = { desired ->
                 coroutineScope.launch {
-                  val res = userRepository.toggleVerificationStatus()
-                  val newStatus = res.getOrDefault(false)
-                  val msg = if (newStatus) strings.verifiedStatusActive else strings.verifiedStatusInactive
-                  Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                  val res = userRepository.setVerificationStatus(desired)
+                  if (res.isSuccess) {
+                    val newStatus = res.getOrDefault(desired)
+                    val msg = if (newStatus) strings.verificationEnableSuccess else strings.verificationDisableSuccess
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                  } else {
+                    Toast.makeText(
+                      context,
+                      res.exceptionOrNull()?.localizedMessage ?: strings.verificationError,
+                      Toast.LENGTH_SHORT
+                    ).show()
+                  }
                 }
               },
               modifier = Modifier.testTag("verification_toggle_switch")
@@ -634,9 +651,17 @@ fun ProfileScreen(
                 Card(
                   onClick = {
                     coroutineScope.launch {
-                      userRepository.setVerificationTier(tier.id)
-                      val name = if (isArabic) tier.titleAr else tier.titleEn
-                      Toast.makeText(context, "${if (isArabic) "تم تفعيل" else "Equipped"}: $name", Toast.LENGTH_SHORT).show()
+                      val res = userRepository.setVerificationTier(tier.id)
+                      if (res.isSuccess) {
+                        val name = if (isArabic) tier.titleAr else tier.titleEn
+                        Toast.makeText(context, "${if (isArabic) "تم تفعيل" else "Equipped"}: $name", Toast.LENGTH_SHORT).show()
+                      } else {
+                        Toast.makeText(
+                          context,
+                          res.exceptionOrNull()?.localizedMessage ?: strings.verificationError,
+                          Toast.LENGTH_SHORT
+                        ).show()
+                      }
                     }
                   },
                   shape = RoundedCornerShape(12.dp),
@@ -864,6 +889,7 @@ fun ProfileScreen(
       }
 
       Spacer(modifier = Modifier.height(24.dp))
+    }
     }
   }
 

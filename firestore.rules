@@ -24,7 +24,7 @@ service cloud.firestore {
     }
 
     function isValidTier(tier) {
-      return tier in ['BLUE', 'GOLD', 'EMERALD', 'ROSE_GOLD', 'AMETHYST', 'ONYX'];
+      return tier in ['BLUE', 'GOLD', 'EMERALD', 'ROSE_GOLD', 'AMETHYST', 'ONYX', 'PLATINUM'];
     }
 
     function isValidStringList(arr, maxLen) {
@@ -48,6 +48,8 @@ service cloud.firestore {
              (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 2000)) &&
              (!('isVerified' in data) || data.isVerified is bool) &&
              (!('verifiedTier' in data) || (data.verifiedTier is string && isValidTier(data.verifiedTier))) &&
+             (!('equippedFrame' in data) || data.equippedFrame == null || (data.equippedFrame is string && data.equippedFrame.size() <= 64)) &&
+             (!('equippedNameplate' in data) || data.equippedNameplate == null || (data.equippedNameplate is string && data.equippedNameplate.size() <= 64)) &&
              (!('quietMode' in data) || data.quietMode is bool) &&
              (!('readReceiptsEnabled' in data) || data.readReceiptsEnabled is bool) &&
              (!('lastSeen' in data) || data.lastSeen == null || (data.lastSeen is timestamp && data.lastSeen <= request.time)) &&
@@ -84,6 +86,13 @@ service cloud.firestore {
              (!('isSenderVerified' in data) || data.isSenderVerified is bool) &&
              (!('senderVerifiedTier' in data) || (data.senderVerifiedTier is string && isValidTier(data.senderVerifiedTier))) &&
              data.content is string && data.content.size() >= 1 && data.content.size() <= 4000 &&
+             (!('mediaType' in data) || data.mediaType in ['text', 'image', 'video', 'file']) &&
+             (!('mediaId' in data) || data.mediaId == null || (data.mediaId is string && isValidId(data.mediaId))) &&
+             (!('mediaFileName' in data) || data.mediaFileName == null || (data.mediaFileName is string && data.mediaFileName.size() <= 255)) &&
+             (!('mediaMimeType' in data) || data.mediaMimeType == null || (data.mediaMimeType is string && data.mediaMimeType.size() <= 128)) &&
+             (!('mediaSizeBytes' in data) || (data.mediaSizeBytes is int && data.mediaSizeBytes >= 0 && data.mediaSizeBytes <= 26214400)) &&
+             (!('mediaChunkCount' in data) || (data.mediaChunkCount is int && data.mediaChunkCount >= 0 && data.mediaChunkCount <= 100)) &&
+             (!('mediaDurationMs' in data) || (data.mediaDurationMs is int && data.mediaDurationMs >= 0)) &&
              (!('replyToId' in data) || data.replyToId == null || (data.replyToId is string && data.replyToId.size() <= 128)) &&
              (!('replyToSender' in data) || data.replyToSender == null || (data.replyToSender is string && data.replyToSender.size() <= 100)) &&
              (!('replyToText' in data) || data.replyToText == null || (data.replyToText is string && data.replyToText.size() <= 500)) &&
@@ -180,8 +189,8 @@ service cloud.firestore {
                        incoming().keys().hasOnly([
                          'displayName', 'handle', 'bio', 'profession', 'isProfessionalVerified',
                          'professionalOrg', 'openToNetworking', 'avatarUrl', 'isVerified',
-                         'verifiedTier', 'quietMode', 'readReceiptsEnabled', 'lastSeen',
-                         'createdAt', 'updatedAt'
+                         'verifiedTier', 'equippedFrame', 'equippedNameplate', 'quietMode',
+                         'readReceiptsEnabled', 'lastSeen', 'createdAt', 'updatedAt'
                        ]);
 
       allow update: if isSignedIn() &&
@@ -196,11 +205,132 @@ service cloud.firestore {
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'displayName', 'handle', 'bio', 'profession', 'professionalOrg',
                            'openToNetworking', 'avatarUrl', 'isVerified', 'verifiedTier',
-                           'quietMode', 'readReceiptsEnabled', 'lastSeen', 'updatedAt'
+                           'equippedFrame', 'equippedNameplate', 'quietMode',
+                           'readReceiptsEnabled', 'lastSeen', 'updatedAt'
                          ])
                        );
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Server-Authoritative Store Wallet & Owned Decorations
+      match /wallet/{walletId} {
+        function framePriceMap() {
+          return {
+            'cat_bell': 200,
+            'violet_night': 200,
+            'skull_eye': 200,
+            'octopus_crown': 200,
+            'future_mech': 200,
+            'sakura_tide': 50,
+            'celestial_wings': 500,
+            'imperial_gold': 400,
+            'dragon_flame': 450,
+            'cosmic_swirl': 300
+          };
+        }
+
+        function nameplatePriceMap() {
+          return {
+            'np_aurora': 100,
+            'np_prismatic': 100,
+            'np_golden': 100,
+            'np_midnight': 100,
+            'np_moonlit': 300,
+            'np_bone_noir': 350
+          };
+        }
+
+        function isValidStoreWallet(data) {
+          return data.coinBalance is int &&
+                 data.coinBalance >= 0 &&
+                 data.coinBalance <= 100000 &&
+                 isValidStringList(data.ownedItemIds, 100) &&
+                 isValidStringList(data.claimedMilestones, 20) &&
+                 (!('lastDailyClaimAt' in data) || data.lastDailyClaimAt == null || (data.lastDailyClaimAt is timestamp && data.lastDailyClaimAt <= request.time)) &&
+                 (!('equippedFrame' in data) || data.equippedFrame == null || (data.equippedFrame is string && data.equippedFrame.size() <= 64)) &&
+                 (!('equippedNameplate' in data) || data.equippedNameplate == null || (data.equippedNameplate is string && data.equippedNameplate.size() <= 64)) &&
+                 data.createdAt is timestamp && data.createdAt <= request.time &&
+                 data.updatedAt is timestamp && data.updatedAt <= request.time &&
+                 !('id' in data);
+        }
+
+        allow get: if isSignedIn() && request.auth.uid == userId && walletId == 'state';
+        allow list, delete: if false;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         walletId == 'state' &&
+                         isValidStoreWallet(incoming()) &&
+                         incoming().keys().hasAll(['coinBalance', 'ownedItemIds', 'claimedMilestones', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'coinBalance', 'ownedItemIds', 'claimedMilestones',
+                           'lastDailyClaimAt', 'equippedFrame', 'equippedNameplate',
+                           'createdAt', 'updatedAt'
+                         ]) &&
+                         incoming().coinBalance == 500 &&
+                         incoming().ownedItemIds.size() == 0 &&
+                         incoming().claimedMilestones.size() == 0 &&
+                         (!('lastDailyClaimAt' in incoming()) || incoming().lastDailyClaimAt == null) &&
+                         (!('equippedFrame' in incoming()) || incoming().equippedFrame == null) &&
+                         (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null);
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         walletId == 'state' &&
+                         isValidStoreWallet(incoming()) &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           // 1. Daily check-in (+250 coins, 24h cooldown verified against server request.time)
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['coinBalance', 'lastDailyClaimAt', 'updatedAt']) &&
+                             incoming().coinBalance == existing().coinBalance + 250 &&
+                             incoming().lastDailyClaimAt == request.time &&
+                             (!('lastDailyClaimAt' in existing()) ||
+                              existing().lastDailyClaimAt == null ||
+                              existing().lastDailyClaimAt + duration.value(24, 'h') <= request.time)
+                           ) ||
+                           // 2. One-time milestone quest rewards
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['coinBalance', 'claimedMilestones', 'updatedAt']) &&
+                             incoming().claimedMilestones.size() == existing().claimedMilestones.size() + 1 &&
+                             incoming().claimedMilestones.hasAll(existing().claimedMilestones) &&
+                             (
+                               ('m_profile' in incoming().claimedMilestones && !('m_profile' in existing().claimedMilestones) && incoming().coinBalance == existing().coinBalance + 150) ||
+                               ('m_verified' in incoming().claimedMilestones && !('m_verified' in existing().claimedMilestones) && incoming().coinBalance == existing().coinBalance + 200) ||
+                               ('m_flux' in incoming().claimedMilestones && !('m_flux' in existing().claimedMilestones) && incoming().coinBalance == existing().coinBalance + 250) ||
+                               ('m_avatar' in incoming().claimedMilestones && !('m_avatar' in existing().claimedMilestones) && incoming().coinBalance == existing().coinBalance + 150)
+                             )
+                           ) ||
+                           // 3a. Buy Avatar Frame (exact price deducted & auto-equipped)
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['coinBalance', 'ownedItemIds', 'equippedFrame', 'updatedAt']) &&
+                             incoming().equippedFrame is string &&
+                             incoming().equippedFrame in framePriceMap() &&
+                             !(incoming().equippedFrame in existing().ownedItemIds) &&
+                             incoming().equippedFrame in incoming().ownedItemIds &&
+                             incoming().ownedItemIds.size() == existing().ownedItemIds.size() + 1 &&
+                             incoming().ownedItemIds.hasAll(existing().ownedItemIds) &&
+                             incoming().coinBalance == existing().coinBalance - framePriceMap()[incoming().equippedFrame]
+                           ) ||
+                           // 3b. Buy Role Nameplate (exact price deducted & auto-equipped)
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['coinBalance', 'ownedItemIds', 'equippedNameplate', 'updatedAt']) &&
+                             incoming().equippedNameplate is string &&
+                             incoming().equippedNameplate in nameplatePriceMap() &&
+                             !(incoming().equippedNameplate in existing().ownedItemIds) &&
+                             incoming().equippedNameplate in incoming().ownedItemIds &&
+                             incoming().ownedItemIds.size() == existing().ownedItemIds.size() + 1 &&
+                             incoming().ownedItemIds.hasAll(existing().ownedItemIds) &&
+                             incoming().coinBalance == existing().coinBalance - nameplatePriceMap()[incoming().equippedNameplate]
+                           ) ||
+                           // 4. Equip / unequip owned decorations only
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['equippedFrame', 'equippedNameplate', 'updatedAt']) &&
+                             (!('equippedFrame' in incoming()) || incoming().equippedFrame == null || incoming().equippedFrame in existing().ownedItemIds) &&
+                             (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null || incoming().equippedNameplate in existing().ownedItemIds)
+                           )
+                         );
+      }
 
       // Saved Memories subcollection (Strictly private per-user vault)
       match /saved_memories/{memoryId} {
@@ -285,7 +415,9 @@ service cloud.firestore {
                          incoming().keys().hasAll(['conversationId', 'senderId', 'senderName', 'content', 'createdAt']) &&
                          incoming().keys().hasOnly([
                            'conversationId', 'senderId', 'senderName', 'isSenderVerified', 'senderVerifiedTier',
-                           'content', 'replyToId', 'replyToSender', 'replyToText', 'status', 'readBy',
+                           'content', 'mediaType', 'mediaId', 'mediaFileName', 'mediaMimeType',
+                           'mediaSizeBytes', 'mediaChunkCount', 'mediaDurationMs',
+                           'replyToId', 'replyToSender', 'replyToText', 'status', 'readBy',
                            'isEdited', 'isDeleted', 'createdAt', 'updatedAt'
                          ]) &&
                          isConvoParticipant(conversationId);
@@ -305,6 +437,26 @@ service cloud.firestore {
                          );
 
         allow delete: if false;
+      }
+
+      // Chunked high-quality media payloads inside a conversation (Parent-Gated)
+      match /media/{mediaId}/chunks/{chunkId} {
+        allow get, list: if isValidId(conversationId) && isValidId(mediaId) && isConvoParticipant(conversationId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(conversationId) &&
+                         isValidId(mediaId) &&
+                         isValidId(chunkId) &&
+                         isConvoParticipant(conversationId) &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().mediaId == mediaId &&
+                         incoming().index is int && incoming().index >= 0 && incoming().index < 100 &&
+                         incoming().data is string && incoming().data.size() >= 1 && incoming().data.size() <= 750000 &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().keys().hasAll(['mediaId', 'senderId', 'index', 'data', 'createdAt']) &&
+                         incoming().keys().hasOnly(['mediaId', 'senderId', 'index', 'data', 'createdAt']);
+
+        allow update, delete: if false;
       }
     }
 
@@ -426,6 +578,87 @@ service cloud.firestore {
 
         allow update: if false;
         allow delete: if isSignedIn() && isValidId(fluxId) && isValidId(commentId) && existing().authorId == request.auth.uid;
+      }
+    }
+
+    // Two-Party Voice Calls & WebRTC Signaling (Strict Participant Isolation)
+    match /calls/{callId} {
+      function isCallParticipant(cid) {
+        return isSignedIn() &&
+               exists(/databases/$(database)/documents/calls/$(cid)) &&
+               request.auth.uid in get(/databases/$(database)/documents/calls/$(cid)).data.participantIds;
+      }
+
+      function isValidVoiceCall(data) {
+        return data.conversationId is string && isValidId(data.conversationId) &&
+               data.callerId is string && data.callerId.size() >= 1 && data.callerId.size() <= 128 &&
+               data.callerName is string && data.callerName.size() >= 1 && data.callerName.size() <= 100 &&
+               (!('callerAvatarUrl' in data) || data.callerAvatarUrl == null || (data.callerAvatarUrl is string && data.callerAvatarUrl.size() <= 2000)) &&
+               data.calleeId is string && data.calleeId.size() >= 1 && data.calleeId.size() <= 128 &&
+               (!('calleeName' in data) || data.calleeName == null || (data.calleeName is string && data.calleeName.size() <= 100)) &&
+               (!('calleeAvatarUrl' in data) || data.calleeAvatarUrl == null || (data.calleeAvatarUrl is string && data.calleeAvatarUrl.size() <= 2000)) &&
+               isValidStringList(data.participantIds, 2) && data.participantIds.size() == 2 &&
+               data.callerId in data.participantIds &&
+               data.calleeId in data.participantIds &&
+               data.status in ['ringing', 'connecting', 'connected', 'ended', 'declined', 'missed'] &&
+               (!('offerSdp' in data) || data.offerSdp == null || (data.offerSdp is string && data.offerSdp.size() <= 40000)) &&
+               (!('answerSdp' in data) || data.answerSdp == null || (data.answerSdp is string && data.answerSdp.size() <= 40000)) &&
+               data.createdAt is timestamp && data.createdAt <= request.time &&
+               data.updatedAt is timestamp && data.updatedAt <= request.time &&
+               (!('endedAt' in data) || data.endedAt == null || (data.endedAt is timestamp && data.endedAt <= request.time)) &&
+               !('id' in data);
+      }
+
+      allow get: if isSignedIn() && isValidId(callId) && request.auth.uid in existing().participantIds;
+      allow list: if isSignedIn() && request.auth.uid in existing().participantIds;
+
+      allow create: if isSignedIn() &&
+                       isValidId(callId) &&
+                       isValidVoiceCall(incoming()) &&
+                       incoming().callerId == request.auth.uid &&
+                       incoming().status == 'ringing' &&
+                       incoming().keys().hasAll([
+                         'conversationId', 'callerId', 'callerName', 'calleeId',
+                         'participantIds', 'status', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'conversationId', 'callerId', 'callerName', 'callerAvatarUrl',
+                         'calleeId', 'calleeName', 'calleeAvatarUrl', 'participantIds',
+                         'status', 'offerSdp', 'answerSdp', 'createdAt', 'updatedAt', 'endedAt'
+                       ]);
+
+      allow update: if isSignedIn() &&
+                       isValidId(callId) &&
+                       isValidVoiceCall(incoming()) &&
+                       request.auth.uid in existing().participantIds &&
+                       request.auth.uid in incoming().participantIds &&
+                       incoming().callerId == existing().callerId &&
+                       incoming().calleeId == existing().calleeId &&
+                       incoming().participantIds == existing().participantIds &&
+                       incoming().conversationId == existing().conversationId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'status', 'offerSdp', 'answerSdp', 'updatedAt', 'endedAt'
+                       ]);
+
+      allow delete: if false;
+
+      match /candidates/{candidateId} {
+        allow get, list: if isValidId(callId) && isCallParticipant(callId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(callId) &&
+                         isValidId(candidateId) &&
+                         isCallParticipant(callId) &&
+                         incoming().senderId == request.auth.uid &&
+                         incoming().sdpMid is string && incoming().sdpMid.size() <= 64 &&
+                         incoming().sdpMLineIndex is int && incoming().sdpMLineIndex >= 0 &&
+                         incoming().candidate is string && incoming().candidate.size() >= 1 && incoming().candidate.size() <= 4096 &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                         incoming().keys().hasAll(['senderId', 'sdpMid', 'sdpMLineIndex', 'candidate', 'createdAt']) &&
+                         incoming().keys().hasOnly(['senderId', 'sdpMid', 'sdpMLineIndex', 'candidate', 'createdAt']);
+
+        allow update, delete: if false;
       }
     }
   }

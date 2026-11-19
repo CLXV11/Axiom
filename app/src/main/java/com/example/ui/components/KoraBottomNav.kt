@@ -77,8 +77,8 @@ fun KoraBottomNav(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(68.dp)
-        .padding(horizontal = spacing.compact),
+        .defaultMinSize(minHeight = 64.dp)
+        .padding(horizontal = spacing.compact, vertical = 4.dp),
       horizontalArrangement = Arrangement.SpaceAround,
       verticalAlignment = Alignment.CenterVertically
     ) {

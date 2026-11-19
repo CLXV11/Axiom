@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="chat_media" path="chat_media/" />
+    <files-path name="flux_media" path="flux_media/" />
+    <cache-path name="shared_cache" path="." />
+</paths>

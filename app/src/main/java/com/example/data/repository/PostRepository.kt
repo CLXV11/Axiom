@@ -39,8 +39,13 @@ class PostRepository(
   )
 
   private val localPosts = MutableStateFlow<List<Post>>(emptyList())
+  private var cachedServerPosts: List<Post> = emptyList()
   private val localComments = mutableMapOf<String, MutableStateFlow<List<PostComment>>>()
   private val localMemories = MutableStateFlow<List<SavedMemory>>(emptyList())
+
+  companion object {
+    val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
+  }
 
   private fun getEffectiveUserId(): String {
     return auth.currentUser?.uid ?: prefsManager?.getOrCreateGuestUserId() ?: "kora_lead_user"
@@ -62,10 +67,16 @@ class PostRepository(
         .map { snapshot ->
           snapshot.toObjects(Post::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
             .sortedByDescending { it.createdAt }
+            .also { cachedServerPosts = it }
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "posts", auth)
-          emit(emptyList())
+          val fallback = if (audienceFilter != null && audienceFilter != "all") {
+            cachedServerPosts.filter { it.audience == audienceFilter }
+          } else {
+            cachedServerPosts
+          }
+          emit(fallback)
         }
     } else {
       return localPosts.asStateFlow()
@@ -78,15 +89,11 @@ class PostRepository(
     authorName: String,
     authorHandle: String,
     isAuthorVerified: Boolean = false,
-    authorVerifiedTier: String = "GOLD"
+    authorVerifiedTier: String = "BLUE"
   ): Result<Unit> {
     val uid = getEffectiveUserId()
     val postId = UUID.randomUUID().toString()
-    val validTier = if (authorVerifiedTier in listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX")) {
-      authorVerifiedTier
-    } else {
-      "GOLD"
-    }
+    val validTier = if (authorVerifiedTier in VALID_TIERS) authorVerifiedTier else "BLUE"
     val validAudience = if (audience == "circles") "circles" else "public"
 
     if (auth.currentUser != null) {
