@@ -5,9 +5,12 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,9 +57,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -75,10 +75,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -259,6 +264,8 @@ fun MediaMessageBubbleContent(
   onPlayInlineVideo: () -> Unit,
   onStopInlineVideo: () -> Unit,
   onOpenFullscreenVideo: (File) -> Unit,
+  isMeBubble: Boolean = false,
+  cornerFooter: (@Composable () -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -298,9 +305,9 @@ fun MediaMessageBubbleContent(
         Box(
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 140.dp, max = 260.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))
+            .heightIn(min = 150.dp, max = 272.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF0D111A))
             .clickable(enabled = resolvedFile != null) { showImageLightbox = true }
             .testTag("chat_media_image_${message.id}"),
           contentAlignment = Alignment.Center
@@ -330,19 +337,29 @@ fun MediaMessageBubbleContent(
                 }
               },
               shape = CircleShape,
-              color = Color.Black.copy(alpha = 0.55f),
+              color = Color.Black.copy(alpha = 0.48f),
               modifier = Modifier
-                .align(Alignment.BottomEnd)
+                .align(Alignment.TopEnd)
                 .padding(8.dp)
-                .size(38.dp)
+                .size(34.dp)
             ) {
               Box(contentAlignment = Alignment.Center) {
                 Icon(
                   imageVector = Icons.Default.Download,
                   contentDescription = strings.saveFileAction,
                   tint = Color.White,
-                  modifier = Modifier.size(18.dp)
+                  modifier = Modifier.size(17.dp)
                 )
+              }
+            }
+
+            if (cornerFooter != null) {
+              Box(
+                modifier = Modifier
+                  .align(Alignment.BottomEnd)
+                  .padding(8.dp)
+              ) {
+                cornerFooter()
               }
             }
           } else {
@@ -362,14 +379,13 @@ fun MediaMessageBubbleContent(
           modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 10f)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(Color(0xFF0A0D18))
             .testTag("chat_media_video_${message.id}"),
           contentAlignment = Alignment.Center
         ) {
           val file = resolvedFile
           if (isInlineVideoPlaying && file != null) {
-            // Live hardware-accelerated ExoPlayer embedded directly inside the chat bubble!
             EmbeddedChatExoPlayer(
               file = file,
               onStopClick = onStopInlineVideo,
@@ -414,11 +430,10 @@ fun MediaMessageBubbleContent(
               )
             }
 
-            // Subtle dark scrim for legibility
             Box(
               modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.25f))
+                .background(Color.Black.copy(alpha = 0.24f))
                 .clickable(enabled = file != null || loadError != null) {
                   if (file != null) {
                     onPlayInlineVideo()
@@ -437,11 +452,11 @@ fun MediaMessageBubbleContent(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color.Black.copy(alpha = 0.65f)
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Black.copy(alpha = 0.56f)
               ) {
                 Row(
-                  modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Icon(
@@ -461,28 +476,27 @@ fun MediaMessageBubbleContent(
               }
               if (message.mediaSizeBytes > 0L) {
                 Surface(
-                  shape = RoundedCornerShape(6.dp),
-                  color = Color.Black.copy(alpha = 0.55f)
+                  shape = RoundedCornerShape(999.dp),
+                  color = Color.Black.copy(alpha = 0.50f)
                 ) {
                   Text(
                     text = ChatMediaRepository.formatBytes(message.mediaSizeBytes),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = Color.White.copy(alpha = 0.9f),
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    color = Color.White.copy(alpha = 0.92f),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                   )
                 }
               }
             }
 
-            // Center Play button or Loading/Retry
             if (file != null) {
               Surface(
                 onClick = onPlayInlineVideo,
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-                border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.8f)),
+                color = Color.Black.copy(alpha = 0.55f),
+                border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.85f)),
                 modifier = Modifier
-                  .size(56.dp)
+                  .size(54.dp)
                   .testTag("play_inline_video_${message.id}")
               ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -490,12 +504,11 @@ fun MediaMessageBubbleContent(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = strings.tapToPlayInline,
                     tint = Color.White,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                   )
                 }
               }
 
-              // Bottom bar: Duration + Quick Fullscreen & Save
               Row(
                 modifier = Modifier
                   .align(Alignment.BottomCenter)
@@ -504,64 +517,38 @@ fun MediaMessageBubbleContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
               ) {
-                Surface(
-                  shape = RoundedCornerShape(8.dp),
-                  color = Color.Black.copy(alpha = 0.65f)
-                ) {
-                  Text(
-                    text = ChatMediaRepository.formatDuration(message.mediaDurationMs),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                  )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                   Surface(
-                    onClick = {
-                      scope.launch {
-                        val res = chatMediaRepository.saveToDeviceGalleryOrDownloads(
-                          file = file,
-                          mediaType = "video",
-                          mimeType = message.mediaMimeType,
-                          fileName = message.mediaFileName
-                        )
-                        Toast.makeText(
-                          context,
-                          if (res.isSuccess) strings.savedToGalleryToast else strings.gallerySaveFailedToast,
-                          Toast.LENGTH_SHORT
-                        ).show()
-                      }
-                    },
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.65f),
-                    modifier = Modifier.size(34.dp)
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color.Black.copy(alpha = 0.58f)
                   ) {
-                    Box(contentAlignment = Alignment.Center) {
-                      Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = strings.saveToGallery,
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                      )
-                    }
+                    Text(
+                      text = ChatMediaRepository.formatDuration(message.mediaDurationMs),
+                      style = MaterialTheme.typography.labelSmall,
+                      color = Color.White,
+                      fontWeight = FontWeight.SemiBold,
+                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
                   }
                   Surface(
                     onClick = { onOpenFullscreenVideo(file) },
                     shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.65f),
-                    modifier = Modifier.size(34.dp)
+                    color = Color.Black.copy(alpha = 0.58f),
+                    modifier = Modifier.size(30.dp)
                   ) {
                     Box(contentAlignment = Alignment.Center) {
                       Icon(
                         imageVector = Icons.Default.Fullscreen,
                         contentDescription = strings.fullscreenVideo,
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                       )
                     }
                   }
+                }
+
+                if (cornerFooter != null) {
+                  cornerFooter()
                 }
               }
             } else {
@@ -585,6 +572,7 @@ fun MediaMessageBubbleContent(
           isLoading = isLoading,
           progress = progress,
           loadError = loadError,
+          isMeBubble = isMeBubble,
           onRetry = { retryCounter++ }
         )
       }
@@ -594,134 +582,152 @@ fun MediaMessageBubbleContent(
           .uppercase()
           .take(5)
           .ifBlank { "FILE" }
+        val badgeColor = when (ext) {
+          "PDF" -> Color(0xFFEF4444)
+          "ZIP", "RAR", "7Z" -> Color(0xFFF59E0B)
+          "PNG", "JPG", "JPEG", "WEBP" -> Color(0xFF38BDF8)
+          "MP3", "M4A", "WAV" -> Color(0xFFA855F7)
+          else -> MaterialTheme.colorScheme.primary
+        }
 
-        Surface(
-          shape = RoundedCornerShape(14.dp),
-          color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
-          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        Column(
           modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = resolvedFile != null) {
+              val res = chatMediaRepository.openFileWithSystem(resolvedFile!!, message.mediaMimeType)
+              if (res.isFailure) {
+                Toast.makeText(context, strings.noAppToOpenFile, Toast.LENGTH_SHORT).show()
+              }
+            }
             .testTag("chat_media_file_${message.id}")
         ) {
-          Column(modifier = Modifier.padding(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                modifier = Modifier.size(42.dp)
-              ) {
-                Box(contentAlignment = Alignment.Center) {
-                  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                      imageVector = Icons.Default.InsertDriveFile,
-                      contentDescription = null,
-                      tint = MaterialTheme.colorScheme.primary,
-                      modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                      text = ext,
-                      style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                      fontWeight = FontWeight.ExtraBold,
-                      color = MaterialTheme.colorScheme.primary,
-                      maxLines = 1
-                    )
-                  }
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            // Sleek Telegram/WhatsApp circular file badge
+            Surface(
+              shape = RoundedCornerShape(14.dp),
+              color = badgeColor.copy(alpha = 0.18f),
+              modifier = Modifier.size(46.dp)
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                  Icon(
+                    imageVector = Icons.Default.InsertDriveFile,
+                    contentDescription = null,
+                    tint = badgeColor,
+                    modifier = Modifier.size(18.dp)
+                  )
+                  Text(
+                    text = ext,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, lineHeight = 9.sp),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = badgeColor,
+                    maxLines = 1
+                  )
                 }
-              }
-              Spacer(modifier = Modifier.width(10.dp))
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = message.mediaFileName ?: "Attachment",
-                  style = MaterialTheme.typography.bodyMedium,
-                  fontWeight = FontWeight.SemiBold,
-                  color = MaterialTheme.colorScheme.onSurface,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                  text = ChatMediaRepository.formatBytes(message.mediaSizeBytes),
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
               }
             }
 
-            if (isLoading) {
-              Spacer(modifier = Modifier.height(8.dp))
-              LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .height(4.dp)
-                  .clip(RoundedCornerShape(2.dp))
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = message.mediaFileName ?: "Attachment",
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
               )
-            } else if (loadError != null) {
-              Spacer(modifier = Modifier.height(8.dp))
-              OutlinedButton(
-                onClick = { retryCounter++ },
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.fillMaxWidth()
-              ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.retry, style = MaterialTheme.typography.labelMedium)
-              }
-            } else if (resolvedFile != null) {
-              Spacer(modifier = Modifier.height(8.dp))
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-              ) {
-                OutlinedButton(
-                  onClick = {
-                    val res = chatMediaRepository.openFileWithSystem(resolvedFile!!, message.mediaMimeType)
-                    if (res.isFailure) {
-                      Toast.makeText(context, strings.noAppToOpenFile, Toast.LENGTH_SHORT).show()
-                    }
-                  },
-                  contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                  modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 40.dp)
-                ) {
-                  Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
-                  Spacer(modifier = Modifier.width(5.dp))
-                  Text(strings.openFileAction, style = MaterialTheme.typography.labelMedium)
-                }
+              Spacer(modifier = Modifier.height(2.dp))
+              Text(
+                text = "${ChatMediaRepository.formatBytes(message.mediaSizeBytes)} • $ext",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
 
-                Button(
-                  onClick = {
-                    scope.launch {
-                      val res = chatMediaRepository.saveToDeviceGalleryOrDownloads(
-                        file = resolvedFile!!,
-                        mediaType = "file",
-                        mimeType = message.mediaMimeType,
-                        fileName = message.mediaFileName
-                      )
-                      Toast.makeText(
-                        context,
-                        if (res.isSuccess) strings.savedFileToast else strings.gallerySaveFailedToast,
-                        Toast.LENGTH_SHORT
-                      ).show()
-                    }
-                  },
-                  contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+            if (resolvedFile != null) {
+              Spacer(modifier = Modifier.width(6.dp))
+              IconButton(
+                onClick = {
+                  val res = chatMediaRepository.openFileWithSystem(resolvedFile!!, message.mediaMimeType)
+                  if (res.isFailure) {
+                    Toast.makeText(context, strings.noAppToOpenFile, Toast.LENGTH_SHORT).show()
+                  }
+                },
+                modifier = Modifier.size(40.dp)
+              ) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                  contentDescription = strings.openFileAction,
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(19.dp)
+                )
+              }
+              IconButton(
+                onClick = {
+                  scope.launch {
+                    val res = chatMediaRepository.saveToDeviceGalleryOrDownloads(
+                      file = resolvedFile!!,
+                      mediaType = "file",
+                      mimeType = message.mediaMimeType,
+                      fileName = message.mediaFileName
+                    )
+                    Toast.makeText(
+                      context,
+                      if (res.isSuccess) strings.savedFileToast else strings.gallerySaveFailedToast,
+                      Toast.LENGTH_SHORT
+                    ).show()
+                  }
+                },
+                modifier = Modifier.size(40.dp)
+              ) {
+                Box(
                   modifier = Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 40.dp)
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                  contentAlignment = Alignment.Center
                 ) {
-                  Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
-                  Spacer(modifier = Modifier.width(5.dp))
-                  Text(strings.saveFileAction, style = MaterialTheme.typography.labelMedium)
+                  Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = strings.saveFileAction,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                  )
                 }
+              }
+            } else if (loadError != null) {
+              IconButton(
+                onClick = { retryCounter++ },
+                modifier = Modifier.size(40.dp)
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Refresh,
+                  contentDescription = strings.retry,
+                  tint = MaterialTheme.colorScheme.error,
+                  modifier = Modifier.size(20.dp)
+                )
               }
             }
+          }
+
+          if (isLoading) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(
+              progress = { progress.coerceIn(0.05f, 1f) },
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .clip(RoundedCornerShape(2.dp))
+            )
           }
         }
       }
     }
-
-    Spacer(modifier = Modifier.height(6.dp))
   }
 
   if (showImageLightbox && resolvedFile != null) {
@@ -1119,16 +1125,26 @@ private fun VoiceNoteBubblePlayer(
   isLoading: Boolean,
   progress: Float,
   loadError: String?,
+  isMeBubble: Boolean = false,
   onRetry: () -> Unit
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   var isPlaying by remember(messageId) { mutableStateOf(false) }
   var speedIndex by remember(messageId) { mutableIntStateOf(0) }
   val speeds = remember { listOf(1.0f, 1.5f, 2.0f) }
   val speedLabels = remember { listOf("1x", "1.5x", "2x") }
   var currentPositionMs by remember(messageId) { mutableLongStateOf(0L) }
   var totalDurationMs by remember(messageId, durationHintMs) { mutableLongStateOf(durationHintMs.coerceAtLeast(0L)) }
+
+  val waveformBars = remember(messageId) {
+    val seed = messageId.hashCode()
+    List(30) { idx ->
+      val raw = kotlin.math.abs((seed * 31 + idx * 19) xor (idx * 97)) % 100
+      0.24f + (raw / 100f) * 0.76f
+    }
+  }
 
   val exoPlayer = remember(file?.absolutePath) {
     file?.let { audioFile ->
@@ -1174,135 +1190,181 @@ private fun VoiceNoteBubblePlayer(
       if (exoPlayer.duration > 0L) {
         totalDurationMs = exoPlayer.duration
       }
-      delay(120L)
+      delay(90L)
     }
   }
 
-  Surface(
-    shape = RoundedCornerShape(14.dp),
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+  val useLightInk = isMeBubble && colors.background.luminance() < 0.5f
+  val playButtonBg = if (useLightInk) Color.White else colors.primary
+  val playIconTint = if (useLightInk) colors.primary else colors.onPrimary
+  val playedBarColor = if (useLightInk) Color.White else colors.primary
+  val unplayedBarColor = if (useLightInk) {
+    Color.White.copy(alpha = 0.30f)
+  } else {
+    colors.onSurfaceVariant.copy(alpha = 0.34f)
+  }
+
+  Column(
     modifier = Modifier
       .fillMaxWidth()
+      .padding(vertical = 2.dp)
       .testTag("chat_media_audio_$messageId")
   ) {
-    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        if (file != null && exoPlayer != null) {
-          IconButton(
-            onClick = {
-              if (isPlaying) {
-                exoPlayer.pause()
-                isPlaying = false
-              } else {
-                exoPlayer.play()
-                isPlaying = true
-              }
-            },
-            modifier = Modifier
-              .size(44.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.primary)
-              .testTag("voice_note_play_toggle_$messageId")
-          ) {
-            Icon(
-              imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-              contentDescription = strings.voiceNoteLabel,
-              tint = MaterialTheme.colorScheme.onPrimary,
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      if (file != null && exoPlayer != null) {
+        IconButton(
+          onClick = {
+            if (isPlaying) {
+              exoPlayer.pause()
+              isPlaying = false
+            } else {
+              exoPlayer.play()
+              isPlaying = true
+            }
+          },
+          modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(playButtonBg)
+            .testTag("voice_note_play_toggle_$messageId")
+        ) {
+          Icon(
+            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            contentDescription = strings.voiceNoteLabel,
+            tint = playIconTint,
+            modifier = Modifier.size(24.dp)
+          )
+        }
+      } else if (loadError != null) {
+        IconButton(
+          onClick = onRetry,
+          modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(colors.error.copy(alpha = 0.16f))
+        ) {
+          Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = strings.retry,
+            tint = colors.error
+          )
+        }
+      } else {
+        Box(
+          modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(colors.primary.copy(alpha = 0.16f)),
+          contentAlignment = Alignment.Center
+        ) {
+          if (isLoading) {
+            CircularProgressIndicator(
+              progress = { progress.coerceIn(0.08f, 1f) },
+              strokeWidth = 2.5.dp,
               modifier = Modifier.size(22.dp)
             )
-          }
-        } else if (loadError != null) {
-          IconButton(
-            onClick = onRetry,
-            modifier = Modifier
-              .size(44.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.error.copy(alpha = 0.16f))
-          ) {
+          } else {
             Icon(
-              imageVector = Icons.Default.Refresh,
-              contentDescription = strings.retry,
-              tint = MaterialTheme.colorScheme.error
+              imageVector = Icons.Default.Mic,
+              contentDescription = strings.voiceNoteLabel,
+              tint = colors.primary
             )
           }
-        } else {
-          Box(
-            modifier = Modifier.size(44.dp),
-            contentAlignment = Alignment.Center
-          ) {
-            if (isLoading) {
-              CircularProgressIndicator(
-                progress = { progress.coerceIn(0.08f, 1f) },
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(24.dp)
-              )
-            } else {
-              Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = strings.voiceNoteLabel,
-                tint = MaterialTheme.colorScheme.primary
-              )
+        }
+      }
+
+      Spacer(modifier = Modifier.width(12.dp))
+
+      Column(modifier = Modifier.weight(1f)) {
+        val maxDur = totalDurationMs.coerceAtLeast(1000L).toFloat()
+        val playbackFraction = (currentPositionMs.toFloat() / maxDur).coerceIn(0f, 1f)
+
+        // Interactive 30-bar Telegram-style Canvas Waveform Scrubber
+        Canvas(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(exoPlayer, maxDur) {
+              if (exoPlayer != null) {
+                detectTapGestures { offset ->
+                  val frac = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                  val seekMs = (frac * maxDur).toLong()
+                  currentPositionMs = seekMs
+                  exoPlayer.seekTo(seekMs)
+                }
+              }
             }
+            .pointerInput(exoPlayer, maxDur) {
+              if (exoPlayer != null) {
+                detectHorizontalDragGestures { change, _ ->
+                  change.consume()
+                  val frac = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                  val seekMs = (frac * maxDur).toLong()
+                  currentPositionMs = seekMs
+                  exoPlayer.seekTo(seekMs)
+                }
+              }
+            }
+        ) {
+          val count = waveformBars.size
+          val slotW = size.width / count
+          val barW = (slotW * 0.56f).coerceIn(2.dp.toPx(), 4.dp.toPx())
+          val radius = CornerRadius(barW / 2f, barW / 2f)
+          val activeBars = playbackFraction * count
+
+          waveformBars.forEachIndexed { idx, amp ->
+            val barH = (size.height * amp).coerceAtLeast(4.dp.toPx())
+            val x = idx * slotW + (slotW - barW) / 2f
+            val y = (size.height - barH) / 2f
+            val color = when {
+              idx + 1 <= activeBars -> playedBarColor
+              idx < activeBars -> playedBarColor.copy(alpha = 0.72f)
+              else -> unplayedBarColor
+            }
+            drawRoundRect(
+              color = color,
+              topLeft = Offset(x, y),
+              size = Size(barW, barH),
+              cornerRadius = radius
+            )
           }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
-          val maxDur = totalDurationMs.coerceAtLeast(1000L).toFloat()
-          Slider(
-            value = currentPositionMs.toFloat().coerceIn(0f, maxDur),
-            onValueChange = { target ->
-              currentPositionMs = target.toLong()
-              exoPlayer?.seekTo(target.toLong())
-            },
-            valueRange = 0f..maxDur,
-            enabled = exoPlayer != null,
-            colors = SliderDefaults.colors(
-              thumbColor = MaterialTheme.colorScheme.primary,
-              activeTrackColor = MaterialTheme.colorScheme.primary,
-              inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
-            ),
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(26.dp)
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          val timeText = if (isPlaying || currentPositionMs > 0L) {
+            "${ChatMediaRepository.formatDuration(currentPositionMs)} / ${ChatMediaRepository.formatDuration(totalDurationMs)}"
+          } else {
+            ChatMediaRepository.formatDuration(totalDurationMs)
+          }
+          Text(
+            text = timeText,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
+            color = if (useLightInk) Color.White.copy(alpha = 0.80f) else colors.onSurfaceVariant,
+            fontWeight = FontWeight.Medium
           )
 
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+          Surface(
+            onClick = { speedIndex = (speedIndex + 1) % speeds.size },
+            shape = RoundedCornerShape(999.dp),
+            color = if (useLightInk) Color.White.copy(alpha = 0.16f) else colors.onSurface.copy(alpha = 0.10f),
+            modifier = Modifier.testTag("voice_note_speed_$messageId")
           ) {
-            val timeText = if (isPlaying || currentPositionMs > 0L) {
-              "${ChatMediaRepository.formatDuration(currentPositionMs)} / ${ChatMediaRepository.formatDuration(totalDurationMs)}"
-            } else {
-              ChatMediaRepository.formatDuration(totalDurationMs)
-            }
             Text(
-              text = timeText,
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              fontWeight = FontWeight.Medium
+              text = speedLabels[speedIndex],
+              style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+              color = if (useLightInk) Color.White else colors.primary,
+              fontWeight = FontWeight.Bold,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
             )
-
-            Surface(
-              onClick = { speedIndex = (speedIndex + 1) % speeds.size },
-              shape = RoundedCornerShape(999.dp),
-              color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-              modifier = Modifier.testTag("voice_note_speed_$messageId")
-            ) {
-              Text(
-                text = speedLabels[speedIndex],
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-              )
-            }
           }
         }
       }
@@ -1324,118 +1386,109 @@ fun PollMessageCard(
     message.pollVotes.values.sumOf { it.size }
   }
 
-  Surface(
-    shape = RoundedCornerShape(14.dp),
-    color = colors.surface.copy(alpha = 0.72f),
-    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f)),
+  Column(
     modifier = modifier
       .fillMaxWidth()
-      .testTag("poll_card_${message.id}")
+      .padding(vertical = 2.dp)
+      .testTag("poll_card_${message.id}"),
+    verticalArrangement = Arrangement.spacedBy(8.dp)
   ) {
-    Column(
-      modifier = Modifier.padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Default.Poll,
-          contentDescription = null,
-          tint = colors.primary,
-          modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          text = question,
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
-          color = colors.onSurface
-        )
-      }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Icon(
+        imageVector = Icons.Default.Poll,
+        contentDescription = null,
+        tint = colors.primary,
+        modifier = Modifier.size(18.dp)
+      )
+      Spacer(modifier = Modifier.width(6.dp))
+      Text(
+        text = question,
+        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+        fontWeight = FontWeight.Bold,
+        color = colors.onSurface
+      )
+    }
 
-      message.pollOptions.forEachIndexed { index, optionText ->
-        val voters = message.pollVotes[index.toString()].orEmpty()
-        val isVotedByMe = voters.contains(currentUid)
-        val fraction = if (totalVotes > 0) voters.size.toFloat() / totalVotes.toFloat() else 0f
-        val percent = (fraction * 100f).toInt()
+    message.pollOptions.forEachIndexed { index, optionText ->
+      val voters = message.pollVotes[index.toString()].orEmpty()
+      val isVotedByMe = voters.contains(currentUid)
+      val fraction = if (totalVotes > 0) voters.size.toFloat() / totalVotes.toFloat() else 0f
+      val percent = (fraction * 100f).toInt()
 
-        Surface(
-          onClick = { onVoteOption(index) },
-          shape = RoundedCornerShape(10.dp),
-          color = colors.surfaceVariant.copy(alpha = 0.55f),
-          border = BorderStroke(
-            width = if (isVotedByMe) 1.5.dp else 1.dp,
-            color = if (isVotedByMe) colors.primary else colors.outlineVariant.copy(alpha = 0.45f)
-          ),
-          modifier = Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = 46.dp)
-            .testTag("poll_option_${message.id}_$index")
-        ) {
-          Box(modifier = Modifier.fillMaxWidth()) {
-            if (fraction > 0f) {
+      Surface(
+        onClick = { onVoteOption(index) },
+        shape = RoundedCornerShape(12.dp),
+        color = colors.surface.copy(alpha = 0.55f),
+        border = if (isVotedByMe) BorderStroke(1.2.dp, colors.primary) else null,
+        modifier = Modifier
+          .fillMaxWidth()
+          .defaultMinSize(minHeight = 44.dp)
+          .testTag("poll_option_${message.id}_$index")
+      ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+          if (fraction > 0f) {
+            Box(
+              modifier = Modifier
+                .matchParentSize()
+                .fillMaxWidth(fraction)
+            ) {
               Box(
                 modifier = Modifier
-                  .matchParentSize()
-                  .fillMaxWidth(fraction)
-              ) {
-                Box(
-                  modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                      if (isVotedByMe) colors.primary.copy(alpha = 0.22f)
-                      else colors.onSurface.copy(alpha = 0.08f)
-                    )
-                )
-              }
-            }
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-              Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-              ) {
-                if (isVotedByMe) {
-                  Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = colors.primary,
-                    modifier = Modifier.size(16.dp)
+                  .fillMaxSize()
+                  .background(
+                    if (isVotedByMe) colors.primary.copy(alpha = 0.24f)
+                    else colors.onSurface.copy(alpha = 0.08f)
                   )
-                  Spacer(modifier = Modifier.width(6.dp))
-                }
-                Text(
-                  text = optionText,
-                  style = MaterialTheme.typography.bodyMedium,
-                  fontWeight = if (isVotedByMe) FontWeight.Bold else FontWeight.Medium,
-                  color = colors.onSurface,
-                  maxLines = 2,
-                  overflow = TextOverflow.Ellipsis
+              )
+            }
+          }
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
+              if (isVotedByMe) {
+                Icon(
+                  imageVector = Icons.Default.CheckCircle,
+                  contentDescription = null,
+                  tint = colors.primary,
+                  modifier = Modifier.size(16.dp)
                 )
+                Spacer(modifier = Modifier.width(6.dp))
               }
-              if (totalVotes > 0) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "$percent% (${voters.size})",
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.SemiBold,
-                  color = if (isVotedByMe) colors.primary else colors.onSurfaceVariant
-                )
-              }
+              Text(
+                text = optionText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isVotedByMe) FontWeight.Bold else FontWeight.Medium,
+                color = colors.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+            if (totalVotes > 0) {
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "$percent% (${voters.size})",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isVotedByMe) colors.primary else colors.onSurfaceVariant
+              )
             }
           }
         }
       }
-
-      Text(
-        text = String.format(strings.pollVotesCountFormat, totalVotes),
-        style = MaterialTheme.typography.labelSmall,
-        color = colors.onSurfaceVariant
-      )
     }
+
+    Text(
+      text = String.format(strings.pollVotesCountFormat, totalVotes),
+      style = MaterialTheme.typography.labelSmall,
+      color = colors.onSurfaceVariant
+    )
   }
 }

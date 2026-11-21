@@ -12,19 +12,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -39,7 +36,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,57 +44,33 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Forward
-import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.outlined.AddReaction
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.outlined.Search
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -123,7 +95,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -140,24 +111,22 @@ import com.example.data.repository.ChatRepository
 import com.example.data.repository.PostRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
+import com.example.ui.components.ChatDateDividerPill
 import com.example.ui.components.ChatMediaAttachmentSheet
+import com.example.ui.components.FloatingCapsuleComposer
 import com.example.ui.components.FullscreenVideoPlayerDialog
-import com.example.ui.components.IosFloatingReactionBar
-import com.example.ui.components.MediaMessageBubbleContent
-import com.example.ui.components.PollMessageCard
-import com.example.ui.components.ReactionChipsRow
+import com.example.ui.components.TelegramChatTopBar
+import com.example.ui.components.TelegramMessageBubble
 import com.example.ui.components.TypingBubble
-import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.components.VoiceRecorderController
 import com.example.ui.components.WeirdEmojiPickerBottomSheet
-import com.example.ui.theme.StatusOnline
+import com.example.ui.components.buildChatDisplayItems
 import com.example.ui.util.LocalAppStrings
+import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 private typealias UnitCallback = () -> Unit
 
@@ -542,23 +511,15 @@ fun ChatDetailScreen(
       isAiChat -> strings.aiAssistantSubtitle
       isGroup -> String.format(strings.membersCountFormat, liveConversation.participantIds.size)
       !peerUser?.profession.isNullOrBlank() -> peerUser!!.profession
-      !peerUser?.handle.isNullOrBlank() -> peerUser!!.handle
+      !peerUser?.handle.isNullOrBlank() -> formatHandleForDisplay(peerUser!!.handle)
       else -> strings.online
     }
   }
 
-  val calmBackdrop = Brush.verticalGradient(
-    colors = listOf(
-      MaterialTheme.colorScheme.background,
-      MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
-      MaterialTheme.colorScheme.background
-    )
-  )
-
   Scaffold(
     containerColor = MaterialTheme.colorScheme.background,
     topBar = {
-      PolishedChatTopBar(
+      TelegramChatTopBar(
         title = convoTitle,
         subtitle = headerSubtitle,
         avatarUrl = peerUser?.avatarUrl,
@@ -593,7 +554,7 @@ fun ChatDetailScreen(
           if (!isAiChat) showChatInfoSheet = true
         },
         onStartVoiceCall = {
-          val targetId = peerId ?: return@PolishedChatTopBar
+          val targetId = peerId ?: return@TelegramChatTopBar
           runWithMicPermission {
             onStartVoiceCall(
               targetId,
@@ -613,7 +574,7 @@ fun ChatDetailScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(calmBackdrop)
+        .background(MaterialTheme.colorScheme.background)
         .imePadding(),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -689,15 +650,20 @@ fun ChatDetailScreen(
               .padding(horizontal = 20.dp, vertical = 16.dp)
           )
         } else {
+          val displayItems = remember(messages, strings.chatDateToday, strings.chatDateYesterday) {
+            buildChatDisplayItems(messages, strings.chatDateToday, strings.chatDateYesterday)
+          }
+
           LazyColumn(
             state = listState,
             modifier = Modifier
               .fillMaxSize()
               .testTag("chat_messages_list"),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
           ) {
-            items(messages, key = { it.id }) { msg ->
+            items(displayItems, key = { it.message.id }) { displayItem ->
+              val msg = displayItem.message
               val isMe = msg.senderId == currentUid
               val isBotMsg = msg.senderId == ChatRepository.AI_CHATBOT_SENDER_ID
               val senderProfile = directoryUsers.find { it.id == msg.senderId }
@@ -716,117 +682,136 @@ fun ChatDetailScreen(
               val isPinnedMsg = liveConversation.pinnedMessageId == msg.id
               val isSearchMatched = activeMatchedMsgId == msg.id
 
-              PolishedMessageBubble(
-                conversationId = liveConversation.id,
-                currentUid = currentUid,
-                message = msg.copy(
-                  isSenderVerified = liveVerified,
-                  senderVerifiedTier = liveVerifiedTier
-                ),
-                isMe = isMe,
-                isAiMessage = isBotMsg,
-                isPinned = isPinnedMsg,
-                isSearchHighlighted = isSearchMatched,
-                senderAvatarUrl = senderProfile?.avatarUrl,
-                senderFrameKey = senderProfile?.equippedFrame,
-                chatMediaRepository = chatMediaRepository,
-                isInlineVideoPlaying = activeInlineVideoMsgId == msg.id,
-                onInspectSender = {
-                  inspectParticipant(
-                    targetUid = msg.senderId,
-                    fallbackName = msg.senderName,
-                    fallbackVerified = liveVerified,
-                    fallbackTier = liveVerifiedTier
-                  )
-                },
-                onVotePoll = { optionIdx ->
-                  coroutineScope.launch {
-                    val res = chatRepository.votePollOption(
-                      conversationId = liveConversation.id,
-                      messageId = msg.id,
-                      optionIndex = optionIdx
+              val topSpacing = when {
+                displayItem.showDateDivider -> 0.dp
+                displayItem.isFirstInGroup -> 10.dp
+                else -> 3.dp
+              }
+
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(top = topSpacing)
+              ) {
+                if (displayItem.showDateDivider) {
+                  ChatDateDividerPill(label = displayItem.dateLabel)
+                }
+
+                TelegramMessageBubble(
+                  conversationId = liveConversation.id,
+                  currentUid = currentUid,
+                  displayItem = displayItem.copy(
+                    message = msg.copy(
+                      isSenderVerified = liveVerified,
+                      senderVerifiedTier = liveVerifiedTier
                     )
-                    if (res.isFailure) {
-                      Toast.makeText(
-                        context,
-                        res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
-                        Toast.LENGTH_SHORT
-                      ).show()
-                    }
-                  }
-                },
-                onPlayInlineVideo = { activeInlineVideoMsgId = msg.id },
-                onStopInlineVideo = {
-                  if (activeInlineVideoMsgId == msg.id) {
-                    activeInlineVideoMsgId = null
-                  }
-                },
-                onOpenFullscreenVideo = { file ->
-                  activeInlineVideoMsgId = null
-                  fullscreenVideoItem = Triple(file, msg.mediaFileName, msg.mediaMimeType)
-                },
-                onToggleReaction = { emoji ->
-                  coroutineScope.launch {
-                    val res = chatRepository.toggleMessageReaction(liveConversation.id, msg.id, emoji)
-                    if (res.isFailure) {
-                      Toast.makeText(
-                        context,
-                        res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
-                        Toast.LENGTH_SHORT
-                      ).show()
-                    }
-                  }
-                },
-                onOpenReactionSheet = {
-                  reactionTargetMessageId = msg.id
-                },
-                onReply = {
-                  replyingToMessage = msg
-                  editingMessage = null
-                },
-                onCopy = { copyToClipboard(msg.content) },
-                onForward = if (!msg.isDeleted) {
-                  { forwardTargetMessage = msg }
-                } else null,
-                onTogglePin = if (canPin) {
-                  {
+                  ),
+                  isMe = isMe,
+                  isAiMessage = isBotMsg,
+                  isGroupChat = isGroup,
+                  isPinned = isPinnedMsg,
+                  isSearchHighlighted = isSearchMatched,
+                  senderAvatarUrl = senderProfile?.avatarUrl,
+                  senderFrameKey = senderProfile?.equippedFrame,
+                  chatMediaRepository = chatMediaRepository,
+                  isInlineVideoPlaying = activeInlineVideoMsgId == msg.id,
+                  onInspectSender = {
+                    inspectParticipant(
+                      targetUid = msg.senderId,
+                      fallbackName = msg.senderName,
+                      fallbackVerified = liveVerified,
+                      fallbackTier = liveVerifiedTier
+                    )
+                  },
+                  onVotePoll = { optionIdx ->
                     coroutineScope.launch {
-                      val targetPin = if (isPinnedMsg) null else msg
-                      val res = chatRepository.pinMessageInConversation(liveConversation.id, targetPin)
-                      if (res.isSuccess) {
+                      val res = chatRepository.votePollOption(
+                        conversationId = liveConversation.id,
+                        messageId = msg.id,
+                        optionIndex = optionIdx
+                      )
+                      if (res.isFailure) {
                         Toast.makeText(
                           context,
-                          if (targetPin != null) strings.messagePinnedToast else strings.messageUnpinnedToast,
+                          res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
                           Toast.LENGTH_SHORT
                         ).show()
-                      } else {
+                      }
+                    }
+                  },
+                  onPlayInlineVideo = { activeInlineVideoMsgId = msg.id },
+                  onStopInlineVideo = {
+                    if (activeInlineVideoMsgId == msg.id) {
+                      activeInlineVideoMsgId = null
+                    }
+                  },
+                  onOpenFullscreenVideo = { file ->
+                    activeInlineVideoMsgId = null
+                    fullscreenVideoItem = Triple(file, msg.mediaFileName, msg.mediaMimeType)
+                  },
+                  onToggleReaction = { emoji ->
+                    coroutineScope.launch {
+                      val res = chatRepository.toggleMessageReaction(liveConversation.id, msg.id, emoji)
+                      if (res.isFailure) {
+                        Toast.makeText(
+                          context,
+                          res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                          Toast.LENGTH_SHORT
+                        ).show()
+                      }
+                    }
+                  },
+                  onOpenReactionSheet = {
+                    reactionTargetMessageId = msg.id
+                  },
+                  onReply = {
+                    replyingToMessage = msg
+                    editingMessage = null
+                  },
+                  onCopy = { copyToClipboard(msg.content) },
+                  onForward = if (!msg.isDeleted) {
+                    { forwardTargetMessage = msg }
+                  } else null,
+                  onTogglePin = if (canPin) {
+                    {
+                      coroutineScope.launch {
+                        val targetPin = if (isPinnedMsg) null else msg
+                        val res = chatRepository.pinMessageInConversation(liveConversation.id, targetPin)
+                        if (res.isSuccess) {
+                          Toast.makeText(
+                            context,
+                            if (targetPin != null) strings.messagePinnedToast else strings.messageUnpinnedToast,
+                            Toast.LENGTH_SHORT
+                          ).show()
+                        } else {
+                          Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+                        }
+                      }
+                    }
+                  } else null,
+                  onEdit = {
+                    editingMessage = msg
+                    replyingToMessage = null
+                    messageInput = msg.content
+                  },
+                  onDelete = {
+                    coroutineScope.launch {
+                      val res = chatRepository.deleteMessage(
+                        conversationId = liveConversation.id,
+                        messageId = msg.id,
+                        deletedPlaceholder = strings.messageDeleted
+                      )
+                      if (res.isFailure) {
                         Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
                       }
                     }
+                  },
+                  onSaveMemory = {
+                    memoryTargetMessage = msg
+                    privateNoteInput = ""
                   }
-                } else null,
-                onEdit = {
-                  editingMessage = msg
-                  replyingToMessage = null
-                  messageInput = msg.content
-                },
-                onDelete = {
-                  coroutineScope.launch {
-                    val res = chatRepository.deleteMessage(
-                      conversationId = liveConversation.id,
-                      messageId = msg.id,
-                      deletedPlaceholder = strings.messageDeleted
-                    )
-                    if (res.isFailure) {
-                      Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
-                    }
-                  }
-                },
-                onSaveMemory = {
-                  memoryTargetMessage = msg
-                  privateNoteInput = ""
-                }
-              )
+                )
+              }
             }
 
             if (peerTypingUsers.isNotEmpty()) {
@@ -917,9 +902,9 @@ fun ChatDetailScreen(
         }
       }
 
-      // Floating Soft Pill Composer (or Voice Note Recording Bar)
+      // Floating Capsule Composer with Side Mic / Send FAB (or Voice Recording Bar)
       Box(modifier = Modifier.fillMaxWidth().widthIn(max = 840.dp)) {
-        PolishedMessageComposer(
+        FloatingCapsuleComposer(
           value = messageInput,
           onValueChange = { messageInput = it },
           placeholder = strings.typeMessage,
@@ -1161,239 +1146,6 @@ fun ChatDetailScreen(
 }
 
 @Composable
-private fun PolishedChatTopBar(
-  title: String,
-  subtitle: String,
-  avatarUrl: String?,
-  frameStyleKey: String? = null,
-  isAiChat: Boolean,
-  isVerified: Boolean,
-  verifiedTier: String?,
-  isThinkingOrTyping: Boolean,
-  canClearAiChat: Boolean,
-  canStartVoiceCall: Boolean,
-  canInspectOrViewInfo: Boolean = true,
-  isSearchOpen: Boolean = false,
-  onHeaderClick: () -> Unit = {},
-  onToggleSearch: () -> Unit = {},
-  onOpenChatInfo: () -> Unit = {},
-  onStartVoiceCall: () -> Unit,
-  onClearAiChat: () -> Unit,
-  onBackClick: () -> Unit
-) {
-  val strings = LocalAppStrings.current
-
-  Surface(
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-    tonalElevation = 2.dp,
-    modifier = Modifier.fillMaxWidth()
-  ) {
-    Column(modifier = Modifier.statusBarsPadding()) {
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .defaultMinSize(minHeight = 64.dp)
-          .padding(horizontal = 6.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        IconButton(
-          onClick = onBackClick,
-          modifier = Modifier.size(48.dp)
-        ) {
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
-            tint = MaterialTheme.colorScheme.onSurface
-          )
-        }
-
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = canInspectOrViewInfo, onClick = onHeaderClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp)
-            .testTag("chat_header_profile_button")
-        ) {
-          if (isAiChat) {
-            Box(
-              modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(
-                  Brush.linearGradient(
-                    colors = listOf(
-                      MaterialTheme.colorScheme.primary,
-                      MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                    )
-                  )
-                ),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = title,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-              )
-            }
-          } else {
-            AvatarView(
-              name = title,
-              avatarUrl = avatarUrl,
-              size = 40.dp,
-              frameStyleKey = frameStyleKey,
-              showPresence = true,
-              isOnline = true
-            )
-          }
-
-          Spacer(modifier = Modifier.width(10.dp))
-
-          Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-              )
-              if (isVerified) {
-                Spacer(modifier = Modifier.width(5.dp))
-                VerifiedBadge(
-                  size = 15.dp,
-                  tierKey = verifiedTier,
-                  showDialogOnClick = true
-                )
-              }
-              if (isAiChat) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                  shape = RoundedCornerShape(6.dp),
-                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                ) {
-                  Text(
-                    text = strings.aiBotBadge,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                  )
-                }
-              }
-            }
-
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(top = 2.dp)
-            ) {
-              if (isThinkingOrTyping) {
-                TypingDotsIndicator(
-                  dotSize = 4.dp,
-                  travelDistance = 2.dp,
-                  dotColor = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                  text = subtitle,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.primary,
-                  fontWeight = FontWeight.Medium,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              } else {
-                Box(
-                  modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(StatusOnline)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                  text = subtitle,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-            }
-          }
-        }
-
-        IconButton(
-          onClick = onToggleSearch,
-          modifier = Modifier
-            .size(48.dp)
-            .testTag("chat_search_button")
-        ) {
-          Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = strings.searchMessagesPlaceholder,
-            tint = if (isSearchOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-
-        if (canStartVoiceCall) {
-          IconButton(
-            onClick = onStartVoiceCall,
-            modifier = Modifier
-              .size(48.dp)
-              .testTag("start_voice_call_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Call,
-              contentDescription = strings.startVoiceCall,
-              tint = MaterialTheme.colorScheme.primary
-            )
-          }
-        }
-
-        if (canInspectOrViewInfo) {
-          IconButton(
-            onClick = onOpenChatInfo,
-            modifier = Modifier
-              .size(48.dp)
-              .testTag("chat_info_button")
-          ) {
-            Icon(
-              imageVector = Icons.Outlined.Info,
-              contentDescription = strings.chatInfoTitle,
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-
-        if (canClearAiChat) {
-          IconButton(
-            onClick = onClearAiChat,
-            modifier = Modifier
-              .size(48.dp)
-              .testTag("clear_ai_chat_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Refresh,
-              contentDescription = strings.aiClearChat,
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-      }
-
-      HorizontalDivider(
-        thickness = 0.8.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-      )
-    }
-  }
-}
-
-@Composable
 private fun AiWelcomeHero(
   onPromptClick: (String) -> Unit,
   modifier: Modifier = Modifier
@@ -1497,493 +1249,6 @@ private fun AiWelcomeHero(
             )
           }
         }
-      }
-    }
-  }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PolishedMessageBubble(
-  conversationId: String,
-  currentUid: String,
-  message: Message,
-  isMe: Boolean,
-  isAiMessage: Boolean,
-  isPinned: Boolean = false,
-  isSearchHighlighted: Boolean = false,
-  senderAvatarUrl: String?,
-  senderFrameKey: String? = null,
-  chatMediaRepository: ChatMediaRepository,
-  isInlineVideoPlaying: Boolean,
-  onInspectSender: () -> Unit = {},
-  onVotePoll: (Int) -> Unit = {},
-  onPlayInlineVideo: () -> Unit,
-  onStopInlineVideo: () -> Unit,
-  onOpenFullscreenVideo: (File) -> Unit,
-  onToggleReaction: (String) -> Unit,
-  onOpenReactionSheet: () -> Unit,
-  onReply: () -> Unit,
-  onCopy: () -> Unit,
-  onForward: (() -> Unit)? = null,
-  onTogglePin: (() -> Unit)? = null,
-  onEdit: () -> Unit,
-  onDelete: () -> Unit,
-  onSaveMemory: () -> Unit
-) {
-  val strings = LocalAppStrings.current
-  var showMenu by remember { mutableStateOf(false) }
-  var isSpoilerRevealed by remember(message.id) { mutableStateOf(false) }
-
-  val formattedTime = remember(message.createdAt) {
-    val date = message.createdAt?.toDate()
-    if (date != null) {
-      try {
-        SimpleDateFormat("hh:mm a", Locale.getDefault()).format(date)
-      } catch (_: Exception) {
-        ""
-      }
-    } else ""
-  }
-
-  val bubbleShape = if (isMe) {
-    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp)
-  } else {
-    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 6.dp)
-  }
-
-  val bubbleContainerColor = when {
-    isSearchHighlighted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-    isMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
-  }
-
-  val bubbleBorderColor = when {
-    isSearchHighlighted -> MaterialTheme.colorScheme.primary
-    isPinned -> Color(0xFFF59E0B).copy(alpha = 0.55f)
-    isMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-  }
-
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
-    verticalAlignment = Alignment.Bottom
-  ) {
-    if (!isMe) {
-      if (isAiMessage) {
-        Box(
-          modifier = Modifier
-            .size(30.dp)
-            .clip(CircleShape)
-            .background(
-              Brush.linearGradient(
-                listOf(
-                  MaterialTheme.colorScheme.primary,
-                  MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
-                )
-              )
-            ),
-          contentAlignment = Alignment.Center
-        ) {
-          Icon(
-            imageVector = Icons.Default.AutoAwesome,
-            contentDescription = message.senderName,
-            tint = Color.White,
-            modifier = Modifier.size(15.dp)
-          )
-        }
-      } else {
-        Box(
-          modifier = Modifier
-            .clip(CircleShape)
-            .clickable(onClick = onInspectSender)
-            .testTag("message_avatar_inspect_${message.id}")
-        ) {
-          AvatarView(
-            name = message.senderName,
-            avatarUrl = senderAvatarUrl,
-            size = 30.dp,
-            frameStyleKey = senderFrameKey
-          )
-        }
-      }
-      Spacer(modifier = Modifier.width(8.dp))
-    }
-
-    Column(
-      horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
-      modifier = Modifier.widthIn(max = 316.dp)
-    ) {
-      Box {
-      Surface(
-        shape = bubbleShape,
-        color = bubbleContainerColor,
-        border = BorderStroke(if (isSearchHighlighted) 1.5.dp else 1.dp, bubbleBorderColor),
-        modifier = Modifier
-          .widthIn(max = 310.dp)
-          .clip(bubbleShape)
-          .combinedClickable(
-            onClick = {
-              if (message.isSpoiler && !isSpoilerRevealed && !message.isDeleted) {
-                isSpoilerRevealed = true
-              }
-            },
-            onLongClick = { showMenu = true }
-          )
-      ) {
-        Column(
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-          // Incoming sender badge row (clickable to inspect user profile)
-          if (!isMe) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier
-                .padding(bottom = 4.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(enabled = !isAiMessage, onClick = onInspectSender)
-            ) {
-              Text(
-                text = if (isAiMessage) strings.aiAssistantName else message.senderName,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-              )
-              if (message.isSenderVerified) {
-                Spacer(modifier = Modifier.width(4.dp))
-                VerifiedBadge(
-                  size = 13.dp,
-                  tierKey = message.senderVerifiedTier,
-                  showDialogOnClick = true
-                )
-              }
-            }
-          }
-
-          // Forwarded provenance pill
-          if (!message.forwardedFromName.isNullOrBlank() && !message.isDeleted) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(bottom = 4.dp)
-            ) {
-              Icon(
-                imageVector = Icons.AutoMirrored.Filled.Forward,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(13.dp)
-              )
-              Spacer(modifier = Modifier.width(4.dp))
-              Text(
-                text = String.format(strings.forwardedFromLabel, message.forwardedFromName),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Medium
-              )
-            }
-          }
-
-          // Clean Quoted Reply Container
-          if (!message.replyToText.isNullOrBlank()) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Box(
-                modifier = Modifier
-                  .width(3.dp)
-                  .height(26.dp)
-                  .clip(RoundedCornerShape(2.dp))
-                  .background(MaterialTheme.colorScheme.primary)
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = message.replyToSender.orEmpty(),
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.primary,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                  text = message.replyToText,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-            }
-          }
-
-          // Spoiler Gate OR Message Content
-          if (message.isSpoiler && !isSpoilerRevealed && !message.isDeleted) {
-            Surface(
-              onClick = { isSpoilerRevealed = true },
-              shape = RoundedCornerShape(12.dp),
-              color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-              border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-              modifier = Modifier
-                .fillMaxWidth()
-                .testTag("spoiler_cover_${message.id}")
-            ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Icon(
-                  imageVector = Icons.Default.VisibilityOff,
-                  contentDescription = strings.spoilerHiddenTitle,
-                  tint = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                  Text(
-                    text = strings.spoilerHiddenTitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                  )
-                  Text(
-                    text = strings.spoilerTapToReveal,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                  )
-                }
-              }
-            }
-          } else {
-            // Interactive Poll Card
-            if (message.isPollMessage() && !message.isDeleted) {
-              PollMessageCard(
-                message = message,
-                currentUid = currentUid,
-                onVoteOption = onVotePoll
-              )
-            }
-
-            // Embedded Media Content (Photo / Inline ExoPlayer Video / Voice Note Audio / File Card)
-            if (message.hasMediaAttachment() && !message.isDeleted) {
-              MediaMessageBubbleContent(
-                conversationId = conversationId,
-                message = message,
-                chatMediaRepository = chatMediaRepository,
-                isInlineVideoPlaying = isInlineVideoPlaying,
-                onPlayInlineVideo = onPlayInlineVideo,
-                onStopInlineVideo = onStopInlineVideo,
-                onOpenFullscreenVideo = onOpenFullscreenVideo
-              )
-            }
-
-            val isSyntheticMediaPlaceholder = message.hasMediaAttachment() &&
-              (message.content.startsWith("📷 ") ||
-                message.content.startsWith("🎬 ") ||
-                message.content.startsWith("🎤 ") ||
-                message.content.startsWith("📎 "))
-
-            // Message Text / Optional Caption (suppressed for polls & pure synthetic media prefixes)
-            if (!message.isPollMessage() && !isSyntheticMediaPlaceholder && message.content.isNotBlank()) {
-              Text(
-                text = message.content,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                  fontSize = 15.sp,
-                  lineHeight = 23.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-              )
-            }
-          }
-
-          Spacer(modifier = Modifier.height(4.dp))
-
-          // Subtle timestamp, pinned indicator & status row
-          Row(
-            modifier = Modifier.align(Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-          ) {
-            if (isPinned) {
-              Icon(
-                imageVector = Icons.Default.PushPin,
-                contentDescription = strings.pinnedMessageBannerTitle,
-                modifier = Modifier.size(12.dp),
-                tint = Color(0xFFF59E0B)
-              )
-            }
-            if (message.isEdited) {
-              Text(
-                text = strings.edited,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-              )
-            }
-            if (formattedTime.isNotBlank()) {
-              Text(
-                text = formattedTime,
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-              )
-            }
-            if (isMe) {
-              Icon(
-                imageVector = Icons.Default.DoneAll,
-                contentDescription = "Delivered",
-                modifier = Modifier.size(13.dp),
-                tint = MaterialTheme.colorScheme.primary
-              )
-            }
-          }
-        }
-      }
-
-      DropdownMenu(
-        expanded = showMenu,
-        onDismissRequest = { showMenu = false },
-        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-      ) {
-        if (!message.isDeleted) {
-          val mySelectedEmojis = remember(message.reactions, currentUid) {
-            message.reactions.filterValues { it.contains(currentUid) }.keys.toSet()
-          }
-          Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            IosFloatingReactionBar(
-              selectedEmojis = mySelectedEmojis,
-              onEmojiSelected = { emoji ->
-                showMenu = false
-                onToggleReaction(emoji)
-              },
-              onMoreClick = {
-                showMenu = false
-                onOpenReactionSheet()
-              }
-            )
-          }
-          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-          DropdownMenuItem(
-            text = { Text(strings.reactAction, color = MaterialTheme.colorScheme.onSurface) },
-            leadingIcon = {
-              Icon(Icons.Outlined.AddReaction, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            onClick = {
-              showMenu = false
-              onOpenReactionSheet()
-            }
-          )
-        }
-        DropdownMenuItem(
-          text = { Text(strings.copy, color = MaterialTheme.colorScheme.onSurface) },
-          leadingIcon = {
-            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-          },
-          onClick = {
-            showMenu = false
-            onCopy()
-          }
-        )
-        DropdownMenuItem(
-          text = { Text(strings.reply, color = MaterialTheme.colorScheme.onSurface) },
-          leadingIcon = {
-            Icon(Icons.AutoMirrored.Filled.Reply, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-          },
-          onClick = {
-            showMenu = false
-            onReply()
-          }
-        )
-        if (onForward != null) {
-          DropdownMenuItem(
-            text = { Text(strings.forwardAction, color = MaterialTheme.colorScheme.onSurface) },
-            leadingIcon = {
-              Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
-            onClick = {
-              showMenu = false
-              onForward()
-            }
-          )
-        }
-        if (onTogglePin != null) {
-          DropdownMenuItem(
-            text = {
-              Text(
-                text = if (isPinned) strings.unpinMessageAction else strings.pinMessageAction,
-                color = MaterialTheme.colorScheme.onSurface
-              )
-            },
-            leadingIcon = {
-              Icon(
-                imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                contentDescription = null,
-                tint = Color(0xFFF59E0B)
-              )
-            },
-            onClick = {
-              showMenu = false
-              onTogglePin()
-            }
-          )
-        }
-        if (!isMe && !isAiMessage) {
-          DropdownMenuItem(
-            text = { Text(strings.inspectProfileAction, color = MaterialTheme.colorScheme.onSurface) },
-            leadingIcon = {
-              Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            onClick = {
-              showMenu = false
-              onInspectSender()
-            }
-          )
-        }
-        DropdownMenuItem(
-          text = { Text(strings.saveToMemory, color = MaterialTheme.colorScheme.onSurface) },
-          leadingIcon = {
-            Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-          },
-          onClick = {
-            showMenu = false
-            onSaveMemory()
-          }
-        )
-        if (isMe) {
-          DropdownMenuItem(
-            text = { Text(strings.edit, color = MaterialTheme.colorScheme.onSurface) },
-            leadingIcon = {
-              Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            },
-            onClick = {
-              showMenu = false
-              onEdit()
-            }
-          )
-          DropdownMenuItem(
-            text = { Text(strings.delete, color = MaterialTheme.colorScheme.error) },
-            leadingIcon = {
-              Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-            },
-            onClick = {
-              showMenu = false
-              onDelete()
-            }
-          )
-        }
-      }
-      }
-
-      if (message.reactions.isNotEmpty() && !message.isDeleted) {
-        ReactionChipsRow(
-          reactions = message.reactions,
-          currentUid = currentUid,
-          onToggleReaction = onToggleReaction,
-          modifier = Modifier.padding(top = 4.dp)
-        )
       }
     }
   }
@@ -2112,258 +1377,6 @@ private fun ComposerContextStrip(
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.size(18.dp)
         )
-      }
-    }
-  }
-}
-
-@Composable
-private fun PolishedMessageComposer(
-  value: String,
-  onValueChange: (String) -> Unit,
-  placeholder: String,
-  isSendEnabled: Boolean,
-  showAttachButton: Boolean,
-  isAttachEnabled: Boolean,
-  canRecordVoiceNote: Boolean = false,
-  isRecordingVoice: Boolean = false,
-  recordingElapsedMs: Long = 0L,
-  isSpoilerMode: Boolean = false,
-  onToggleSpoiler: () -> Unit = {},
-  onStartRecording: () -> Unit = {},
-  onCancelRecording: () -> Unit = {},
-  onSendRecording: () -> Unit = {},
-  onAttachClick: () -> Unit,
-  onSend: () -> Unit
-) {
-  val strings = LocalAppStrings.current
-  val useMicAction = canRecordVoiceNote && value.isBlank()
-  val sendBtnBg by animateColorAsState(
-    targetValue = when {
-      useMicAction -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-      isSendEnabled -> MaterialTheme.colorScheme.primary
-      else -> MaterialTheme.colorScheme.surfaceVariant
-    },
-    label = "send_btn_bg"
-  )
-  val sendIconTint by animateColorAsState(
-    targetValue = when {
-      useMicAction -> MaterialTheme.colorScheme.primary
-      isSendEnabled -> MaterialTheme.colorScheme.onPrimary
-      else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-    },
-    label = "send_icon_tint"
-  )
-
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .navigationBarsPadding()
-      .padding(horizontal = 14.dp, vertical = 10.dp)
-  ) {
-    if (isRecordingVoice) {
-      Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f)),
-        tonalElevation = 2.dp,
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("voice_recording_bar")
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          IconButton(
-            onClick = onCancelRecording,
-            modifier = Modifier
-              .size(48.dp)
-              .testTag("cancel_voice_recording_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Close,
-              contentDescription = strings.cancelRecording,
-              tint = MaterialTheme.colorScheme.error
-            )
-          }
-
-          Box(
-            modifier = Modifier
-              .size(10.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.error)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = "${strings.recordingVoiceNote} • ${ChatMediaRepository.formatDuration(recordingElapsedMs)}",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-
-          IconButton(
-            onClick = onSendRecording,
-            modifier = Modifier
-              .size(48.dp)
-              .testTag("send_voice_recording_button")
-          ) {
-            Box(
-              modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.AutoMirrored.Filled.Send,
-                contentDescription = strings.sendVoiceNote,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(18.dp)
-              )
-            }
-          }
-        }
-      }
-    } else {
-      Surface(
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-        border = BorderStroke(
-          width = 1.dp,
-          color = if (isSpoilerMode) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-          } else {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-          }
-        ),
-        tonalElevation = 2.dp,
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-              start = if (showAttachButton) 4.dp else 18.dp,
-              end = 6.dp,
-              top = 6.dp,
-              bottom = 6.dp
-            ),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          if (showAttachButton) {
-            IconButton(
-              onClick = onAttachClick,
-              enabled = isAttachEnabled,
-              modifier = Modifier
-                .size(48.dp)
-                .testTag("chat_attach_button")
-            ) {
-              Icon(
-                imageVector = Icons.Default.AttachFile,
-                contentDescription = strings.attachMedia,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-              )
-            }
-
-            IconButton(
-              onClick = onToggleSpoiler,
-              enabled = isAttachEnabled,
-              modifier = Modifier
-                .size(48.dp)
-                .testTag("chat_spoiler_toggle")
-            ) {
-              Icon(
-                imageVector = if (isSpoilerMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                contentDescription = strings.spoilerToggleLabel,
-                tint = if (isSpoilerMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-              )
-            }
-          }
-
-          BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-              fontSize = 15.sp,
-              color = MaterialTheme.colorScheme.onSurface
-            ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            maxLines = 5,
-            modifier = Modifier
-              .weight(1f)
-              .padding(vertical = 8.dp)
-              .testTag("chat_message_input"),
-            decorationBox = { innerTextField ->
-              if (value.isEmpty()) {
-                Text(
-                  text = if (isSpoilerMode) "${strings.spoilerToggleLabel}: $placeholder" else placeholder,
-                  style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                  color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-              innerTextField()
-            }
-          )
-
-          Spacer(modifier = Modifier.width(6.dp))
-
-          if (useMicAction) {
-            IconButton(
-              onClick = onStartRecording,
-              modifier = Modifier
-                .size(48.dp)
-                .testTag("chat_record_voice_button")
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(38.dp)
-                  .clip(CircleShape)
-                  .background(sendBtnBg),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Mic,
-                  contentDescription = strings.voiceNoteLabel,
-                  tint = sendIconTint,
-                  modifier = Modifier.size(20.dp)
-                )
-              }
-            }
-          } else {
-            IconButton(
-              onClick = onSend,
-              enabled = isSendEnabled,
-              modifier = Modifier
-                .size(48.dp)
-                .testTag("chat_send_button")
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(38.dp)
-                  .clip(CircleShape)
-                  .background(sendBtnBg),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.AutoMirrored.Filled.Send,
-                  contentDescription = strings.send,
-                  tint = sendIconTint,
-                  modifier = Modifier.size(18.dp)
-                )
-              }
-            }
-          }
-        }
       }
     }
   }

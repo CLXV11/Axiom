@@ -489,6 +489,8 @@ interface KoraStrings {
   val authWeakPasswordError: String
   val authPasswordMismatchError: String
   val authSignInSubtitle: String
+  val chatDateToday: String
+  val chatDateYesterday: String
 }
 
 object EnglishStrings : KoraStrings {
@@ -905,6 +907,8 @@ object EnglishStrings : KoraStrings {
   override val authWeakPasswordError = "Password must be at least 6 characters."
   override val authPasswordMismatchError = "Passwords do not match."
   override val authSignInSubtitle = "Sign in, create an account, or recover access."
+  override val chatDateToday = "Today"
+  override val chatDateYesterday = "Yesterday"
 }
 
 object ArabicStrings : KoraStrings {
@@ -1321,6 +1325,8 @@ object ArabicStrings : KoraStrings {
   override val authWeakPasswordError = "يجب أن تتكون كلمة السر من 6 أحرف على الأقل."
   override val authPasswordMismatchError = "كلمتا السر غير متطابقتين."
   override val authSignInSubtitle = "سجّل دخولك أو أنشئ حساباً جديداً أو استرجع حسابك."
+  override val chatDateToday = "اليوم"
+  override val chatDateYesterday = "أمس"
 }
 
 val LocalAppStrings = compositionLocalOf<KoraStrings> { EnglishStrings }
