@@ -946,5 +946,206 @@ test("Conversations support live typing indicators, polls, voice audio notes, pi
   );
 });
 
+test("User display name fonts/themes and follow graph enforce ownership and anti-tamper rules", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+
+  const past = new Date(Date.now() - 1000);
+
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).set({
+      displayName: "Alice",
+      handle: "@alice",
+      nameFontId: "default",
+      nameThemeId: "default",
+      followersCount: 0,
+      followingCount: 0,
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  await assertSucceeds(
+    bobDb.collection("users").doc(BOB_UID).set({
+      displayName: "Bob",
+      handle: "@bob",
+      nameFontId: "cairo",
+      nameThemeId: "royal_gold",
+      followersCount: 0,
+      followingCount: 0,
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+
+  // Alice can customize her own display name font & color theme
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      nameFontId: "amiri",
+      nameThemeId: "cyber_neon",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+
+  // Unknown font or theme values are blocked
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      nameFontId: "comic_sans_hack",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      nameThemeId: "hacked_theme",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+
+  // Self-follow is forbidden
+  await assertFails(
+    aliceDb.collection("users").doc(ALICE_UID).collection("followers").doc(ALICE_UID).set({
+      followerId: ALICE_UID,
+      createdAt: new Date(Date.now() - 500),
+    })
+  );
+
+  // Alice follows Bob: edge creation + ±1 count updates succeed
+  await assertSucceeds(
+    aliceDb.collection("users").doc(BOB_UID).collection("followers").doc(ALICE_UID).set({
+      followerId: ALICE_UID,
+      createdAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(BOB_UID).update({
+      followersCount: 1,
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      followingCount: 1,
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+
+  // Count inflation (+50) and cross-user profile tampering fail
+  await assertFails(
+    eveDb.collection("users").doc(BOB_UID).update({
+      followersCount: 50,
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertFails(
+    eveDb.collection("users").doc(ALICE_UID).update({
+      nameThemeId: "arctic_ice",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+
+  // Alice unfollows Bob: edge delete + -1 count updates succeed
+  await assertSucceeds(
+    aliceDb.collection("users").doc(BOB_UID).collection("followers").doc(ALICE_UID).delete()
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(BOB_UID).update({
+      followersCount: 0,
+      updatedAt: new Date(Date.now() - 400),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("users").doc(ALICE_UID).update({
+      followingCount: 0,
+      updatedAt: new Date(Date.now() - 400),
+    })
+  );
+});
+
+test("Flux videos and Posts allow multi-emoji reactions and strictly author-only edit & delete", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const past = new Date(Date.now() - 1000);
+
+  // Alice creates a Flux clip
+  await assertSucceeds(
+    aliceDb.collection("flux_videos").doc("flux_manage_1").set({
+      authorId: ALICE_UID,
+      authorName: "Alice",
+      authorHandle: "@alice",
+      caption: "Initial #flux",
+      audioTitle: "Track 1",
+      likesCount: 0,
+      likedBy: [],
+      commentsCount: 0,
+      sharesCount: 0,
+      savedBy: [],
+      reactions: {},
+      tags: ["#flux"],
+      gradientTheme: "NITRO",
+      createdAt: past,
+    })
+  );
+
+  // Bob can add reactions, cannot edit caption/audio, cannot delete
+  await assertSucceeds(
+    bobDb.collection("flux_videos").doc("flux_manage_1").update({
+      reactions: { "🔥": [BOB_UID], "🤩": [BOB_UID] },
+    })
+  );
+  await assertFails(
+    bobDb.collection("flux_videos").doc("flux_manage_1").update({
+      caption: "Hacked caption",
+      audioTitle: "Hacked",
+      tags: ["#hack"],
+    })
+  );
+  await assertFails(bobDb.collection("flux_videos").doc("flux_manage_1").delete());
+
+  // Alice (author) can edit caption, audioTitle, tags, and delete
+  await assertSucceeds(
+    aliceDb.collection("flux_videos").doc("flux_manage_1").update({
+      caption: "Edited #flux #kora",
+      audioTitle: "Track 2",
+      tags: ["#flux", "#kora"],
+    })
+  );
+  await assertSucceeds(aliceDb.collection("flux_videos").doc("flux_manage_1").delete());
+
+  // Alice creates a Post; Bob can react, only Alice can edit & delete
+  await assertSucceeds(
+    aliceDb.collection("posts").doc("post_manage_1").set({
+      authorId: ALICE_UID,
+      authorName: "Alice",
+      authorHandle: "@alice",
+      content: "Original post body",
+      audience: "public",
+      likedBy: [],
+      likesCount: 0,
+      commentsCount: 0,
+      reactions: {},
+      createdAt: past,
+      updatedAt: past,
+    })
+  );
+  await assertFails(
+    bobDb.collection("posts").doc("post_manage_1").update({
+      content: "Bob tampered",
+      audience: "public",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertFails(bobDb.collection("posts").doc("post_manage_1").delete());
+  await assertSucceeds(
+    aliceDb.collection("posts").doc("post_manage_1").update({
+      content: "Updated post body",
+      audience: "circles",
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertSucceeds(aliceDb.collection("posts").doc("post_manage_1").delete());
+});
+
+
 
 

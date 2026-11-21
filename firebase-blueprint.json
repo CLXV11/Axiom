@@ -18,6 +18,10 @@
         "equippedFrame": { "type": "string" },
         "equippedNameplate": { "type": "string" },
         "equippedWall": { "type": "string" },
+        "nameFontId": { "type": "string" },
+        "nameThemeId": { "type": "string" },
+        "followersCount": { "type": "integer" },
+        "followingCount": { "type": "integer" },
         "quietMode": { "type": "boolean" },
         "readReceiptsEnabled": { "type": "boolean" },
         "lastSeen": { "type": "string", "format": "date-time" },
@@ -25,6 +29,16 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "handle", "createdAt", "updatedAt"]
+    },
+    "UserFollower": {
+      "title": "UserFollower",
+      "description": "Follow edge stored under /users/{userId}/followers/{followerId}",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["followerId", "createdAt"]
     },
     "Conversation": {
       "title": "Conversation",
@@ -170,6 +184,7 @@
         "commentsCount": { "type": "integer" },
         "sharesCount": { "type": "integer" },
         "savedBy": { "type": "array" },
+        "reactions": { "type": "object" },
         "tags": { "type": "array" },
         "gradientTheme": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
@@ -262,6 +277,10 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User directory profiles and presence status"
+    },
+    "/users/{userId}/followers/{followerId}": {
+      "schema": "UserFollower",
+      "description": "Follow graph edges pointing from followerId to userId"
     },
     "/users/{userId}/wallet/{walletId}": {
       "schema": "StoreWallet",

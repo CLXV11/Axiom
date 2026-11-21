@@ -157,4 +157,54 @@ class FluxRepositoryTest {
     assertTrue("Should extract #تطبيق_كورا", arabicVideo.tags.contains("#تطبيق_كورا"))
     assertTrue("Should extract #kora2026", arabicVideo.tags.contains("#kora2026"))
   }
+
+  @Test
+  fun testToggleFluxReaction_updatesAndTogglesReactions() = runTest {
+    val clip = fluxRepository.publishFlux(
+      authorId = "author_r1",
+      authorName = "Creator",
+      authorHandle = "@creator",
+      isAuthorVerified = false,
+      authorVerifiedTier = "BLUE",
+      caption = "React to this #flux",
+      videoUri = null,
+      audioTitle = "Sound"
+    )
+
+    fluxRepository.toggleFluxReaction(clip.id, "🔥", "viewer_1").getOrThrow()
+    fluxRepository.toggleFluxReaction(clip.id, "❤️", "viewer_2").getOrThrow()
+    val afterReact = fluxRepository.observeVideos().first().first { it.id == clip.id }
+    assertEquals(listOf("viewer_1"), afterReact.reactions["🔥"])
+    assertEquals(listOf("viewer_2"), afterReact.reactions["❤️"])
+
+    fluxRepository.toggleFluxReaction(clip.id, "🔥", "viewer_1").getOrThrow()
+    val afterToggleOff = fluxRepository.observeVideos().first().first { it.id == clip.id }
+    assertFalse(afterToggleOff.reactions.containsKey("🔥"))
+    assertEquals(listOf("viewer_2"), afterToggleOff.reactions["❤️"])
+  }
+
+  @Test
+  fun testUpdateAndDeleteFluxVideo_updatesCaptionAndRemovesClip() = runTest {
+    val clip = fluxRepository.publishFlux(
+      authorId = "author_edit_1",
+      authorName = "Creator",
+      authorHandle = "@creator",
+      isAuthorVerified = false,
+      authorVerifiedTier = "BLUE",
+      caption = "Initial caption #one",
+      videoUri = null,
+      audioTitle = "Track One"
+    )
+
+    fluxRepository.updateFluxVideo(clip.id, "Updated caption #two #vibes", "Track Two").getOrThrow()
+    val updated = fluxRepository.observeVideos().first().first { it.id == clip.id }
+    assertEquals("Updated caption #two #vibes", updated.caption)
+    assertEquals("Track Two", updated.audioTitle)
+    assertTrue(updated.tags.contains("#two"))
+    assertTrue(updated.tags.contains("#vibes"))
+
+    fluxRepository.deleteFluxVideo(clip.id).getOrThrow()
+    val remaining = fluxRepository.observeVideos().first()
+    assertTrue(remaining.none { it.id == clip.id })
+  }
 }

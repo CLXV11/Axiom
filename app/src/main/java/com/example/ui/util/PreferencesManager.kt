@@ -41,7 +41,7 @@ class PreferencesManager(context: Context) {
     }
 
   var amoledPureBlack: Boolean
-    get() = prefs.getBoolean("key_amoled_pure_black", false)
+    get() = prefs.getBoolean("key_amoled_pure_black", true)
     set(value) {
       prefs.edit().putBoolean("key_amoled_pure_black", value).apply()
     }
@@ -69,6 +69,10 @@ class PreferencesManager(context: Context) {
       put("equippedFrame", profile.equippedFrame ?: "")
       put("equippedNameplate", profile.equippedNameplate ?: "")
       put("equippedWall", profile.equippedWall ?: "")
+      put("nameFontId", profile.nameFontId)
+      put("nameThemeId", profile.nameThemeId)
+      put("followersCount", profile.followersCount)
+      put("followingCount", profile.followingCount)
       put("quietMode", profile.quietMode)
       put("readReceiptsEnabled", profile.readReceiptsEnabled)
     }
@@ -99,6 +103,10 @@ class PreferencesManager(context: Context) {
         equippedFrame = frame,
         equippedNameplate = nameplate,
         equippedWall = wall,
+        nameFontId = json.optString("nameFontId", "default").ifBlank { "default" },
+        nameThemeId = json.optString("nameThemeId", "default").ifBlank { "default" },
+        followersCount = json.optLong("followersCount", 0L).coerceAtLeast(0L),
+        followingCount = json.optLong("followingCount", 0L).coerceAtLeast(0L),
         quietMode = json.optBoolean("quietMode", false),
         readReceiptsEnabled = json.optBoolean("readReceiptsEnabled", true)
       )
@@ -180,6 +188,18 @@ class PreferencesManager(context: Context) {
     get() = prefs.getString("key_guest_avatar_url", "") ?: ""
     set(value) {
       prefs.edit().putString("key_guest_avatar_url", value).apply()
+    }
+
+  var guestNameFontId: String
+    get() = prefs.getString("key_guest_name_font_id", "default") ?: "default"
+    set(value) {
+      prefs.edit().putString("key_guest_name_font_id", value).apply()
+    }
+
+  var guestNameThemeId: String
+    get() = prefs.getString("key_guest_name_theme_id", "default") ?: "default"
+    set(value) {
+      prefs.edit().putString("key_guest_name_theme_id", value).apply()
     }
 
   var inAppBannersEnabled: Boolean

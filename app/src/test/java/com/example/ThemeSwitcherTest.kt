@@ -122,6 +122,41 @@ class ThemeSwitcherTest {
   }
 
   @Test
+  fun testPreferencesManager_amoledEnabledByDefaultOnStartup() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    context.getSharedPreferences("kora_preferences", Context.MODE_PRIVATE)
+      .edit()
+      .clear()
+      .commit()
+    val freshPrefs = PreferencesManager(context)
+    assertTrue("AMOLED Pure Black should be active from startup by default", freshPrefs.amoledPureBlack)
+  }
+
+  @Test
+  fun testDisplayNameStyleOptions_resolveGracefully() {
+    assertEquals(
+      com.example.ui.components.NameFontOption.CAIRO,
+      com.example.ui.components.NameFontOption.fromId("cairo")
+    )
+    assertEquals(
+      com.example.ui.components.NameFontOption.DEFAULT,
+      com.example.ui.components.NameFontOption.fromId("unknown_font")
+    )
+    assertEquals(
+      com.example.ui.components.NameThemeOption.ROYAL_GOLD,
+      com.example.ui.components.NameThemeOption.fromId("royal_gold")
+    )
+    assertEquals(
+      com.example.ui.components.NameThemeOption.DEFAULT,
+      com.example.ui.components.NameThemeOption.fromId(null)
+    )
+    prefs.guestNameFontId = "amiri"
+    prefs.guestNameThemeId = "cyber_neon"
+    assertEquals("amiri", prefs.guestNameFontId)
+    assertEquals("cyber_neon", prefs.guestNameThemeId)
+  }
+
+  @Test
   fun testPreferencesManager_persistsExtendedSettingsAndMediaCache() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     prefs.inAppBannersEnabled = false

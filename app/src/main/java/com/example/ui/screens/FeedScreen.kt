@@ -38,11 +38,17 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.AddReaction
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +58,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -79,6 +86,7 @@ import com.example.ui.components.EmptyStateView
 import com.example.ui.components.IosFloatingReactionBar
 import com.example.ui.components.KoraTopBar
 import com.example.ui.components.ReactionChipsRow
+import com.example.ui.components.StyledDisplayName
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.components.WeirdEmojiPickerBottomSheet
 import com.example.ui.theme.SemanticError
@@ -102,12 +110,20 @@ fun FeedScreen(
   val posts by postRepository.observePosts(selectedFilter).collectAsState(initial = emptyList())
   val directoryUsers by userRepository.observeDirectoryUsers()
     .collectAsState(initial = userRepository.getDirectoryUsers())
-  val usersById = remember(directoryUsers) { directoryUsers.associateBy { it.id } }
+  val currentUserProfile by userRepository.observeUserProfile(currentUid)
+    .collectAsState(initial = userRepository.getCachedProfile(currentUid))
+  val usersById = remember(directoryUsers, currentUserProfile, currentUid) {
+    val map = directoryUsers.associateBy { it.id }.toMutableMap()
+    currentUserProfile?.let { map[currentUid] = it }
+    map
+  }
 
   var newPostContent by remember { mutableStateOf("") }
   var postAudience by remember { mutableStateOf("public") } // "public" or "circles"
   var isSubmitting by remember { mutableStateOf(false) }
   var reactionTargetPostId by remember { mutableStateOf<String?>(null) }
+  var editingPost by remember { mutableStateOf<Post?>(null) }
+  var deletingPost by remember { mutableStateOf<Post?>(null) }
 
   LaunchedEffect(Unit) {
     userRepository.fetchDirectoryUsers()
@@ -278,6 +294,8 @@ fun FeedScreen(
             postRepository = postRepository,
             userRepository = userRepository,
             onOpenReactionSheet = { reactionTargetPostId = post.id },
+            onEditPost = { editingPost = post },
+            onDeletePost = { deletingPost = post },
             onInspectUser = onInspectUser
           )
         }
@@ -313,6 +331,104 @@ fun FeedScreen(
       onDismiss = { reactionTargetPostId = null }
     )
   }
+
+  editingPost?.let { target ->
+    var contentDraft by remember(target.id) { mutableStateOf(target.content) }
+    var isSavingEdit by remember(target.id) { mutableStateOf(false) }
+
+    AlertDialog(
+      onDismissRequest = { if (!isSavingEdit) editingPost = null },
+      title = { Text(strings.editPostTitle, fontWeight = FontWeight.Bold) },
+      text = {
+        OutlinedTextField(
+          value = contentDraft,
+          onValueChange = { contentDraft = it },
+          placeholder = { Text(strings.whatsOnYourMind) },
+          maxLines = 6,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("edit_post_content_input")
+        )
+      },
+      confirmButton = {
+        Button(
+          enabled = contentDraft.isNotBlank() && !isSavingEdit,
+          onClick = {
+            isSavingEdit = true
+            coroutineScope.launch {
+              val res = postRepository.updatePost(target.id, contentDraft, target.audience)
+              isSavingEdit = false
+              if (res.isSuccess) {
+                editingPost = null
+                Toast.makeText(context, strings.contentUpdatedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(
+                  context,
+                  res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          }
+        ) {
+          Text(strings.confirm)
+        }
+      },
+      dismissButton = {
+        TextButton(
+          enabled = !isSavingEdit,
+          onClick = { editingPost = null }
+        ) {
+          Text(strings.cancel)
+        }
+      }
+    )
+  }
+
+  deletingPost?.let { target ->
+    var isDeleting by remember(target.id) { mutableStateOf(false) }
+    AlertDialog(
+      onDismissRequest = { if (!isDeleting) deletingPost = null },
+      title = { Text(strings.deleteContentTitle, fontWeight = FontWeight.Bold) },
+      text = { Text(strings.deleteContentConfirm) },
+      confirmButton = {
+        Button(
+          enabled = !isDeleting,
+          colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.error,
+            contentColor = MaterialTheme.colorScheme.onError
+          ),
+          onClick = {
+            isDeleting = true
+            coroutineScope.launch {
+              val res = postRepository.deletePost(target.id)
+              isDeleting = false
+              if (res.isSuccess) {
+                deletingPost = null
+                Toast.makeText(context, strings.contentDeletedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(
+                  context,
+                  res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          }
+        ) {
+          Text(strings.delete)
+        }
+      },
+      dismissButton = {
+        TextButton(
+          enabled = !isDeleting,
+          onClick = { deletingPost = null }
+        ) {
+          Text(strings.cancel)
+        }
+      }
+    )
+  }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -325,6 +441,8 @@ private fun PostCard(
   postRepository: PostRepository,
   userRepository: UserRepository,
   onOpenReactionSheet: () -> Unit,
+  onEditPost: () -> Unit,
+  onDeletePost: () -> Unit,
   onInspectUser: (UserProfile) -> Unit
 ) {
   val context = LocalContext.current
@@ -332,6 +450,7 @@ private fun PostCard(
   val coroutineScope = rememberCoroutineScope()
   var showThreads by remember { mutableStateOf(false) }
   var showInlineReactionBar by remember { mutableStateOf(false) }
+  var showAuthorMenu by remember { mutableStateOf(false) }
   var commentInput by remember { mutableStateOf("") }
 
   val isLiked = post.likedBy.contains(currentUid)
@@ -403,10 +522,12 @@ private fun PostCard(
           Spacer(modifier = Modifier.width(12.dp))
           Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = liveAuthorName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+              StyledDisplayName(
+                name = liveAuthorName,
+                nameFontId = authorProfile?.nameFontId ?: "default",
+                nameThemeId = authorProfile?.nameThemeId ?: "default",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                fallbackColor = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
@@ -424,26 +545,79 @@ private fun PostCard(
           }
         }
 
-        // Audience Badge
         Row(
-          modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-          verticalAlignment = Alignment.CenterVertically
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-          Icon(
-            imageVector = if (post.audience == "circles") Icons.Default.Lock else Icons.Default.Public,
-            contentDescription = null,
-            modifier = Modifier.size(12.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = if (post.audience == "circles") strings.audienceCircles else strings.audiencePublic,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+          // Audience Badge
+          Row(
+            modifier = Modifier
+              .clip(RoundedCornerShape(6.dp))
+              .background(MaterialTheme.colorScheme.surfaceVariant)
+              .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = if (post.audience == "circles") Icons.Default.Lock else Icons.Default.Public,
+              contentDescription = null,
+              modifier = Modifier.size(12.dp),
+              tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = if (post.audience == "circles") strings.audienceCircles else strings.audiencePublic,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          if (post.authorId == currentUid) {
+            Box {
+              IconButton(
+                onClick = { showAuthorMenu = true },
+                modifier = Modifier
+                  .size(36.dp)
+                  .testTag("post_author_menu_${post.id}")
+              ) {
+                Icon(
+                  imageVector = Icons.Default.MoreVert,
+                  contentDescription = strings.edit,
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
+              DropdownMenu(
+                expanded = showAuthorMenu,
+                onDismissRequest = { showAuthorMenu = false }
+              ) {
+                DropdownMenuItem(
+                  text = { Text(strings.edit) },
+                  leadingIcon = {
+                    Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                  },
+                  onClick = {
+                    showAuthorMenu = false
+                    onEditPost()
+                  }
+                )
+                DropdownMenuItem(
+                  text = { Text(strings.delete, color = MaterialTheme.colorScheme.error) },
+                  leadingIcon = {
+                    Icon(
+                      Icons.Default.DeleteOutline,
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.error,
+                      modifier = Modifier.size(18.dp)
+                    )
+                  },
+                  onClick = {
+                    showAuthorMenu = false
+                    onDeletePost()
+                  }
+                )
+              }
+            }
+          }
         }
       }
 
@@ -632,6 +806,8 @@ private fun PostCard(
               ContextThreadCommentItem(
                 comment = comment,
                 avatarUrl = commentAuthor?.avatarUrl,
+                authorNameFontId = commentAuthor?.nameFontId ?: "default",
+                authorNameThemeId = commentAuthor?.nameThemeId ?: "default",
                 liveVerified = commentAuthor?.isVerified ?: comment.isAuthorVerified,
                 liveVerifiedTier = commentAuthor?.verifiedTier ?: "BLUE",
                 canDelete = comment.authorId == currentUid,
@@ -704,6 +880,8 @@ private fun PostCard(
 private fun ContextThreadCommentItem(
   comment: PostComment,
   avatarUrl: String? = null,
+  authorNameFontId: String = "default",
+  authorNameThemeId: String = "default",
   liveVerified: Boolean = comment.isAuthorVerified,
   liveVerifiedTier: String = "BLUE",
   canDelete: Boolean = false,
@@ -723,10 +901,15 @@ private fun ContextThreadCommentItem(
     Spacer(modifier = Modifier.width(8.dp))
     Column(modifier = Modifier.weight(1f)) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-          text = comment.authorName,
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold
+        StyledDisplayName(
+          name = comment.authorName,
+          nameFontId = authorNameFontId,
+          nameThemeId = authorNameThemeId,
+          style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+          fallbackColor = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false)
         )
         if (liveVerified) {
           Spacer(modifier = Modifier.width(4.dp))

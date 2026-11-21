@@ -73,6 +73,7 @@ import com.example.ui.components.AvatarView
 import com.example.ui.components.ContactDirectorySheet
 import com.example.ui.components.EmptyStateView
 import com.example.ui.components.KoraTopBar
+import com.example.ui.components.StyledDisplayName
 import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.util.LocalAppStrings
@@ -561,11 +562,15 @@ private fun ConversationRow(
               )
               Spacer(modifier = Modifier.width(4.dp))
             }
-            Text(
-              text = title,
-              style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
-              fontWeight = FontWeight.SemiBold,
-              color = colors.onSurface,
+            StyledDisplayName(
+              name = title,
+              nameFontId = if (isAiChatbot || conversation.type != "direct") "default" else peerUser?.nameFontId ?: "default",
+              nameThemeId = if (isAiChatbot || conversation.type != "direct") "default" else peerUser?.nameThemeId ?: "default",
+              style = MaterialTheme.typography.titleSmall.copy(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+              ),
+              fallbackColor = colors.onSurface,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
               modifier = Modifier.weight(1f, fill = false)

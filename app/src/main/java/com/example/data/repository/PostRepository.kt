@@ -109,6 +109,7 @@ class PostRepository(
         "likedBy" to emptyList<String>(),
         "likesCount" to 0L,
         "commentsCount" to 0L,
+        "reactions" to emptyMap<String, List<String>>(),
         "createdAt" to FieldValue.serverTimestamp(),
         "updatedAt" to FieldValue.serverTimestamp()
       )
@@ -219,6 +220,56 @@ class PostRepository(
         post.copy(reactions = updated.mapValues { it.value.distinct() })
       } else post
     }
+    return Result.success(Unit)
+  }
+
+  suspend fun updatePost(postId: String, content: String, audience: String): Result<Unit> {
+    val cleanContent = content.trim().take(5000)
+    if (cleanContent.isBlank()) {
+      return Result.failure(IllegalArgumentException("Post content cannot be empty"))
+    }
+    val validAudience = if (audience == "circles") "circles" else "public"
+
+    if (auth.currentUser != null) {
+      val postRef = db.collection("posts").document(postId)
+      return try {
+        postRef.update(
+          mapOf(
+            "content" to cleanContent,
+            "audience" to validAudience,
+            "updatedAt" to FieldValue.serverTimestamp()
+          )
+        ).await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.UPDATE, postRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    localPosts.value = localPosts.value.map { post ->
+      if (post.id == postId) {
+        post.copy(content = cleanContent, audience = validAudience, updatedAt = Timestamp.now())
+      } else post
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun deletePost(postId: String): Result<Unit> {
+    if (auth.currentUser != null) {
+      val postRef = db.collection("posts").document(postId)
+      return try {
+        postRef.delete().await()
+        cachedServerPosts = cachedServerPosts.filterNot { it.id == postId }
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.DELETE, postRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    localPosts.value = localPosts.value.filterNot { it.id == postId }
+    localComments.remove(postId)
     return Result.success(Unit)
   }
 

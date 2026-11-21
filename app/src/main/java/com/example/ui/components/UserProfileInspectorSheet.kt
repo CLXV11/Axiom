@@ -28,10 +28,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material3.Button
@@ -50,7 +53,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.FluxVideo
+import com.example.data.model.Post
 import com.example.data.model.UserProfile
 import com.example.data.repository.UserRepository
 import com.example.ui.theme.DiscordBlurple
@@ -78,6 +86,7 @@ import com.example.ui.theme.StatusQuiet
 import com.example.ui.util.LocalAppStrings
 import com.example.ui.util.formatHandleForDisplay
 import com.google.firebase.Timestamp
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -89,6 +98,8 @@ fun UserProfileInspectorSheet(
   currentUid: String,
   postsCount: Int = 0,
   fluxCount: Int = 0,
+  userPosts: List<Post> = emptyList(),
+  userFluxVideos: List<FluxVideo> = emptyList(),
   onDismiss: () -> Unit,
   onMessageClick: (UserProfile) -> Unit,
   onVoiceCallClick: (UserProfile) -> Unit
@@ -96,9 +107,13 @@ fun UserProfileInspectorSheet(
   val context = LocalContext.current
   val strings = LocalAppStrings.current
   val colors = MaterialTheme.colorScheme
+  val coroutineScope = rememberCoroutineScope()
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   val observedUser by userRepository.observeUserProfile(seedUser.id).collectAsState(initial = seedUser)
+  val isFollowing by userRepository.observeIsFollowing(currentUid, seedUser.id).collectAsState(initial = false)
+  var isFollowBusy by remember { mutableStateOf(false) }
+
   LaunchedEffect(seedUser.id) {
     runCatching { userRepository.getUserProfile(seedUser.id) }
   }
@@ -242,11 +257,12 @@ fun UserProfileInspectorSheet(
               verticalAlignment = Alignment.CenterVertically,
               modifier = Modifier.fillMaxWidth()
             ) {
-              Text(
-                text = user.displayName.ifBlank { "Kora Member" },
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = DiscordTextPrimary,
+              StyledDisplayName(
+                name = user.displayName.ifBlank { "Kora Member" },
+                nameFontId = user.nameFontId,
+                nameThemeId = user.nameThemeId,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                fallbackColor = DiscordTextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
@@ -446,6 +462,25 @@ fun UserProfileInspectorSheet(
               horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
               InspectorStatTile(
+                icon = Icons.Default.Group,
+                value = user.followersCount.toString(),
+                label = strings.followersLabel,
+                accentColor = colors.primary,
+                modifier = Modifier.weight(1f)
+              )
+              InspectorStatTile(
+                icon = Icons.Default.PersonAdd,
+                value = user.followingCount.toString(),
+                label = strings.followingLabel,
+                accentColor = Color(0xFFA855F7),
+                modifier = Modifier.weight(1f)
+              )
+            }
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              InspectorStatTile(
                 icon = Icons.Outlined.PostAdd,
                 value = postsCount.toString(),
                 label = strings.inspectProfilePostsCount,
@@ -459,6 +494,97 @@ fun UserProfileInspectorSheet(
                 accentColor = Color(0xFF00A8FC),
                 modifier = Modifier.weight(1f)
               )
+            }
+          }
+        }
+
+        // User's Recent Flux Clips & Posts Preview
+        if (userFluxVideos.isNotEmpty() || userPosts.isNotEmpty()) {
+          Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = DiscordDarkSecondary,
+            border = BorderStroke(1.dp, DiscordBorder.copy(alpha = 0.75f)),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Column(
+              modifier = Modifier.padding(16.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              Text(
+                text = strings.inspectProfileUserContentTitle,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = DiscordTextMuted,
+                letterSpacing = 0.8.sp
+              )
+              userFluxVideos.take(3).forEach { clip ->
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = DiscordDarkDeepest,
+                  border = BorderStroke(1.dp, DiscordBorder.copy(alpha = 0.5f)),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Icon(
+                      imageVector = Icons.Outlined.Movie,
+                      contentDescription = null,
+                      tint = Color(0xFF00A8FC),
+                      modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                      text = clip.caption.ifBlank { "#flux" },
+                      style = MaterialTheme.typography.bodySmall,
+                      color = DiscordTextNormal,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                      modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                      text = "❤️ ${clip.likesCount}",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = DiscordTextMuted
+                    )
+                  }
+                }
+              }
+              userPosts.take(3).forEach { post ->
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = DiscordDarkDeepest,
+                  border = BorderStroke(1.dp, DiscordBorder.copy(alpha = 0.5f)),
+                  modifier = Modifier.fillMaxWidth()
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Icon(
+                      imageVector = Icons.Outlined.PostAdd,
+                      contentDescription = null,
+                      tint = DiscordBlurple,
+                      modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                      text = post.content,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = DiscordTextNormal,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                      modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                      text = "❤️ ${post.likesCount}",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = DiscordTextMuted
+                    )
+                  }
+                }
+              }
             }
           }
         }
@@ -480,6 +606,48 @@ fun UserProfileInspectorSheet(
             )
           }
         } else {
+          OutlinedButton(
+            onClick = {
+              if (!isFollowBusy) {
+                isFollowBusy = true
+                coroutineScope.launch {
+                  val res = userRepository.toggleFollow(user.id)
+                  isFollowBusy = false
+                  if (res.isFailure) {
+                    Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+                  }
+                }
+              }
+            },
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(
+              1.2.dp,
+              if (isFollowing) colors.outlineVariant else colors.primary
+            ),
+            colors = ButtonDefaults.outlinedButtonColors(
+              containerColor = if (isFollowing) DiscordDarkSecondary else colors.primary.copy(alpha = 0.18f),
+              contentColor = if (isFollowing) DiscordTextPrimary else colors.primary
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .defaultMinSize(minHeight = 48.dp)
+              .testTag("inspector_follow_button")
+          ) {
+            Icon(
+              imageVector = if (isFollowing) Icons.Default.Check else Icons.Default.PersonAdd,
+              contentDescription = null,
+              modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = if (isFollowing) strings.followingStateLabel else strings.followAction,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+              softWrap = false
+            )
+          }
+
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)

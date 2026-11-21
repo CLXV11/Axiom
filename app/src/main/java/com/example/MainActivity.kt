@@ -742,6 +742,8 @@ fun KoraAppRoot(
         NavigationTab.PROFILE -> ProfileScreen(
           userRepository = userRepository,
           storeRepository = storeRepository,
+          postRepository = postRepository,
+          fluxRepository = fluxRepository,
           onOpenStore = { showStore = true },
           onOpenSettings = { currentTab = NavigationTab.SETTINGS },
           onOpenThemeStudio = { showQuickThemeSheet = true },
@@ -821,18 +823,20 @@ fun KoraAppRoot(
 
   // App-wide Cross-User Profile Inspector Modal Bottom Sheet
   inspectedUserProfile?.let { target ->
-    val targetPostsCount = remember(allPosts, target.id) {
-      allPosts.count { it.authorId == target.id }
+    val targetPosts = remember(allPosts, target.id) {
+      allPosts.filter { it.authorId == target.id }
     }
-    val targetFluxCount = remember(allFluxVideos, target.id) {
-      allFluxVideos.count { it.authorId == target.id }
+    val targetFluxVideos = remember(allFluxVideos, target.id) {
+      allFluxVideos.filter { it.authorId == target.id }
     }
     UserProfileInspectorSheet(
       seedUser = target,
       userRepository = userRepository,
       currentUid = currentUid,
-      postsCount = targetPostsCount,
-      fluxCount = targetFluxCount,
+      postsCount = targetPosts.size,
+      fluxCount = targetFluxVideos.size,
+      userPosts = targetPosts,
+      userFluxVideos = targetFluxVideos,
       onDismiss = { inspectedUserProfile = null },
       onMessageClick = { peer ->
         inspectedUserProfile = null

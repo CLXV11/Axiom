@@ -24,6 +24,7 @@ data class FluxVideo(
   val commentsCount: Int = 0,
   val sharesCount: Int = 0,
   val savedBy: List<String> = emptyList(),
+  val reactions: Map<String, List<String>> = emptyMap(),
   val tags: List<String> = emptyList(),
   val gradientTheme: String = "BLURPLE", // "BLURPLE", "NITRO", "EMERALD", "SOLAR", "CYBER"
   val createdAt: Long = System.currentTimeMillis()

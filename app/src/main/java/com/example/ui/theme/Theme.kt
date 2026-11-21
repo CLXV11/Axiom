@@ -199,7 +199,7 @@ object KoraTheme {
 @Composable
 fun KoraTheme(
   themePreset: AppThemePreset = AppThemePreset.DISCORD_DARK,
-  amoledPureBlack: Boolean = false,
+  amoledPureBlack: Boolean = true,
   accentChoice: AccentColorChoice = AccentColorChoice.DEFAULT,
   darkTheme: Boolean = isSystemInDarkTheme(),
   spacing: KoraSpacing = KoraSpacing(),

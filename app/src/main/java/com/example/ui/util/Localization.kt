@@ -491,6 +491,29 @@ interface KoraStrings {
   val authSignInSubtitle: String
   val chatDateToday: String
   val chatDateYesterday: String
+  val nameStyleTitle: String
+  val nameStylePreviewLabel: String
+  val nameFontSection: String
+  val nameThemeSection: String
+  val customizeNameStyleBtn: String
+  val followersLabel: String
+  val followingLabel: String
+  val followAction: String
+  val followingStateLabel: String
+  val myContentTitle: String
+  val myContentFluxTab: String
+  val myContentPostsTab: String
+  val noMyFluxYet: String
+  val noMyPostsYet: String
+  val editFluxTitle: String
+  val editFluxAudioLabel: String
+  val editPostTitle: String
+  val deleteContentTitle: String
+  val deleteContentConfirm: String
+  val contentUpdatedToast: String
+  val contentDeletedToast: String
+  val inspectProfileUserContentTitle: String
+  val fluxMoreOptions: String
 }
 
 object EnglishStrings : KoraStrings {
@@ -909,6 +932,29 @@ object EnglishStrings : KoraStrings {
   override val authSignInSubtitle = "Sign in, create an account, or recover access."
   override val chatDateToday = "Today"
   override val chatDateYesterday = "Yesterday"
+  override val nameStyleTitle = "Display Name Style"
+  override val nameStylePreviewLabel = "Live Name Preview"
+  override val nameFontSection = "Name Font"
+  override val nameThemeSection = "Name Theme & Glow"
+  override val customizeNameStyleBtn = "Name Style & Font"
+  override val followersLabel = "Followers"
+  override val followingLabel = "Following"
+  override val followAction = "Follow"
+  override val followingStateLabel = "Following"
+  override val myContentTitle = "My Posts & Flux"
+  override val myContentFluxTab = "Flux Clips"
+  override val myContentPostsTab = "Posts"
+  override val noMyFluxYet = "You haven't published any Flux clips yet"
+  override val noMyPostsYet = "You haven't published any posts yet"
+  override val editFluxTitle = "Edit Flux Clip"
+  override val editFluxAudioLabel = "Audio / Soundtrack Title"
+  override val editPostTitle = "Edit Post"
+  override val deleteContentTitle = "Delete Content"
+  override val deleteContentConfirm = "Are you sure you want to permanently delete this item?"
+  override val contentUpdatedToast = "Updated successfully"
+  override val contentDeletedToast = "Deleted permanently"
+  override val inspectProfileUserContentTitle = "Recent Publications"
+  override val fluxMoreOptions = "More options"
 }
 
 object ArabicStrings : KoraStrings {
@@ -1327,6 +1373,29 @@ object ArabicStrings : KoraStrings {
   override val authSignInSubtitle = "سجّل دخولك أو أنشئ حساباً جديداً أو استرجع حسابك."
   override val chatDateToday = "اليوم"
   override val chatDateYesterday = "أمس"
+  override val nameStyleTitle = "خط وسمة الاسم"
+  override val nameStylePreviewLabel = "معاينة الاسم المباشرة"
+  override val nameFontSection = "خط الاسم فقط"
+  override val nameThemeSection = "سمة ولون الاسم"
+  override val customizeNameStyleBtn = "تخصيص خط وسمة الاسم"
+  override val followersLabel = "المتابِعون"
+  override val followingLabel = "يتابِع"
+  override val followAction = "متابعة"
+  override val followingStateLabel = "متابَع"
+  override val myContentTitle = "منشوراتي وفلوكس"
+  override val myContentFluxTab = "فلوكس"
+  override val myContentPostsTab = "المنشورات"
+  override val noMyFluxYet = "لم تنشر أي مقاطع فلوكس بعد"
+  override val noMyPostsYet = "لم تنشر أي منشورات بعد"
+  override val editFluxTitle = "تعديل مقطع فلوكس"
+  override val editFluxAudioLabel = "اسم الصوت أو الموسيقى"
+  override val editPostTitle = "تعديل المنشور"
+  override val deleteContentTitle = "حذف المحتوى"
+  override val deleteContentConfirm = "هل أنت متأكد من حذف هذا العنصر نهائياً؟"
+  override val contentUpdatedToast = "تم تحديث المحتوى بنجاح"
+  override val contentDeletedToast = "تم الحذف نهائياً"
+  override val inspectProfileUserContentTitle = "أحدث المنشورات والمقاطع"
+  override val fluxMoreOptions = "خيارات إضافية"
 }
 
 val LocalAppStrings = compositionLocalOf<KoraStrings> { EnglishStrings }

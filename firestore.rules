@@ -65,6 +65,10 @@ service cloud.firestore {
              (!('equippedFrame' in data) || data.equippedFrame == null || (data.equippedFrame is string && data.equippedFrame.size() <= 64)) &&
              (!('equippedNameplate' in data) || data.equippedNameplate == null || (data.equippedNameplate is string && data.equippedNameplate.size() <= 64)) &&
              (!('equippedWall' in data) || data.equippedWall == null || (data.equippedWall is string && data.equippedWall.size() <= 64)) &&
+             (!('nameFontId' in data) || (data.nameFontId is string && data.nameFontId in ['default', 'cairo', 'amiri', 'tajawal', 'playfair', 'pacifico', 'outfit'])) &&
+             (!('nameThemeId' in data) || (data.nameThemeId is string && data.nameThemeId in ['default', 'royal_gold', 'cyber_neon', 'velvet_rose', 'emerald_aurora', 'crimson_ember', 'arctic_ice'])) &&
+             (!('followersCount' in data) || (data.followersCount is int && data.followersCount >= 0)) &&
+             (!('followingCount' in data) || (data.followingCount is int && data.followingCount >= 0)) &&
              (!('quietMode' in data) || data.quietMode is bool) &&
              (!('readReceiptsEnabled' in data) || data.readReceiptsEnabled is bool) &&
              (!('lastSeen' in data) || data.lastSeen == null || (data.lastSeen is timestamp && data.lastSeen <= request.time)) &&
@@ -186,6 +190,7 @@ service cloud.firestore {
              (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
              (!('sharesCount' in data) || (data.sharesCount is int && data.sharesCount >= 0)) &&
              (!('savedBy' in data) || isValidStringList(data.savedBy, 200)) &&
+             (!('reactions' in data) || isValidReactionsMap(data.reactions)) &&
              (!('tags' in data) || isValidStringList(data.tags, 15)) &&
              (!('gradientTheme' in data) || data.gradientTheme in ['BLURPLE', 'NITRO', 'EMERALD', 'SOLAR', 'CYBER']) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
@@ -214,32 +219,81 @@ service cloud.firestore {
                        request.auth.uid == userId &&
                        isValidUserProfile(incoming()) &&
                        (!('isProfessionalVerified' in incoming()) || incoming().isProfessionalVerified == false) &&
+                       (!('followersCount' in incoming()) || incoming().followersCount == 0) &&
+                       (!('followingCount' in incoming()) || incoming().followingCount == 0) &&
                        incoming().keys().hasAll(['displayName', 'handle', 'createdAt', 'updatedAt']) &&
                        incoming().keys().hasOnly([
                          'displayName', 'handle', 'bio', 'profession', 'isProfessionalVerified',
                          'professionalOrg', 'openToNetworking', 'avatarUrl', 'isVerified',
-                         'verifiedTier', 'equippedFrame', 'equippedNameplate', 'equippedWall', 'quietMode',
-                         'readReceiptsEnabled', 'lastSeen', 'createdAt', 'updatedAt'
+                         'verifiedTier', 'equippedFrame', 'equippedNameplate', 'equippedWall',
+                         'nameFontId', 'nameThemeId', 'followersCount', 'followingCount',
+                         'quietMode', 'readReceiptsEnabled', 'lastSeen', 'createdAt', 'updatedAt'
                        ]);
 
       allow update: if isSignedIn() &&
                        isValidId(userId) &&
-                       request.auth.uid == userId &&
                        isValidUserProfile(incoming()) &&
                        incoming().createdAt == existing().createdAt &&
                        (!('isProfessionalVerified' in incoming()) ||
                         incoming().isProfessionalVerified == existing().get('isProfessionalVerified', false)) &&
                        (
-                         incoming().diff(existing()).affectedKeys().hasOnly(['lastSeen']) ||
-                         incoming().diff(existing()).affectedKeys().hasOnly([
-                           'displayName', 'handle', 'bio', 'profession', 'professionalOrg',
-                           'openToNetworking', 'avatarUrl', 'isVerified', 'verifiedTier',
-                           'equippedFrame', 'equippedNameplate', 'equippedWall', 'quietMode',
-                           'readReceiptsEnabled', 'lastSeen', 'updatedAt'
-                         ])
+                         (
+                           request.auth.uid == userId &&
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['lastSeen']) ||
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'displayName', 'handle', 'bio', 'profession', 'professionalOrg',
+                               'openToNetworking', 'avatarUrl', 'isVerified', 'verifiedTier',
+                               'equippedFrame', 'equippedNameplate', 'equippedWall',
+                               'nameFontId', 'nameThemeId',
+                               'quietMode', 'readReceiptsEnabled', 'lastSeen', 'updatedAt'
+                             ]) ||
+                             (
+                               incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']) &&
+                               (
+                                 incoming().followingCount == existing().get('followingCount', 0) + 1 ||
+                                 (existing().get('followingCount', 0) > 0 &&
+                                  incoming().followingCount == existing().get('followingCount', 0) - 1)
+                               )
+                             )
+                           )
+                         ) ||
+                         (
+                           request.auth.uid != userId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']) &&
+                           (
+                             incoming().followersCount == existing().get('followersCount', 0) + 1 ||
+                             (existing().get('followersCount', 0) > 0 &&
+                              incoming().followersCount == existing().get('followersCount', 0) - 1)
+                           )
+                         )
                        );
 
       allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+
+      // Public followers graph edges (self-following forbidden)
+      match /followers/{followerId} {
+        allow get, list: if isSignedIn() && isValidId(userId);
+
+        allow create: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(followerId) &&
+                         request.auth.uid == followerId &&
+                         userId != followerId &&
+                         incoming().followerId == followerId &&
+                         incoming().createdAt is timestamp &&
+                         incoming().createdAt <= request.time &&
+                         incoming().keys().hasAll(['followerId', 'createdAt']) &&
+                         incoming().keys().hasOnly(['followerId', 'createdAt']);
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() &&
+                         isValidId(userId) &&
+                         isValidId(followerId) &&
+                         request.auth.uid == followerId &&
+                         userId != followerId;
+      }
 
       // Server-Authoritative Store Wallet & Owned Decorations
       match /wallet/{walletId} {
@@ -644,7 +698,7 @@ service cloud.firestore {
                          'authorId', 'authorName', 'authorHandle', 'isAuthorVerified', 'authorVerifiedTier',
                          'caption', 'videoUri', 'mediaId', 'mediaMimeType', 'mediaSizeBytes', 'mediaChunkCount',
                          'audioTitle', 'likesCount', 'likedBy', 'commentsCount',
-                         'sharesCount', 'savedBy', 'tags', 'gradientTheme', 'createdAt'
+                         'sharesCount', 'savedBy', 'reactions', 'tags', 'gradientTheme', 'createdAt'
                        ]);
 
       allow update: if isSignedIn() &&
@@ -654,11 +708,12 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        (
                          (existing().authorId == request.auth.uid &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'audioTitle'])) ||
+                          incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'audioTitle', 'tags'])) ||
                          incoming().diff(existing()).affectedKeys().hasOnly(['likedBy', 'likesCount']) ||
                          incoming().diff(existing()).affectedKeys().hasOnly(['savedBy']) ||
                          incoming().diff(existing()).affectedKeys().hasOnly(['sharesCount']) ||
-                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount'])
+                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])
                        );
 
       allow delete: if isSignedIn() && isValidId(fluxId) && existing().authorId == request.auth.uid;

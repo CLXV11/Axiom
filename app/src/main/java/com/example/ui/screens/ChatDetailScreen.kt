@@ -521,6 +521,8 @@ fun ChatDetailScreen(
     topBar = {
       TelegramChatTopBar(
         title = convoTitle,
+        titleFontId = if (isAiChat || isGroup) "default" else peerUser?.nameFontId ?: "default",
+        titleThemeId = if (isAiChat || isGroup) "default" else peerUser?.nameThemeId ?: "default",
         subtitle = headerSubtitle,
         avatarUrl = peerUser?.avatarUrl,
         frameStyleKey = peerUser?.equippedFrame,
@@ -713,6 +715,16 @@ fun ChatDetailScreen(
                   isSearchHighlighted = isSearchMatched,
                   senderAvatarUrl = senderProfile?.avatarUrl,
                   senderFrameKey = senderProfile?.equippedFrame,
+                  senderFontId = when {
+                    isBotMsg -> "default"
+                    isMe -> currentUserProfile?.nameFontId ?: "default"
+                    else -> senderProfile?.nameFontId ?: "default"
+                  },
+                  senderThemeId = when {
+                    isBotMsg -> "default"
+                    isMe -> currentUserProfile?.nameThemeId ?: "default"
+                    else -> senderProfile?.nameThemeId ?: "default"
+                  },
                   chatMediaRepository = chatMediaRepository,
                   isInlineVideoPlaying = activeInlineVideoMsgId == msg.id,
                   onInspectSender = {

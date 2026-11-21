@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.util.LocalAppStrings
@@ -151,10 +150,9 @@ fun IosFloatingReactionBar(
             .testTag("quick_reaction_$emoji"),
           contentAlignment = Alignment.Center
         ) {
-          Text(
-            text = emoji,
-            fontSize = 20.sp,
-            textAlign = TextAlign.Center
+          GlossyAppleEmoji(
+            emoji = emoji,
+            size = 24.dp
           )
         }
       }
@@ -232,9 +230,9 @@ fun ReactionChipsRow(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-          Text(
-            text = emoji,
-            fontSize = 14.sp
+          GlossyAppleEmoji(
+            emoji = emoji,
+            size = 16.dp
           )
           Text(
             text = uids.size.toString(),
@@ -368,10 +366,9 @@ fun WeirdEmojiPickerBottomSheet(
               .testTag("emoji_grid_item_$emoji"),
             contentAlignment = Alignment.Center
           ) {
-            Text(
-              text = emoji,
-              fontSize = 26.sp,
-              textAlign = TextAlign.Center
+            GlossyAppleEmoji(
+              emoji = emoji,
+              size = 30.dp
             )
           }
         }

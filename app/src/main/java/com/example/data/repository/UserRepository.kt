@@ -38,6 +38,8 @@ class UserRepository(
   private val localUserProfileFlow = MutableStateFlow<UserProfile?>(null)
   private var cachedFirestoreDirectoryUsers: List<UserProfile> = emptyList()
 
+  private val localFollowingIds = MutableStateFlow<Set<String>>(emptySet())
+
   init {
     initLocalProfile()
   }
@@ -52,6 +54,8 @@ class UserRepository(
     val isVerified = prefsManager?.guestIsVerified ?: false
     val verifiedTier = prefsManager?.guestVerifiedTier ?: "BLUE"
     val avatar = prefsManager?.guestAvatarUrl ?: ""
+    val nameFont = prefsManager?.guestNameFontId ?: "default"
+    val nameTheme = prefsManager?.guestNameThemeId ?: "default"
 
     localUserProfileFlow.value = UserProfile(
       id = uid,
@@ -61,6 +65,8 @@ class UserRepository(
       avatarUrl = avatar,
       isVerified = isVerified,
       verifiedTier = verifiedTier,
+      nameFontId = nameFont,
+      nameThemeId = nameTheme,
       quietMode = quiet,
       readReceiptsEnabled = readReceipts
     )
@@ -68,6 +74,11 @@ class UserRepository(
 
   companion object {
     val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
+    val VALID_NAME_FONTS = listOf("default", "cairo", "amiri", "tajawal", "playfair", "pacifico", "outfit")
+    val VALID_NAME_THEMES = listOf(
+      "default", "royal_gold", "cyber_neon", "velvet_rose",
+      "emerald_aurora", "crimson_ember", "arctic_ice"
+    )
   }
 
   fun isSignedIn(): Boolean = auth.currentUser != null
@@ -147,14 +158,19 @@ class UserRepository(
       "BLUE"
     }
 
-    val normalizedProfile = profile.copy(
+    val validFontId = if (profile.nameFontId in VALID_NAME_FONTS) profile.nameFontId else "default"
+    val validThemeId = if (profile.nameThemeId in VALID_NAME_THEMES) profile.nameThemeId else "default"
+
+    var normalizedProfile = profile.copy(
       id = uid,
       displayName = cleanName,
       handle = cleanHandle,
       bio = profile.bio.trim().take(300),
       profession = profile.profession.trim().take(80),
       professionalOrg = profile.professionalOrg.trim().take(100),
-      verifiedTier = validTier
+      verifiedTier = validTier,
+      nameFontId = validFontId,
+      nameThemeId = validThemeId
     )
 
     if (auth.currentUser != null) {
@@ -162,6 +178,7 @@ class UserRepository(
       return try {
         val existing = docRef.get().await()
         if (!existing.exists()) {
+          normalizedProfile = normalizedProfile.copy(followersCount = 0L, followingCount = 0L)
           val payload = hashMapOf<String, Any?>(
             "displayName" to normalizedProfile.displayName,
             "handle" to normalizedProfile.handle,
@@ -176,6 +193,10 @@ class UserRepository(
             "equippedFrame" to normalizedProfile.equippedFrame,
             "equippedNameplate" to normalizedProfile.equippedNameplate,
             "equippedWall" to normalizedProfile.equippedWall,
+            "nameFontId" to normalizedProfile.nameFontId,
+            "nameThemeId" to normalizedProfile.nameThemeId,
+            "followersCount" to 0L,
+            "followingCount" to 0L,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -184,6 +205,12 @@ class UserRepository(
           )
           docRef.set(payload).await()
         } else {
+          val existingFollowers = (existing.getLong("followersCount") ?: normalizedProfile.followersCount).coerceAtLeast(0L)
+          val existingFollowing = (existing.getLong("followingCount") ?: normalizedProfile.followingCount).coerceAtLeast(0L)
+          normalizedProfile = normalizedProfile.copy(
+            followersCount = existingFollowers,
+            followingCount = existingFollowing
+          )
           val payload = hashMapOf<String, Any?>(
             "displayName" to normalizedProfile.displayName,
             "handle" to normalizedProfile.handle,
@@ -197,6 +224,8 @@ class UserRepository(
             "equippedFrame" to normalizedProfile.equippedFrame,
             "equippedNameplate" to normalizedProfile.equippedNameplate,
             "equippedWall" to normalizedProfile.equippedWall,
+            "nameFontId" to normalizedProfile.nameFontId,
+            "nameThemeId" to normalizedProfile.nameThemeId,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -223,6 +252,8 @@ class UserRepository(
       guestIsVerified = normalizedProfile.isVerified
       guestVerifiedTier = normalizedProfile.verifiedTier
       guestAvatarUrl = normalizedProfile.avatarUrl
+      guestNameFontId = normalizedProfile.nameFontId
+      guestNameThemeId = normalizedProfile.nameThemeId
     }
     return Result.success(Unit)
   }
@@ -271,6 +302,127 @@ class UserRepository(
     val uid = requireUserId()
     val current = loadCurrentOrFallbackProfile(uid)
     return createOrUpdateProfile(current.copy(quietMode = quiet))
+  }
+
+  suspend fun updateDisplayNameStyle(fontId: String, themeId: String): Result<Unit> {
+    val uid = requireUserId()
+    val validFont = if (fontId in VALID_NAME_FONTS) fontId else "default"
+    val validTheme = if (themeId in VALID_NAME_THEMES) themeId else "default"
+    val current = loadCurrentOrFallbackProfile(uid)
+    return createOrUpdateProfile(
+      current.copy(
+        nameFontId = validFont,
+        nameThemeId = validTheme
+      )
+    )
+  }
+
+  fun observeIsFollowing(currentUid: String, targetUserId: String): Flow<Boolean> {
+    if (currentUid.isBlank() || targetUserId.isBlank() || currentUid == targetUserId) {
+      return flowOf(false)
+    }
+    if (auth.currentUser != null) {
+      val ref = db.collection("users")
+        .document(targetUserId)
+        .collection("followers")
+        .document(currentUid)
+      return ref.snapshots()
+        .map { it.exists() }
+        .catch { emit(localFollowingIds.value.contains(targetUserId)) }
+    }
+    return localFollowingIds.map { it.contains(targetUserId) }
+  }
+
+  suspend fun toggleFollow(targetUserId: String): Result<Boolean> {
+    val uid = requireUserId()
+    if (targetUserId.isBlank() || uid == targetUserId) {
+      return Result.failure(IllegalArgumentException("Cannot follow your own account"))
+    }
+    if (auth.currentUser != null) {
+      val targetRef = db.collection("users").document(targetUserId)
+      val selfRef = db.collection("users").document(uid)
+      val followerRef = targetRef.collection("followers").document(uid)
+      return try {
+        val nowFollowing = db.runTransaction { transaction ->
+          val followerSnap = transaction.get(followerRef)
+          val targetSnap = transaction.get(targetRef)
+          val selfSnap = transaction.get(selfRef)
+
+          val alreadyFollowing = followerSnap.exists()
+          val currentFollowers = (targetSnap.getLong("followersCount") ?: 0L).coerceAtLeast(0L)
+          val currentFollowing = (selfSnap.getLong("followingCount") ?: 0L).coerceAtLeast(0L)
+
+          if (alreadyFollowing) {
+            transaction.delete(followerRef)
+            if (targetSnap.exists()) {
+              transaction.update(
+                targetRef,
+                mapOf(
+                  "followersCount" to (currentFollowers - 1L).coerceAtLeast(0L),
+                  "updatedAt" to FieldValue.serverTimestamp()
+                )
+              )
+            }
+            if (selfSnap.exists()) {
+              transaction.update(
+                selfRef,
+                mapOf(
+                  "followingCount" to (currentFollowing - 1L).coerceAtLeast(0L),
+                  "updatedAt" to FieldValue.serverTimestamp()
+                )
+              )
+            }
+            false
+          } else {
+            transaction.set(
+              followerRef,
+              mapOf(
+                "followerId" to uid,
+                "createdAt" to FieldValue.serverTimestamp()
+              )
+            )
+            if (targetSnap.exists()) {
+              transaction.update(
+                targetRef,
+                mapOf(
+                  "followersCount" to (currentFollowers + 1L),
+                  "updatedAt" to FieldValue.serverTimestamp()
+                )
+              )
+            }
+            if (selfSnap.exists()) {
+              transaction.update(
+                selfRef,
+                mapOf(
+                  "followingCount" to (currentFollowing + 1L),
+                  "updatedAt" to FieldValue.serverTimestamp()
+                )
+              )
+            }
+            true
+          }
+        }.await()
+
+        val currentSelf = localUserProfileFlow.value ?: loadCurrentOrFallbackProfile(uid)
+        val adjustedSelf = currentSelf.copy(
+          followingCount = (currentSelf.followingCount + if (nowFollowing) 1L else -1L).coerceAtLeast(0L)
+        )
+        localUserProfileFlow.value = adjustedSelf
+        prefsManager?.saveCachedProfile(adjustedSelf)
+        Result.success(nowFollowing)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.WRITE, followerRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    val currentSet = localFollowingIds.value
+    val nowFollowing = !currentSet.contains(targetUserId)
+    localFollowingIds.value = if (nowFollowing) currentSet + targetUserId else currentSet - targetUserId
+    localUserProfileFlow.value = localUserProfileFlow.value?.let {
+      it.copy(followingCount = (it.followingCount + if (nowFollowing) 1L else -1L).coerceAtLeast(0L))
+    }
+    return Result.success(nowFollowing)
   }
 
   suspend fun updateLastSeen() {

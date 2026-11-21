@@ -168,7 +168,7 @@ fun AuthScreen(
   startInProfileSetup: Boolean = false,
   isCheckingAutoSignIn: Boolean = false,
   currentPreset: AppThemePreset = AppThemePreset.DISCORD_DARK,
-  currentAmoled: Boolean = false,
+  currentAmoled: Boolean = true,
   @Suppress("UNUSED_PARAMETER") currentAccent: AccentColorChoice = AccentColorChoice.DEFAULT,
   @Suppress("UNUSED_PARAMETER") onThemeChanged: ((AppThemePreset, Boolean, AccentColorChoice) -> Unit)? = null,
   onLanguageToggle: (() -> Unit)? = null,

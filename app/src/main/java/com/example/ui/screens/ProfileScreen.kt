@@ -30,10 +30,14 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FontDownload
 import androidx.compose.material.icons.outlined.MonetizationOn
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Tune
@@ -44,6 +48,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +64,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,14 +82,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.FluxVideo
+import com.example.data.model.Post
 import com.example.data.model.UserProfile
+import com.example.data.repository.FluxRepository
+import com.example.data.repository.PostRepository
 import com.example.data.repository.StoreRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AchievementWallView
 import com.example.ui.components.AvatarPickerSheet
 import com.example.ui.components.AvatarView
 import com.example.ui.components.KoraTopBar
+import com.example.ui.components.NameStyleCustomizerSheet
 import com.example.ui.components.RoleNameplateView
+import com.example.ui.components.StyledDisplayName
 import com.example.ui.components.VerificationTier
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.theme.StatusQuiet
@@ -90,6 +103,7 @@ import com.example.ui.util.AppLanguage
 import com.example.ui.util.LocalAppLanguage
 import com.example.ui.util.LocalAppStrings
 import com.example.ui.util.formatHandleForDisplay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -97,6 +111,8 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(
   userRepository: UserRepository,
   storeRepository: StoreRepository,
+  postRepository: PostRepository? = null,
+  fluxRepository: FluxRepository? = null,
   onOpenStore: () -> Unit,
   onLanguageToggle: () -> Unit,
   onOpenSettings: (() -> Unit)? = null,
@@ -121,8 +137,29 @@ fun ProfileScreen(
   val equippedWall = storeWall ?: profile?.equippedWall
   val coins by storeRepository.coinBalance.collectAsState()
 
+  val allFluxVideos by remember(fluxRepository) {
+    fluxRepository?.observeVideos() ?: flowOf(emptyList())
+  }.collectAsState(initial = emptyList())
+  val allPosts by remember(postRepository) {
+    postRepository?.observePosts("all") ?: flowOf(emptyList())
+  }.collectAsState(initial = emptyList())
+
+  val myFluxVideos = remember(allFluxVideos, uid) { allFluxVideos.filter { it.authorId == uid } }
+  val myPosts = remember(allPosts, uid) { allPosts.filter { it.authorId == uid } }
+
   var showEditDialog by remember { mutableStateOf(false) }
   var showAvatarPickerSheet by remember { mutableStateOf(false) }
+  var showNameStyleSheet by remember { mutableStateOf(false) }
+  var myContentTabIndex by remember { mutableIntStateOf(0) }
+  var editingFlux by remember { mutableStateOf<FluxVideo?>(null) }
+  var editFluxCaption by remember { mutableStateOf("") }
+  var editFluxAudio by remember { mutableStateOf("") }
+  var deletingFlux by remember { mutableStateOf<FluxVideo?>(null) }
+  var editingPost by remember { mutableStateOf<Post?>(null) }
+  var editPostContent by remember { mutableStateOf("") }
+  var editPostAudience by remember { mutableStateOf("public") }
+  var deletingPost by remember { mutableStateOf<Post?>(null) }
+
   var editDisplayName by remember { mutableStateOf("") }
   var editHandle by remember { mutableStateOf("") }
   var editBio by remember { mutableStateOf("") }
@@ -285,17 +322,18 @@ fun ProfileScreen(
                 .padding(horizontal = 18.dp, vertical = 14.dp),
               horizontalAlignment = Alignment.CenterHorizontally
             ) {
-              // Name + Single Balanced Verification Badge
+              // Name (with Custom Display Name Font & Theme ONLY) + Single Balanced Verification Badge
               Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier.fillMaxWidth()
               ) {
-                Text(
-                  text = profile?.displayName?.takeIf { it.isNotBlank() } ?: strings.loading,
-                  style = MaterialTheme.typography.titleLarge,
-                  fontWeight = FontWeight.Bold,
-                  color = colors.onSurface,
+                StyledDisplayName(
+                  name = profile?.displayName?.takeIf { it.isNotBlank() } ?: strings.loading,
+                  nameFontId = profile?.nameFontId,
+                  nameThemeId = profile?.nameThemeId,
+                  style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                  fallbackColor = colors.onSurface,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis,
                   modifier = Modifier.weight(1f, fill = false)
@@ -319,6 +357,73 @@ fun ProfileScreen(
                 color = colors.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
               )
+
+              Spacer(modifier = Modifier.height(10.dp))
+
+              // Followers & Following Metrics Row
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = colors.background,
+                  border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("profile_followers_stat")
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text(
+                      text = (profile?.followersCount ?: 0L).toString(),
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.ExtraBold,
+                      color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                      text = strings.followersLabel,
+                      style = MaterialTheme.typography.labelMedium,
+                      color = colors.onSurfaceVariant,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  }
+                }
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = colors.background,
+                  border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
+                  modifier = Modifier
+                    .weight(1f)
+                    .testTag("profile_following_stat")
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Text(
+                      text = (profile?.followingCount ?: 0L).toString(),
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.ExtraBold,
+                      color = colors.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                      text = strings.followingLabel,
+                      style = MaterialTheme.typography.labelMedium,
+                      color = colors.onSurfaceVariant,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  }
+                }
+              }
 
               // Single Optional Role/Specialty Pill (never repeats displayName)
               val roleLabel = profile?.profession?.takeIf { it.isNotBlank() }
@@ -430,6 +535,311 @@ fun ProfileScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                   )
+                }
+              }
+
+              Spacer(modifier = Modifier.height(10.dp))
+
+              // Display Name Font & Theme Customizer Button (affects display name only)
+              OutlinedButton(
+                onClick = { showNameStyleSheet = true },
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.45f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                  containerColor = colors.primary.copy(alpha = 0.12f),
+                  contentColor = colors.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .defaultMinSize(minHeight = 46.dp)
+                  .testTag("customize_name_style_button")
+              ) {
+                Icon(Icons.Outlined.FontDownload, contentDescription = null, modifier = Modifier.size(17.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                  text = strings.customizeNameStyleBtn,
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.Bold,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+            }
+          }
+        }
+
+        // 1b. Author's Published Flux Clips & Feed Posts Management Card
+        if (fluxRepository != null || postRepository != null) {
+          Card(
+            shape = cardShape,
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = cardBorder,
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("profile_my_content_card")
+          ) {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Text(
+                  text = strings.myContentTitle,
+                  style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                  fontWeight = FontWeight.Bold,
+                  color = colors.onSurface
+                )
+                Text(
+                  text = "${myFluxVideos.size + myPosts.size}",
+                  style = MaterialTheme.typography.labelMedium,
+                  color = colors.primary,
+                  fontWeight = FontWeight.Bold
+                )
+              }
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                FilterChip(
+                  selected = myContentTabIndex == 0,
+                  onClick = { myContentTabIndex = 0 },
+                  leadingIcon = {
+                    Icon(
+                      imageVector = Icons.Outlined.Movie,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  },
+                  label = {
+                    Text(
+                      text = "${strings.myContentFluxTab} (${myFluxVideos.size})",
+                      fontWeight = if (myContentTabIndex == 0) FontWeight.Bold else FontWeight.Medium
+                    )
+                  },
+                  colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = colors.primary.copy(alpha = 0.16f),
+                    selectedLabelColor = colors.primary,
+                    selectedLeadingIconColor = colors.primary
+                  ),
+                  modifier = Modifier.testTag("profile_my_flux_tab")
+                )
+                FilterChip(
+                  selected = myContentTabIndex == 1,
+                  onClick = { myContentTabIndex = 1 },
+                  leadingIcon = {
+                    Icon(
+                      imageVector = Icons.Outlined.PostAdd,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp)
+                    )
+                  },
+                  label = {
+                    Text(
+                      text = "${strings.myContentPostsTab} (${myPosts.size})",
+                      fontWeight = if (myContentTabIndex == 1) FontWeight.Bold else FontWeight.Medium
+                    )
+                  },
+                  colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = colors.primary.copy(alpha = 0.16f),
+                    selectedLabelColor = colors.primary,
+                    selectedLeadingIconColor = colors.primary
+                  ),
+                  modifier = Modifier.testTag("profile_my_posts_tab")
+                )
+              }
+
+              if (myContentTabIndex == 0) {
+                if (myFluxVideos.isEmpty()) {
+                  Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = colors.background,
+                    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                  ) {
+                    Text(
+                      text = strings.noMyFluxYet,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = colors.onSurfaceVariant,
+                      textAlign = TextAlign.Center,
+                      modifier = Modifier.padding(16.dp)
+                    )
+                  }
+                } else {
+                  myFluxVideos.forEach { clip ->
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = colors.background,
+                      border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_flux_item_${clip.id}")
+                    ) {
+                      Row(
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                      ) {
+                        Box(
+                          modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(colors.primary.copy(alpha = 0.14f)),
+                          contentAlignment = Alignment.Center
+                        ) {
+                          Icon(
+                            imageVector = Icons.Outlined.Movie,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp)
+                          )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                          Text(
+                            text = clip.caption.ifBlank { "#flux" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                          )
+                          Text(
+                            text = "${clip.audioTitle} • ❤️ ${clip.likesCount} • 💬 ${clip.commentsCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                          )
+                        }
+                        IconButton(
+                          onClick = {
+                            editFluxCaption = clip.caption
+                            editFluxAudio = clip.audioTitle
+                            editingFlux = clip
+                          },
+                          modifier = Modifier
+                            .size(40.dp)
+                            .testTag("profile_edit_flux_${clip.id}")
+                        ) {
+                          Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = strings.edit,
+                            tint = colors.primary,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                        IconButton(
+                          onClick = { deletingFlux = clip },
+                          modifier = Modifier
+                            .size(40.dp)
+                            .testTag("profile_delete_flux_${clip.id}")
+                        ) {
+                          Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = strings.delete,
+                            tint = colors.error,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                      }
+                    }
+                  }
+                }
+              } else {
+                if (myPosts.isEmpty()) {
+                  Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = colors.background,
+                    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                  ) {
+                    Text(
+                      text = strings.noMyPostsYet,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = colors.onSurfaceVariant,
+                      textAlign = TextAlign.Center,
+                      modifier = Modifier.padding(16.dp)
+                    )
+                  }
+                } else {
+                  myPosts.forEach { post ->
+                    Surface(
+                      shape = RoundedCornerShape(12.dp),
+                      color = colors.background,
+                      border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_post_item_${post.id}")
+                    ) {
+                      Row(
+                        modifier = Modifier
+                          .fillMaxWidth()
+                          .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                      ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                          Text(
+                            text = post.content,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                          )
+                          Spacer(modifier = Modifier.height(2.dp))
+                          val audLabel = if (post.audience == "circles") strings.audienceCircles else strings.audiencePublic
+                          Text(
+                            text = "$audLabel • ❤️ ${post.likesCount} • 💬 ${post.commentsCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                          )
+                        }
+                        IconButton(
+                          onClick = {
+                            editPostContent = post.content
+                            editPostAudience = post.audience
+                            editingPost = post
+                          },
+                          modifier = Modifier
+                            .size(40.dp)
+                            .testTag("profile_edit_post_${post.id}")
+                        ) {
+                          Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = strings.edit,
+                            tint = colors.primary,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                        IconButton(
+                          onClick = { deletingPost = post },
+                          modifier = Modifier
+                            .size(40.dp)
+                            .testTag("profile_delete_post_${post.id}")
+                        ) {
+                          Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = strings.delete,
+                            tint = colors.error,
+                            modifier = Modifier.size(18.dp)
+                          )
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -975,6 +1385,205 @@ fun ProfileScreen(
           } else {
             Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
           }
+        }
+      }
+    )
+  }
+
+  // Display Name Style & Font Sheet (applies strictly to display name)
+  if (showNameStyleSheet) {
+    NameStyleCustomizerSheet(
+      displayName = profile?.displayName ?: strings.appName,
+      handle = formatHandleForDisplay(profile?.handle),
+      initialFontId = profile?.nameFontId ?: "default",
+      initialThemeId = profile?.nameThemeId ?: "default",
+      onDismiss = { showNameStyleSheet = false },
+      onSave = { fontId, themeId ->
+        coroutineScope.launch {
+          val res = userRepository.updateDisplayNameStyle(fontId, themeId)
+          if (res.isSuccess) {
+            showNameStyleSheet = false
+            Toast.makeText(context, strings.profileUpdated, Toast.LENGTH_SHORT).show()
+          } else {
+            Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+          }
+        }
+      }
+    )
+  }
+
+  // Edit Flux Clip Dialog
+  editingFlux?.let { clip ->
+    AlertDialog(
+      onDismissRequest = { editingFlux = null },
+      containerColor = colors.surface,
+      title = { Text(strings.editFluxTitle) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          OutlinedTextField(
+            value = editFluxCaption,
+            onValueChange = { editFluxCaption = it },
+            label = { Text(strings.fluxCaptionPlaceholder) },
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth().testTag("edit_flux_caption_input")
+          )
+          OutlinedTextField(
+            value = editFluxAudio,
+            onValueChange = { editFluxAudio = it },
+            label = { Text(strings.editFluxAudioLabel) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("edit_flux_audio_input")
+          )
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            val repo = fluxRepository ?: return@Button
+            coroutineScope.launch {
+              val res = repo.updateFluxVideo(clip.id, editFluxCaption, editFluxAudio)
+              if (res.isSuccess) {
+                editingFlux = null
+                Toast.makeText(context, strings.contentUpdatedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+              }
+            }
+          },
+          modifier = Modifier.testTag("save_edit_flux_button")
+        ) {
+          Text(strings.confirm)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { editingFlux = null }) {
+          Text(strings.cancel)
+        }
+      }
+    )
+  }
+
+  // Delete Flux Confirmation Dialog
+  deletingFlux?.let { clip ->
+    AlertDialog(
+      onDismissRequest = { deletingFlux = null },
+      containerColor = colors.surface,
+      title = { Text(strings.deleteContentTitle) },
+      text = { Text(strings.deleteContentConfirm) },
+      confirmButton = {
+        Button(
+          onClick = {
+            val repo = fluxRepository ?: return@Button
+            coroutineScope.launch {
+              val res = repo.deleteFluxVideo(clip.id)
+              if (res.isSuccess) {
+                deletingFlux = null
+                Toast.makeText(context, strings.contentDeletedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+              }
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+          modifier = Modifier.testTag("confirm_delete_flux_button")
+        ) {
+          Text(strings.delete)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { deletingFlux = null }) {
+          Text(strings.cancel)
+        }
+      }
+    )
+  }
+
+  // Edit Post Dialog
+  editingPost?.let { post ->
+    AlertDialog(
+      onDismissRequest = { editingPost = null },
+      containerColor = colors.surface,
+      title = { Text(strings.editPostTitle) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          OutlinedTextField(
+            value = editPostContent,
+            onValueChange = { editPostContent = it },
+            label = { Text(strings.whatsOnYourMind) },
+            maxLines = 5,
+            modifier = Modifier.fillMaxWidth().testTag("edit_post_content_input")
+          )
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+              selected = editPostAudience == "public",
+              onClick = { editPostAudience = "public" },
+              label = { Text(strings.audiencePublic) }
+            )
+            FilterChip(
+              selected = editPostAudience == "circles",
+              onClick = { editPostAudience = "circles" },
+              label = { Text(strings.audienceCircles) }
+            )
+          }
+        }
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            val repo = postRepository ?: return@Button
+            coroutineScope.launch {
+              val res = repo.updatePost(post.id, editPostContent, editPostAudience)
+              if (res.isSuccess) {
+                editingPost = null
+                Toast.makeText(context, strings.contentUpdatedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+              }
+            }
+          },
+          modifier = Modifier.testTag("save_edit_post_button")
+        ) {
+          Text(strings.confirm)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { editingPost = null }) {
+          Text(strings.cancel)
+        }
+      }
+    )
+  }
+
+  // Delete Post Confirmation Dialog
+  deletingPost?.let { post ->
+    AlertDialog(
+      onDismissRequest = { deletingPost = null },
+      containerColor = colors.surface,
+      title = { Text(strings.deleteContentTitle) },
+      text = { Text(strings.deleteContentConfirm) },
+      confirmButton = {
+        Button(
+          onClick = {
+            val repo = postRepository ?: return@Button
+            coroutineScope.launch {
+              val res = repo.deletePost(post.id)
+              if (res.isSuccess) {
+                deletingPost = null
+                Toast.makeText(context, strings.contentDeletedToast, Toast.LENGTH_SHORT).show()
+              } else {
+                Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+              }
+            }
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = colors.error),
+          modifier = Modifier.testTag("confirm_delete_post_button")
+        ) {
+          Text(strings.delete)
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { deletingPost = null }) {
+          Text(strings.cancel)
         }
       }
     )

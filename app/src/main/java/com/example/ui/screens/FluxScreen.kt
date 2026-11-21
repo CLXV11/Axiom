@@ -57,22 +57,29 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.AddReaction
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,6 +92,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -126,7 +134,12 @@ import com.example.data.repository.ChatMediaRepository
 import com.example.data.repository.FluxRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
+import com.example.ui.components.GlossyAppleEmoji
+import com.example.ui.components.IosFloatingReactionBar
+import com.example.ui.components.ReactionChipsRow
+import com.example.ui.components.StyledDisplayName
 import com.example.ui.components.VerifiedBadge
+import com.example.ui.components.WeirdEmojiPickerBottomSheet
 import com.example.ui.theme.KoraTheme
 import com.example.ui.util.LocalAppStrings
 import com.example.ui.util.formatHandleForDisplay
@@ -206,8 +219,15 @@ fun FluxScreen(
 
   var showCreateSheet by remember { mutableStateOf(false) }
   var activeCommentsFlux by remember { mutableStateOf<FluxVideo?>(null) }
+  var reactionTargetFlux by remember { mutableStateOf<FluxVideo?>(null) }
+  var editingFlux by remember { mutableStateOf<FluxVideo?>(null) }
+  var deletingFlux by remember { mutableStateOf<FluxVideo?>(null) }
   var isAudioMuted by remember(initialMuted) { mutableStateOf(initialMuted) }
   var isRefreshingFeed by remember { mutableStateOf(false) }
+
+  val isDarkBackdrop = colors.background.red < 0.2f
+  val immersiveBackdrop = if (isDarkBackdrop) colors.background else Color(0xFF1E1F22)
+  val overlayPillColor = if (isDarkBackdrop) colors.surface else Color(0xFF1E1F22)
 
   LaunchedEffect(Unit) {
     fluxRepository.refreshVideosFromServer()
@@ -216,10 +236,10 @@ fun FluxScreen(
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color(0xFF1E1F22))
+      .background(immersiveBackdrop)
   ) {
     if (filteredVideos.isEmpty()) {
-      // Calm Discord Charcoal Empty State
+      // Calm Discord / AMOLED Empty State
       Column(
         modifier = Modifier
           .fillMaxSize()
@@ -231,8 +251,8 @@ fun FluxScreen(
           modifier = Modifier
             .size(72.dp)
             .clip(CircleShape)
-            .background(Color(0xFF313338))
-            .border(1.dp, Color(0xFF3F4147), CircleShape),
+            .background(if (isDarkBackdrop) colors.surface else Color(0xFF313338))
+            .border(1.dp, colors.outlineVariant.copy(alpha = 0.7f), CircleShape),
           contentAlignment = Alignment.Center
         ) {
           Icon(
@@ -328,6 +348,8 @@ fun FluxScreen(
             authorHandle = authorProfile?.handle?.takeIf { it.isNotBlank() } ?: liveVideo.authorHandle
           ),
           authorAvatarUrl = authorProfile?.avatarUrl,
+          authorNameFontId = authorProfile?.nameFontId ?: "default",
+          authorNameThemeId = authorProfile?.nameThemeId ?: "default",
           fluxRepository = fluxRepository,
           isCurrentPage = pagerState.currentPage == pageIndex,
           isMuted = isAudioMuted,
@@ -345,6 +367,21 @@ fun FluxScreen(
               }
             }
           },
+          onToggleReaction = { emoji ->
+            coroutineScope.launch {
+              val res = fluxRepository.toggleFluxReaction(liveVideo.id, emoji)
+              if (res.isFailure) {
+                Toast.makeText(
+                  context,
+                  res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          },
+          onOpenReactionSheet = { reactionTargetFlux = liveVideo },
+          onEditVideo = { editingFlux = liveVideo },
+          onDeleteVideo = { deletingFlux = liveVideo },
           onToggleSave = {
             coroutineScope.launch {
               val res = fluxRepository.toggleSave(liveVideo.id, currentUid)
@@ -408,7 +445,7 @@ fun FluxScreen(
       val savedCount = videos.count { it.savedBy.contains(currentUid) }
       Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xFF1E1F22).copy(alpha = 0.76f),
+        color = overlayPillColor.copy(alpha = 0.78f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
       ) {
         Row(
@@ -453,7 +490,7 @@ fun FluxScreen(
             modifier = Modifier
               .size(38.dp)
               .clip(CircleShape)
-              .background(Color(0xFF1E1F22).copy(alpha = 0.76f))
+              .background(overlayPillColor.copy(alpha = 0.78f))
               .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center
           ) {
@@ -482,7 +519,7 @@ fun FluxScreen(
             modifier = Modifier
               .size(38.dp)
               .clip(CircleShape)
-              .background(Color(0xFF1E1F22).copy(alpha = 0.76f))
+              .background(overlayPillColor.copy(alpha = 0.78f))
               .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center
           ) {
@@ -555,6 +592,149 @@ fun FluxScreen(
         onDismiss = { activeCommentsFlux = null }
       )
     }
+
+    // Full Glossy Emoji Picker Sheet for Flux
+    val liveReactionTarget = reactionTargetFlux?.let { target ->
+      videos.firstOrNull { it.id == target.id } ?: target
+    }
+    if (liveReactionTarget != null) {
+      val selectedEmojis = remember(liveReactionTarget.reactions, currentUid) {
+        liveReactionTarget.reactions.filterValues { it.contains(currentUid) }.keys.toSet()
+      }
+      WeirdEmojiPickerBottomSheet(
+        selectedEmojis = selectedEmojis,
+        onEmojiSelected = { emoji ->
+          reactionTargetFlux = null
+          coroutineScope.launch {
+            val res = fluxRepository.toggleFluxReaction(liveReactionTarget.id, emoji)
+            if (res.isFailure) {
+              Toast.makeText(
+                context,
+                res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                Toast.LENGTH_SHORT
+              ).show()
+            }
+          }
+        },
+        onDismiss = { reactionTargetFlux = null }
+      )
+    }
+
+    // Author Edit Flux Caption / Audio Dialog
+    editingFlux?.let { target ->
+      var captionDraft by remember(target.id) { mutableStateOf(target.caption) }
+      var audioDraft by remember(target.id) { mutableStateOf(target.audioTitle) }
+      var isSavingEdit by remember(target.id) { mutableStateOf(false) }
+
+      AlertDialog(
+        onDismissRequest = { if (!isSavingEdit) editingFlux = null },
+        title = { Text(strings.editFluxTitle, fontWeight = FontWeight.Bold) },
+        text = {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+              value = captionDraft,
+              onValueChange = { captionDraft = it },
+              label = { Text(strings.fluxCaptionPlaceholder) },
+              maxLines = 4,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("edit_flux_caption_input")
+            )
+            OutlinedTextField(
+              value = audioDraft,
+              onValueChange = { audioDraft = it },
+              label = { Text(strings.editFluxAudioLabel) },
+              singleLine = true,
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("edit_flux_audio_input")
+            )
+          }
+        },
+        confirmButton = {
+          Button(
+            enabled = captionDraft.isNotBlank() && !isSavingEdit,
+            onClick = {
+              isSavingEdit = true
+              coroutineScope.launch {
+                val res = fluxRepository.updateFluxVideo(
+                  fluxId = target.id,
+                  caption = captionDraft,
+                  audioTitle = audioDraft
+                )
+                isSavingEdit = false
+                if (res.isSuccess) {
+                  editingFlux = null
+                  Toast.makeText(context, strings.contentUpdatedToast, Toast.LENGTH_SHORT).show()
+                } else {
+                  Toast.makeText(
+                    context,
+                    res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                    Toast.LENGTH_SHORT
+                  ).show()
+                }
+              }
+            }
+          ) {
+            Text(strings.confirm)
+          }
+        },
+        dismissButton = {
+          TextButton(
+            enabled = !isSavingEdit,
+            onClick = { editingFlux = null }
+          ) {
+            Text(strings.cancel)
+          }
+        }
+      )
+    }
+
+    // Author Delete Flux Confirmation Dialog
+    deletingFlux?.let { target ->
+      var isDeleting by remember(target.id) { mutableStateOf(false) }
+      AlertDialog(
+        onDismissRequest = { if (!isDeleting) deletingFlux = null },
+        title = { Text(strings.deleteContentTitle, fontWeight = FontWeight.Bold) },
+        text = { Text(strings.deleteContentConfirm) },
+        confirmButton = {
+          Button(
+            enabled = !isDeleting,
+            colors = ButtonDefaults.buttonColors(
+              containerColor = colors.error,
+              contentColor = colors.onError
+            ),
+            onClick = {
+              isDeleting = true
+              coroutineScope.launch {
+                val res = fluxRepository.deleteFluxVideo(target.id)
+                isDeleting = false
+                if (res.isSuccess) {
+                  deletingFlux = null
+                  Toast.makeText(context, strings.contentDeletedToast, Toast.LENGTH_SHORT).show()
+                } else {
+                  Toast.makeText(
+                    context,
+                    res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                    Toast.LENGTH_SHORT
+                  ).show()
+                }
+              }
+            }
+          ) {
+            Text(strings.delete)
+          }
+        },
+        dismissButton = {
+          TextButton(
+            enabled = !isDeleting,
+            onClick = { deletingFlux = null }
+          ) {
+            Text(strings.cancel)
+          }
+        }
+      )
+    }
   }
 }
 
@@ -591,12 +771,18 @@ private fun FluxOverlayFilterChip(
 private fun FluxItemPage(
   video: FluxVideo,
   authorAvatarUrl: String?,
+  authorNameFontId: String = "default",
+  authorNameThemeId: String = "default",
   fluxRepository: FluxRepository,
   isCurrentPage: Boolean,
   isMuted: Boolean,
   autoLoadVideos: Boolean,
   currentUserId: String,
   onToggleLike: () -> Unit,
+  onToggleReaction: (String) -> Unit,
+  onOpenReactionSheet: () -> Unit,
+  onEditVideo: () -> Unit,
+  onDeleteVideo: () -> Unit,
   onToggleSave: () -> Unit,
   onSaveToGallery: () -> Unit,
   onOpenComments: () -> Unit,
@@ -606,13 +792,19 @@ private fun FluxItemPage(
   val context = LocalContext.current
   val strings = LocalAppStrings.current
   val colors = MaterialTheme.colorScheme
+  val isDarkBackdrop = colors.background.red < 0.2f
+  val overlaySurface = if (isDarkBackdrop) colors.surface else Color(0xFF1E1F22)
+  val scrimColor = if (isDarkBackdrop) colors.background else Color(0xFF1E1F22)
 
   var isPlaying by remember { mutableStateOf(true) }
   var showHeartBurst by remember { mutableStateOf(false) }
   var showPauseIcon by remember { mutableStateOf(false) }
+  var showReactionBar by remember(video.id) { mutableStateOf(false) }
+  var showAuthorMenu by remember(video.id) { mutableStateOf(false) }
 
   val isLiked = video.likedBy.contains(currentUserId)
   val isSaved = video.savedBy.contains(currentUserId)
+  val isAuthor = video.authorId == currentUserId
 
   var resolvedVideoFile by remember(video.id, video.mediaId, video.videoUri) {
     mutableStateOf(fluxRepository.peekCachedFluxFile(video))
@@ -630,6 +822,7 @@ private fun FluxItemPage(
       val parsed = Uri.parse(raw)
       when (parsed.scheme) {
         "http", "https" -> parsed
+        "file" -> parsed.path?.let { java.io.File(it) }?.takeIf { it.exists() && it.canRead() }?.let { parsed }
         "content" -> runCatching {
           context.contentResolver.openFileDescriptor(parsed, "r")?.use { parsed }
         }.getOrNull()
@@ -706,7 +899,7 @@ private fun FluxItemPage(
     if (isBufferingVideo) {
       Surface(
         shape = RoundedCornerShape(999.dp),
-        color = Color(0xFF1E1F22).copy(alpha = 0.82f),
+        color = overlaySurface.copy(alpha = 0.84f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
         modifier = Modifier.align(Alignment.Center)
       ) {
@@ -735,7 +928,7 @@ private fun FluxItemPage(
           loadRetryCount++
         },
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF1E1F22).copy(alpha = 0.86f),
+        color = overlaySurface.copy(alpha = 0.88f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
         modifier = Modifier
           .align(Alignment.Center)
@@ -763,17 +956,17 @@ private fun FluxItemPage(
       }
     }
 
-    // Soft Discord charcoal gradient scrims for crisp legibility (no pure #000000)
+    // Soft AMOLED / Charcoal gradient scrims for crisp legibility
     Box(
       modifier = Modifier
         .fillMaxSize()
         .background(
           Brush.verticalGradient(
             colors = listOf(
-              Color(0xFF1E1F22).copy(alpha = 0.45f),
+              scrimColor.copy(alpha = 0.48f),
               Color.Transparent,
               Color.Transparent,
-              Color(0xFF1E1F22).copy(alpha = 0.88f)
+              scrimColor.copy(alpha = 0.90f)
             )
           )
         )
@@ -796,7 +989,7 @@ private fun FluxItemPage(
         modifier = Modifier
           .size(64.dp)
           .clip(CircleShape)
-          .background(Color(0xFF1E1F22).copy(alpha = 0.78f))
+          .background(overlaySurface.copy(alpha = 0.80f))
           .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape),
         contentAlignment = Alignment.Center
       ) {
@@ -809,7 +1002,7 @@ private fun FluxItemPage(
       }
     }
 
-    // Double-tap Heart Burst
+    // Double-tap Glossy Heart Burst
     LaunchedEffect(showHeartBurst) {
       if (showHeartBurst) {
         delay(800)
@@ -822,23 +1015,39 @@ private fun FluxItemPage(
       exit = scaleOut(animationSpec = tween(300)) + fadeOut(),
       modifier = Modifier.align(Alignment.Center)
     ) {
-      Icon(
-        imageVector = Icons.Default.Favorite,
-        contentDescription = "Heart",
-        tint = Color(0xFFF43F5E),
-        modifier = Modifier.size(104.dp)
+      GlossyAppleEmoji(
+        emoji = "❤️",
+        size = 104.dp
       )
     }
 
-    // Bottom Start Creator + Caption + Audio Metadata Stack
+    // Bottom Start Creator + Caption + Reactions + Audio Metadata Stack
     Column(
       modifier = Modifier
         .align(Alignment.BottomStart)
         .navigationBarsPadding()
-        .fillMaxWidth(0.75f)
+        .fillMaxWidth(0.76f)
         .padding(start = 16.dp, end = 8.dp, bottom = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp)
+      verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
+      AnimatedVisibility(visible = showReactionBar) {
+        val mySelected = remember(video.reactions, currentUserId) {
+          video.reactions.filterValues { it.contains(currentUserId) }.keys.toSet()
+        }
+        IosFloatingReactionBar(
+          selectedEmojis = mySelected,
+          onEmojiSelected = { emoji ->
+            showReactionBar = false
+            onToggleReaction(emoji)
+          },
+          onMoreClick = {
+            showReactionBar = false
+            onOpenReactionSheet()
+          },
+          modifier = Modifier.padding(bottom = 4.dp)
+        )
+      }
+
       Column(
         modifier = Modifier
           .clip(RoundedCornerShape(10.dp))
@@ -850,11 +1059,12 @@ private fun FluxItemPage(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-          Text(
-            text = video.authorName,
-            style = KoraTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFF2F3F5),
+          StyledDisplayName(
+            name = video.authorName,
+            nameFontId = authorNameFontId,
+            nameThemeId = authorNameThemeId,
+            style = KoraTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            fallbackColor = Color(0xFFF2F3F5),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
@@ -885,9 +1095,17 @@ private fun FluxItemPage(
         lineHeight = 20.sp
       )
 
+      if (video.reactions.isNotEmpty()) {
+        ReactionChipsRow(
+          reactions = video.reactions,
+          currentUid = currentUserId,
+          onToggleReaction = onToggleReaction
+        )
+      }
+
       Surface(
         shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E1F22).copy(alpha = 0.78f),
+        color = overlaySurface.copy(alpha = 0.80f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
       ) {
         Row(
@@ -920,12 +1138,12 @@ private fun FluxItemPage(
         .padding(end = 12.dp, bottom = 20.dp)
         .width(56.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(12.dp)
+      verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
       AvatarView(
         name = video.authorName,
         avatarUrl = authorAvatarUrl,
-        size = 48.dp,
+        size = 46.dp,
         modifier = Modifier
           .clip(CircleShape)
           .clickable(onClick = onInspectAuthor)
@@ -937,6 +1155,14 @@ private fun FluxItemPage(
         countText = formatCount(video.likesCount),
         tint = if (isLiked) Color(0xFFF43F5E) else Color(0xFFF2F3F5),
         onClick = onToggleLike
+      )
+
+      FluxActionButton(
+        icon = Icons.Outlined.AddReaction,
+        countText = strings.reactAction,
+        tint = if (showReactionBar) colors.primary else Color(0xFFF2F3F5),
+        onClick = { showReactionBar = !showReactionBar },
+        testTag = "flux_react_button_${video.id}"
       )
 
       FluxActionButton(
@@ -971,18 +1197,60 @@ private fun FluxItemPage(
         onClick = onShare
       )
 
+      if (isAuthor) {
+        Box {
+          FluxActionButton(
+            icon = Icons.Default.MoreVert,
+            countText = strings.edit,
+            tint = Color(0xFFF2F3F5),
+            onClick = { showAuthorMenu = true },
+            testTag = "flux_author_menu_button_${video.id}"
+          )
+          DropdownMenu(
+            expanded = showAuthorMenu,
+            onDismissRequest = { showAuthorMenu = false }
+          ) {
+            DropdownMenuItem(
+              text = { Text(strings.edit) },
+              leadingIcon = {
+                Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+              },
+              onClick = {
+                showAuthorMenu = false
+                onEditVideo()
+              }
+            )
+            DropdownMenuItem(
+              text = { Text(strings.delete, color = colors.error) },
+              leadingIcon = {
+                Icon(
+                  Icons.Outlined.DeleteOutline,
+                  contentDescription = null,
+                  tint = colors.error,
+                  modifier = Modifier.size(18.dp)
+                )
+              },
+              onClick = {
+                showAuthorMenu = false
+                onDeleteVideo()
+              }
+            )
+          }
+        }
+      }
+
       Box(
         modifier = Modifier
-          .size(38.dp)
+          .size(36.dp)
           .rotate(discRotation)
           .clip(CircleShape)
-          .background(Color(0xFF1E1F22))
+          .background(overlaySurface)
           .border(1.5.dp, Color.White.copy(alpha = 0.25f), CircleShape),
         contentAlignment = Alignment.Center
       ) {
         Box(
           modifier = Modifier
-            .size(14.dp)
+            .size(13.dp)
             .clip(CircleShape)
             .background(colors.primary)
         )
@@ -999,6 +1267,8 @@ private fun FluxActionButton(
   onClick: () -> Unit,
   testTag: String? = null
 ) {
+  val colors = MaterialTheme.colorScheme
+  val overlayBg = if (colors.background.red < 0.2f) colors.surface else Color(0xFF1E1F22)
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     modifier = Modifier
@@ -1008,9 +1278,9 @@ private fun FluxActionButton(
   ) {
     Box(
       modifier = Modifier
-        .size(42.dp)
+        .size(40.dp)
         .clip(CircleShape)
-        .background(Color(0xFF1E1F22).copy(alpha = 0.72f))
+        .background(overlayBg.copy(alpha = 0.76f))
         .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
       contentAlignment = Alignment.Center
     ) {
@@ -1021,7 +1291,7 @@ private fun FluxActionButton(
         modifier = Modifier.size(20.dp)
       )
     }
-    Spacer(modifier = Modifier.height(3.dp))
+    Spacer(modifier = Modifier.height(2.dp))
     Text(
       text = countText,
       style = KoraTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -1578,13 +1848,15 @@ private fun FluxCommentsSheet(
         } else {
           items(comments, key = { it.id }) { comment ->
             val authorProfile = usersById[comment.authorId]
-            FluxCommentItem(
-              comment = comment.copy(
-                isAuthorVerified = authorProfile?.isVerified ?: comment.isAuthorVerified,
-                authorVerifiedTier = authorProfile?.verifiedTier ?: comment.authorVerifiedTier
-              ),
-              authorAvatarUrl = authorProfile?.avatarUrl,
-              onInspectAuthor = {
+              FluxCommentItem(
+                comment = comment.copy(
+                  isAuthorVerified = authorProfile?.isVerified ?: comment.isAuthorVerified,
+                  authorVerifiedTier = authorProfile?.verifiedTier ?: comment.authorVerifiedTier
+                ),
+                authorAvatarUrl = authorProfile?.avatarUrl,
+                authorNameFontId = authorProfile?.nameFontId ?: "default",
+                authorNameThemeId = authorProfile?.nameThemeId ?: "default",
+                onInspectAuthor = {
                 val target = authorProfile ?: UserProfile(
                   id = comment.authorId,
                   displayName = comment.authorName,
@@ -1681,6 +1953,8 @@ private fun FluxCommentsSheet(
 private fun FluxCommentItem(
   comment: FluxComment,
   authorAvatarUrl: String? = null,
+  authorNameFontId: String = "default",
+  authorNameThemeId: String = "default",
   onInspectAuthor: () -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
@@ -1704,11 +1978,15 @@ private fun FluxCommentItem(
     Spacer(modifier = Modifier.width(10.dp))
     Column(modifier = Modifier.weight(1f)) {
       Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-          text = comment.authorName,
-          style = KoraTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = colors.onSurface
+        StyledDisplayName(
+          name = comment.authorName,
+          nameFontId = authorNameFontId,
+          nameThemeId = authorNameThemeId,
+          style = KoraTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+          fallbackColor = colors.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false)
         )
         if (comment.isAuthorVerified) {
           Spacer(modifier = Modifier.width(4.dp))

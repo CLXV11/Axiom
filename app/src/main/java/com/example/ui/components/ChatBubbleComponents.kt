@@ -249,6 +249,8 @@ internal fun TelegramChatTopBar(
   subtitle: String,
   avatarUrl: String?,
   frameStyleKey: String? = null,
+  titleFontId: String? = "default",
+  titleThemeId: String? = "default",
   isAiChat: Boolean,
   isVerified: Boolean,
   verifiedTier: String?,
@@ -335,11 +337,15 @@ internal fun TelegramChatTopBar(
 
           Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.5.sp),
-                fontWeight = FontWeight.Bold,
-                color = colors.onSurface,
+              StyledDisplayName(
+                name = title,
+                nameFontId = if (isAiChat) "default" else titleFontId,
+                nameThemeId = if (isAiChat) "default" else titleThemeId,
+                style = MaterialTheme.typography.titleMedium.copy(
+                  fontSize = 16.5.sp,
+                  fontWeight = FontWeight.Bold
+                ),
+                fallbackColor = colors.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
@@ -492,6 +498,8 @@ internal fun TelegramMessageBubble(
   isSearchHighlighted: Boolean = false,
   senderAvatarUrl: String?,
   senderFrameKey: String? = null,
+  senderFontId: String? = "default",
+  senderThemeId: String? = "default",
   chatMediaRepository: ChatMediaRepository,
   isInlineVideoPlaying: Boolean,
   onInspectSender: () -> Unit = {},
@@ -613,10 +621,13 @@ internal fun TelegramMessageBubble(
     ) {
       Box {
         if (displayItem.isJumboEmoji) {
-          val emojiSizeSp = when (displayItem.jumboEmojiCount) {
-            1 -> 44.sp
-            2 -> 36.sp
-            else -> 32.sp
+          val jumboDp = when (displayItem.jumboEmojiCount) {
+            1 -> 52.dp
+            2 -> 42.dp
+            else -> 36.dp
+          }
+          val emojiClusters = remember(message.content) {
+            splitGraphemeClusters(message.content)
           }
           Column(
             horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
@@ -628,11 +639,17 @@ internal fun TelegramMessageBubble(
               )
               .padding(horizontal = 4.dp, vertical = 2.dp)
           ) {
-            Text(
-              text = message.content.trim(),
-              fontSize = emojiSizeSp,
-              lineHeight = (emojiSizeSp.value + 6f).sp
-            )
+            Row(
+              horizontalArrangement = Arrangement.spacedBy(4.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              emojiClusters.forEach { cluster ->
+                GlossyAppleEmoji(
+                  emoji = cluster,
+                  size = jumboDp
+                )
+              }
+            }
             Spacer(modifier = Modifier.height(2.dp))
             Surface(
               shape = RoundedCornerShape(999.dp),
@@ -735,11 +752,15 @@ internal fun TelegramMessageBubble(
                     .clip(RoundedCornerShape(6.dp))
                     .clickable(enabled = !isAiMessage, onClick = onInspectSender)
                 ) {
-                  Text(
-                    text = if (isAiMessage) strings.aiAssistantName else message.senderName,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.5.sp),
-                    fontWeight = FontWeight.Bold,
-                    color = colors.primary
+                  StyledDisplayName(
+                    name = if (isAiMessage) strings.aiAssistantName else message.senderName,
+                    nameFontId = if (isAiMessage) "default" else senderFontId,
+                    nameThemeId = if (isAiMessage) "default" else senderThemeId,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                      fontSize = 12.5.sp,
+                      fontWeight = FontWeight.Bold
+                    ),
+                    fallbackColor = colors.primary
                   )
                   if (message.isSenderVerified) {
                     Spacer(modifier = Modifier.width(4.dp))

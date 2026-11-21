@@ -100,7 +100,7 @@ fun LuxurySplashScreen(
     enter = fadeIn(tween(150)),
     exit = fadeOut(tween(340, easing = FastOutSlowInEasing))
   ) {
-    val obsidianAnchor = Color(0xFF050811)
+    val obsidianAnchor = Color(0xFF000000)
     val champagneGold = Color(0xFFE7C88B)
 
     Box(
@@ -204,7 +204,7 @@ fun LuxurySplashScreen(
           Surface(
             modifier = Modifier.size(86.dp),
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF0E1424),
+            color = Color(0xFF080A0F),
             border = androidx.compose.foundation.BorderStroke(
               1.dp,
               Brush.linearGradient(

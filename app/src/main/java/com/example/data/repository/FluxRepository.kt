@@ -66,6 +66,7 @@ class FluxRepository(
   private companion object {
     const val CHUNK_RAW_BYTES = 450 * 1024
     const val MAX_VIDEO_BYTES = 25L * 1024L * 1024L
+    const val RECENT_FLUX_GRACE_MS = 30_000L
     val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
 
     fun resolveFirestore(context: Context): FirebaseFirestore? = try {
@@ -85,6 +86,7 @@ class FluxRepository(
 
   private val downloadMutex = Mutex()
   private val activeDownloads = ConcurrentHashMap<String, Deferred<Result<File>>>()
+  private val recentlyPublishedFlux = ConcurrentHashMap<String, Pair<FluxVideo, Long>>()
 
   private val _videos = MutableStateFlow<List<FluxVideo>>(emptyList())
   val videos: Flow<List<FluxVideo>> = _videos.asStateFlow()
@@ -97,6 +99,25 @@ class FluxRepository(
 
   private fun isSignedIn(): Boolean = auth?.currentUser != null && db != null
 
+  private fun mergeRecentFlux(serverList: List<FluxVideo>): List<FluxVideo> {
+    val now = System.currentTimeMillis()
+    val serverIds = serverList.mapTo(HashSet()) { it.id }
+    val pendingRecent = mutableListOf<FluxVideo>()
+    val iterator = recentlyPublishedFlux.entries.iterator()
+    while (iterator.hasNext()) {
+      val entry = iterator.next()
+      val (video, publishedAtMs) = entry.value
+      if (serverIds.contains(video.id) || (now - publishedAtMs) > RECENT_FLUX_GRACE_MS) {
+        iterator.remove()
+      } else {
+        pendingRecent.add(video)
+      }
+    }
+    return (pendingRecent + serverList)
+      .distinctBy { it.id }
+      .sortedByDescending { it.createdAt }
+  }
+
   private fun DocumentSnapshot.toFluxVideoOrNull(): FluxVideo? {
     if (!exists()) return null
     val authorId = getString("authorId") ?: return null
@@ -106,6 +127,14 @@ class FluxRepository(
     val savedBy = (get("savedBy") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
     @Suppress("UNCHECKED_CAST")
     val tags = (get("tags") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    val reactionsRaw = get("reactions") as? Map<*, *>
+    val reactionsMap: Map<String, List<String>> = reactionsRaw?.entries
+      ?.mapNotNull { (k, v) ->
+        val emoji = k as? String ?: return@mapNotNull null
+        val uids = (v as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+        if (uids.isEmpty()) null else emoji to uids
+      }
+      ?.toMap() ?: emptyMap()
     val ts = getTimestamp("createdAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.toDate()?.time
       ?: System.currentTimeMillis()
     return FluxVideo(
@@ -127,6 +156,7 @@ class FluxRepository(
       commentsCount = (getLong("commentsCount") ?: 0L).toInt(),
       sharesCount = (getLong("sharesCount") ?: 0L).toInt(),
       savedBy = savedBy,
+      reactions = reactionsMap,
       tags = tags,
       gradientTheme = getString("gradientTheme") ?: "BLURPLE",
       createdAt = ts
@@ -158,9 +188,10 @@ class FluxRepository(
         .limit(50)
         .snapshots()
         .map { snapshot ->
-          snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }.also { serverList ->
-            _videos.value = serverList
-            saveVideosToPrefs(serverList)
+          val serverList = snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }
+          mergeRecentFlux(serverList).also { merged ->
+            _videos.value = merged
+            saveVideosToPrefs(merged)
           }
         }
         .onStart {
@@ -194,10 +225,11 @@ class FluxRepository(
       } catch (_: Exception) {
         query.get(Source.DEFAULT).await()
       }
-      val list = snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }
-      _videos.value = list
-      saveVideosToPrefs(list)
-      Result.success(list)
+      val serverList = snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }
+      val merged = mergeRecentFlux(serverList)
+      _videos.value = merged
+      saveVideosToPrefs(merged)
+      Result.success(merged)
     } catch (e: Exception) {
       handleFirestoreError(e, OperationType.LIST, "flux_videos", auth)
       Result.failure(e)
@@ -473,15 +505,26 @@ class FluxRepository(
 
             val job = async {
               semaphore.withPermit {
-                chunksCollection.document("chunk_$index").set(
-                  mapOf(
-                    "mediaId" to mediaId,
-                    "senderId" to uid,
-                    "index" to index,
-                    "data" to encoded,
-                    "createdAt" to FieldValue.serverTimestamp()
-                  )
-                ).await()
+                var lastErr: Exception? = null
+                for (attempt in 0..2) {
+                  try {
+                    chunksCollection.document("chunk_$index").set(
+                      mapOf(
+                        "mediaId" to mediaId,
+                        "senderId" to uid,
+                        "index" to index,
+                        "data" to encoded,
+                        "createdAt" to FieldValue.serverTimestamp()
+                      )
+                    ).await()
+                    lastErr = null
+                    break
+                  } catch (e: Exception) {
+                    lastErr = e
+                    if (attempt < 2) delay(350L * (attempt + 1))
+                  }
+                }
+                if (lastErr != null) throw lastErr
                 countLock.withLock {
                   completedChunks++
                   onProgress(0.08f + (completedChunks.toFloat() / totalChunks.toFloat()) * 0.85f)
@@ -562,6 +605,7 @@ class FluxRepository(
 
     val previousList = _videos.value
     val updatedList = listOf(newVideo) + previousList
+    recentlyPublishedFlux[fluxId] = newVideo to System.currentTimeMillis()
     _videos.value = updatedList
     saveVideosToPrefs(updatedList)
 
@@ -590,6 +634,7 @@ class FluxRepository(
         put("commentsCount", 0)
         put("sharesCount", 0)
         put("savedBy", emptyList<String>())
+        put("reactions", emptyMap<String, List<String>>())
         put("tags", tags)
         put("gradientTheme", validTheme)
         put("createdAt", FieldValue.serverTimestamp())
@@ -597,6 +642,7 @@ class FluxRepository(
       try {
         fluxRef.set(payload).await()
       } catch (e: Exception) {
+        recentlyPublishedFlux.remove(fluxId)
         _videos.value = previousList
         saveVideosToPrefs(previousList)
         handleFirestoreError(e, OperationType.CREATE, fluxRef.path, auth)
@@ -620,6 +666,11 @@ class FluxRepository(
         val newCount = (video.likesCount + if (alreadyLiked) -1 else 1).coerceAtLeast(0)
         video.copy(likedBy = newLikedBy, likesCount = newCount)
       } else video
+    }
+    updated.find { it.id == fluxId }?.let { v ->
+      if (recentlyPublishedFlux.containsKey(fluxId)) {
+        recentlyPublishedFlux[fluxId] = v to System.currentTimeMillis()
+      }
     }
     _videos.value = updated
     saveVideosToPrefs(updated)
@@ -667,6 +718,11 @@ class FluxRepository(
         video.copy(savedBy = newSavedBy)
       } else video
     }
+    updated.find { it.id == fluxId }?.let { v ->
+      if (recentlyPublishedFlux.containsKey(fluxId)) {
+        recentlyPublishedFlux[fluxId] = v to System.currentTimeMillis()
+      }
+    }
     _videos.value = updated
     saveVideosToPrefs(updated)
 
@@ -693,6 +749,143 @@ class FluxRepository(
     }
 
     return Result.success(optimisticNowSaved)
+  }
+
+  suspend fun toggleFluxReaction(fluxId: String, emoji: String, userId: String? = null): Result<Unit> {
+    val cleanEmoji = emoji.trim().take(16)
+    if (cleanEmoji.isBlank()) return Result.success(Unit)
+    val effectiveUid = auth?.currentUser?.uid ?: userId ?: "kora_lead_user"
+    val previousList = _videos.value
+
+    val updated = previousList.map { video ->
+      if (video.id == fluxId) {
+        val mutable = video.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+        val list = mutable.getOrPut(cleanEmoji) { mutableListOf() }
+        if (list.contains(effectiveUid)) {
+          list.remove(effectiveUid)
+          if (list.isEmpty()) mutable.remove(cleanEmoji)
+        } else {
+          if (mutable.size < 40 || mutable.containsKey(cleanEmoji)) {
+            list.add(effectiveUid)
+          }
+        }
+        video.copy(reactions = mutable.mapValues { it.value.distinct().take(200) })
+      } else video
+    }
+    updated.find { it.id == fluxId }?.let { v ->
+      if (recentlyPublishedFlux.containsKey(fluxId)) {
+        recentlyPublishedFlux[fluxId] = v to System.currentTimeMillis()
+      }
+    }
+    _videos.value = updated
+    saveVideosToPrefs(updated)
+
+    if (isSignedIn()) {
+      val uid = auth!!.currentUser!!.uid
+      val fluxRef = db!!.collection("flux_videos").document(fluxId)
+      return try {
+        db.runTransaction { transaction ->
+          val snap = transaction.get(fluxRef)
+          val existing = snap.toFluxVideoOrNull()
+            ?: throw IllegalStateException("Flux video not found")
+          val mutable = existing.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+          val list = mutable.getOrPut(cleanEmoji) { mutableListOf() }
+          if (list.contains(uid)) {
+            list.remove(uid)
+            if (list.isEmpty()) mutable.remove(cleanEmoji)
+          } else {
+            if (mutable.size < 40 || mutable.containsKey(cleanEmoji)) {
+              list.add(uid)
+            }
+          }
+          transaction.update(
+            fluxRef,
+            mapOf("reactions" to mutable.mapValues { it.value.distinct().take(200) })
+          )
+          Unit
+        }.await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    return Result.success(Unit)
+  }
+
+  suspend fun updateFluxVideo(fluxId: String, caption: String, audioTitle: String): Result<Unit> {
+    val cleanCaption = caption.trim().ifBlank { "#flux" }.take(2000)
+    val cleanAudio = audioTitle.trim().ifBlank { "Original Sound" }.take(120)
+    val extractedTags = Regex("#[\\p{L}\\p{N}_]+").findAll(cleanCaption)
+      .map { it.value.lowercase(java.util.Locale.ROOT) }
+      .distinct()
+      .take(15)
+      .toList()
+    val tags = extractedTags.ifEmpty { listOf("#flux") }
+
+    val previousList = _videos.value
+    val updated = previousList.map { video ->
+      if (video.id == fluxId) {
+        video.copy(caption = cleanCaption, audioTitle = cleanAudio, tags = tags)
+      } else video
+    }
+    updated.find { it.id == fluxId }?.let { v ->
+      if (recentlyPublishedFlux.containsKey(fluxId)) {
+        recentlyPublishedFlux[fluxId] = v to System.currentTimeMillis()
+      }
+    }
+    _videos.value = updated
+    saveVideosToPrefs(updated)
+
+    if (isSignedIn()) {
+      val fluxRef = db!!.collection("flux_videos").document(fluxId)
+      return try {
+        fluxRef.update(
+          mapOf(
+            "caption" to cleanCaption,
+            "audioTitle" to cleanAudio,
+            "tags" to tags
+          )
+        ).await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.UPDATE, fluxRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    return Result.success(Unit)
+  }
+
+  suspend fun deleteFluxVideo(fluxId: String): Result<Unit> {
+    val previousList = _videos.value
+    val target = previousList.find { it.id == fluxId }
+    recentlyPublishedFlux.remove(fluxId)
+    val updated = previousList.filterNot { it.id == fluxId }
+    _videos.value = updated
+    saveVideosToPrefs(updated)
+
+    if (isSignedIn()) {
+      val fluxRef = db!!.collection("flux_videos").document(fluxId)
+      try {
+        fluxRef.delete().await()
+      } catch (e: Exception) {
+        _videos.value = previousList
+        saveVideosToPrefs(previousList)
+        handleFirestoreError(e, OperationType.DELETE, fluxRef.path, auth)
+        return Result.failure(e)
+      }
+    }
+
+    target?.mediaId?.takeIf { it.isNotBlank() }?.let { mId ->
+      runCatching { cachedFileForMediaId(mId)?.delete() }
+    }
+    return Result.success(Unit)
   }
 
   suspend fun saveVideoToGallery(context: Context, video: FluxVideo): Result<Unit> = withContext(Dispatchers.IO) {
@@ -876,6 +1069,23 @@ class FluxRepository(
           if (tagsArray != null) {
             for (j in 0 until tagsArray.length()) tagsList.add(tagsArray.getString(j))
           }
+          val reactionsObj = obj.optJSONObject("reactions")
+          val reactionsMap = mutableMapOf<String, List<String>>()
+          if (reactionsObj != null) {
+            val keys = reactionsObj.keys()
+            while (keys.hasNext()) {
+              val emoji = keys.next()
+              val uidsArray = reactionsObj.optJSONArray(emoji)
+              if (uidsArray != null) {
+                val uids = mutableListOf<String>()
+                for (k in 0 until uidsArray.length()) {
+                  val uid = uidsArray.optString(k)
+                  if (!uid.isNullOrBlank()) uids.add(uid)
+                }
+                if (uids.isNotEmpty()) reactionsMap[emoji] = uids
+              }
+            }
+          }
 
           list.add(
             FluxVideo(
@@ -897,6 +1107,7 @@ class FluxRepository(
               commentsCount = obj.optInt("commentsCount", 0),
               sharesCount = obj.optInt("sharesCount", 0),
               savedBy = savedByList,
+              reactions = reactionsMap,
               tags = tagsList,
               gradientTheme = obj.optString("gradientTheme", "BLURPLE"),
               createdAt = obj.optLong("createdAt", System.currentTimeMillis())
@@ -947,6 +1158,14 @@ class FluxRepository(
         val tagsArray = JSONArray()
         for (t in v.tags) tagsArray.put(t)
         obj.put("tags", tagsArray)
+
+        val reactionsObj = JSONObject()
+        v.reactions.forEach { (emoji, uids) ->
+          val uidsArray = JSONArray()
+          uids.forEach { uidsArray.put(it) }
+          reactionsObj.put(emoji, uidsArray)
+        }
+        obj.put("reactions", reactionsObj)
 
         array.put(obj)
       }
