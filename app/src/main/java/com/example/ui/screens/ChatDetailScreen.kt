@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.AddReaction
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -112,10 +113,13 @@ import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
 import com.example.ui.components.ChatMediaAttachmentSheet
 import com.example.ui.components.FullscreenVideoPlayerDialog
+import com.example.ui.components.IosFloatingReactionBar
 import com.example.ui.components.MediaMessageBubbleContent
+import com.example.ui.components.ReactionChipsRow
 import com.example.ui.components.TypingBubble
 import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
+import com.example.ui.components.WeirdEmojiPickerBottomSheet
 import com.example.ui.theme.KoraTheme
 import com.example.ui.theme.StatusOnline
 import com.example.ui.util.LocalAppStrings
@@ -214,9 +218,10 @@ fun ChatDetailScreen(
     }
   }
 
-  // Save to Memory Dialog state
+  // Save to Memory & Reaction Sheet state
   var memoryTargetMessage by remember { mutableStateOf<Message?>(null) }
   var privateNoteInput by remember { mutableStateOf("") }
+  var reactionTargetMessageId by remember { mutableStateOf<String?>(null) }
 
   // Rich media attachment, upload progress, and inline/fullscreen video playback state
   var showMediaPickerSheet by remember { mutableStateOf(false) }
@@ -517,6 +522,7 @@ fun ChatDetailScreen(
               }
               PolishedMessageBubble(
                 conversationId = conversation.id,
+                currentUid = currentUid,
                 message = msg.copy(
                   isSenderVerified = liveVerified,
                   senderVerifiedTier = liveVerifiedTier
@@ -535,6 +541,21 @@ fun ChatDetailScreen(
                 onOpenFullscreenVideo = { file ->
                   activeInlineVideoMsgId = null
                   fullscreenVideoItem = Triple(file, msg.mediaFileName, msg.mediaMimeType)
+                },
+                onToggleReaction = { emoji ->
+                  coroutineScope.launch {
+                    val res = chatRepository.toggleMessageReaction(conversation.id, msg.id, emoji)
+                    if (res.isFailure) {
+                      Toast.makeText(
+                        context,
+                        res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                        Toast.LENGTH_SHORT
+                      ).show()
+                    }
+                  }
+                },
+                onOpenReactionSheet = {
+                  reactionTargetMessageId = msg.id
                 },
                 onReply = {
                   replyingToMessage = msg
@@ -736,6 +757,40 @@ fun ChatDetailScreen(
       }
     )
   }
+
+  // Full Weird & Classic Emoji Picker Sheet for Messages
+  val activeReactionMsg = reactionTargetMessageId?.let { targetId ->
+    messages.firstOrNull { it.id == targetId }
+  }
+  if (activeReactionMsg != null) {
+    val mySelected = remember(activeReactionMsg.reactions, currentUid) {
+      activeReactionMsg.reactions
+        .filterValues { it.contains(currentUid) }
+        .keys
+        .toSet()
+    }
+    WeirdEmojiPickerBottomSheet(
+      selectedEmojis = mySelected,
+      onEmojiSelected = { emoji ->
+        reactionTargetMessageId = null
+        coroutineScope.launch {
+          val res = chatRepository.toggleMessageReaction(
+            conversationId = conversation.id,
+            messageId = activeReactionMsg.id,
+            emoji = emoji
+          )
+          if (res.isFailure) {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
+          }
+        }
+      },
+      onDismiss = { reactionTargetMessageId = null }
+    )
+  }
 }
 
 @Composable
@@ -823,7 +878,8 @@ private fun PolishedChatTopBar(
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface,
               maxLines = 1,
-              overflow = TextOverflow.Ellipsis
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f, fill = false)
             )
             if (isVerified) {
               Spacer(modifier = Modifier.width(6.dp))
@@ -1040,6 +1096,7 @@ private fun AiWelcomeHero(
 @Composable
 private fun PolishedMessageBubble(
   conversationId: String,
+  currentUid: String,
   message: Message,
   isMe: Boolean,
   isAiMessage: Boolean,
@@ -1049,6 +1106,8 @@ private fun PolishedMessageBubble(
   onPlayInlineVideo: () -> Unit,
   onStopInlineVideo: () -> Unit,
   onOpenFullscreenVideo: (File) -> Unit,
+  onToggleReaction: (String) -> Unit,
+  onOpenReactionSheet: () -> Unit,
   onReply: () -> Unit,
   onCopy: () -> Unit,
   onEdit: () -> Unit,
@@ -1125,7 +1184,11 @@ private fun PolishedMessageBubble(
       Spacer(modifier = Modifier.width(8.dp))
     }
 
-    Box {
+    Column(
+      horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
+      modifier = Modifier.widthIn(max = 316.dp)
+    ) {
+      Box {
       Surface(
         shape = bubbleShape,
         color = bubbleContainerColor,
@@ -1272,6 +1335,35 @@ private fun PolishedMessageBubble(
         onDismissRequest = { showMenu = false },
         modifier = Modifier.background(MaterialTheme.colorScheme.surface)
       ) {
+        if (!message.isDeleted) {
+          val mySelectedEmojis = remember(message.reactions, currentUid) {
+            message.reactions.filterValues { it.contains(currentUid) }.keys.toSet()
+          }
+          Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            IosFloatingReactionBar(
+              selectedEmojis = mySelectedEmojis,
+              onEmojiSelected = { emoji ->
+                showMenu = false
+                onToggleReaction(emoji)
+              },
+              onMoreClick = {
+                showMenu = false
+                onOpenReactionSheet()
+              }
+            )
+          }
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+          DropdownMenuItem(
+            text = { Text(strings.reactAction, color = MaterialTheme.colorScheme.onSurface) },
+            leadingIcon = {
+              Icon(Icons.Outlined.AddReaction, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            },
+            onClick = {
+              showMenu = false
+              onOpenReactionSheet()
+            }
+          )
+        }
         DropdownMenuItem(
           text = { Text(strings.copy, color = MaterialTheme.colorScheme.onSurface) },
           leadingIcon = {
@@ -1324,6 +1416,16 @@ private fun PolishedMessageBubble(
             }
           )
         }
+      }
+      }
+
+      if (message.reactions.isNotEmpty() && !message.isDeleted) {
+        ReactionChipsRow(
+          reactions = message.reactions,
+          currentUid = currentUid,
+          onToggleReaction = onToggleReaction,
+          modifier = Modifier.padding(top = 4.dp)
+        )
       }
     }
   }

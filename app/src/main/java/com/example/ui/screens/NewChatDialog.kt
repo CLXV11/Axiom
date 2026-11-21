@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 fun NewChatDialog(
   userRepository: UserRepository,
   chatRepository: ChatRepository,
+  existingConversations: List<com.example.data.model.Conversation> = emptyList(),
   onDismiss: () -> Unit,
   onConversationCreated: (com.example.data.model.Conversation) -> Unit
 ) {
@@ -131,8 +132,9 @@ fun NewChatDialog(
       isCreating = false
       if (res.isSuccess) {
         val convoId = res.getOrThrow()
+        val matchedExisting = existingConversations.firstOrNull { it.id == convoId }
         onConversationCreated(
-          com.example.data.model.Conversation(
+          matchedExisting ?: com.example.data.model.Conversation(
             id = convoId,
             type = chatType,
             title = title ?: "",

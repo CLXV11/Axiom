@@ -3,8 +3,10 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +14,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,16 +27,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DynamicFeed
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.AddReaction
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,6 +53,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +67,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Post
 import com.example.data.model.PostComment
@@ -66,8 +75,11 @@ import com.example.data.repository.PostRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.IosFloatingReactionBar
 import com.example.ui.components.KoraTopBar
+import com.example.ui.components.ReactionChipsRow
 import com.example.ui.components.VerifiedBadge
+import com.example.ui.components.WeirdEmojiPickerBottomSheet
 import com.example.ui.theme.SemanticError
 import com.example.ui.util.LocalAppStrings
 import com.example.ui.util.formatHandleForDisplay
@@ -93,6 +105,11 @@ fun FeedScreen(
   var newPostContent by remember { mutableStateOf("") }
   var postAudience by remember { mutableStateOf("public") } // "public" or "circles"
   var isSubmitting by remember { mutableStateOf(false) }
+  var reactionTargetPostId by remember { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(Unit) {
+    userRepository.fetchDirectoryUsers()
+  }
 
   fun publishPost() {
     val content = newPostContent.trim()
@@ -125,6 +142,7 @@ fun FeedScreen(
   }
 
   Scaffold(
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       KoraTopBar(
         title = strings.feedTitle,
@@ -256,14 +274,45 @@ fun FeedScreen(
             usersById = usersById,
             currentUid = currentUid,
             postRepository = postRepository,
-            userRepository = userRepository
+            userRepository = userRepository,
+            onOpenReactionSheet = { reactionTargetPostId = post.id }
           )
         }
       }
     }
   }
+
+  val activeReactionPost = reactionTargetPostId?.let { targetId ->
+    posts.firstOrNull { it.id == targetId }
+  }
+  if (activeReactionPost != null) {
+    val selectedEmojis = remember(activeReactionPost.reactions, currentUid) {
+      activeReactionPost.reactions
+        .filterValues { it.contains(currentUid) }
+        .keys
+        .toSet()
+    }
+    WeirdEmojiPickerBottomSheet(
+      selectedEmojis = selectedEmojis,
+      onEmojiSelected = { emoji ->
+        reactionTargetPostId = null
+        coroutineScope.launch {
+          val res = postRepository.togglePostReaction(activeReactionPost.id, emoji)
+          if (res.isFailure) {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
+          }
+        }
+      },
+      onDismiss = { reactionTargetPostId = null }
+    )
+  }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PostCard(
   post: Post,
@@ -271,11 +320,14 @@ private fun PostCard(
   usersById: Map<String, com.example.data.model.UserProfile>,
   currentUid: String,
   postRepository: PostRepository,
-  userRepository: UserRepository
+  userRepository: UserRepository,
+  onOpenReactionSheet: () -> Unit
 ) {
+  val context = LocalContext.current
   val strings = LocalAppStrings.current
   val coroutineScope = rememberCoroutineScope()
   var showThreads by remember { mutableStateOf(false) }
+  var showInlineReactionBar by remember { mutableStateOf(false) }
   var commentInput by remember { mutableStateOf("") }
 
   val isLiked = post.likedBy.contains(currentUid)
@@ -310,6 +362,11 @@ private fun PostCard(
     modifier = Modifier
       .fillMaxWidth()
       .widthIn(max = 760.dp)
+      .clip(RoundedCornerShape(16.dp))
+      .combinedClickable(
+        onClick = {},
+        onLongClick = { showInlineReactionBar = !showInlineReactionBar }
+      )
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
       // Author Header
@@ -321,7 +378,10 @@ private fun PostCard(
             Text(
               text = liveAuthorName,
               style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.SemiBold
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f, fill = false)
             )
             if (liveIsVerified) {
               Spacer(modifier = Modifier.width(6.dp))
@@ -367,40 +427,131 @@ private fun PostCard(
         color = MaterialTheme.colorScheme.onSurface
       )
 
+      // Multi-Emoji Reaction Chips
+      if (post.reactions.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(10.dp))
+        ReactionChipsRow(
+          reactions = post.reactions,
+          currentUid = currentUid,
+          onToggleReaction = { emoji ->
+            coroutineScope.launch {
+              val res = postRepository.togglePostReaction(post.id, emoji)
+              if (res.isFailure) {
+                Toast.makeText(
+                  context,
+                  res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          }
+        )
+      }
+
+      // iPhone-style Floating Reaction Pill Bar (toggled on React button or Long-Press)
+      AnimatedVisibility(visible = showInlineReactionBar) {
+        val mySelected = remember(post.reactions, currentUid) {
+          post.reactions.filterValues { it.contains(currentUid) }.keys.toSet()
+        }
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+          contentAlignment = Alignment.CenterStart
+        ) {
+          IosFloatingReactionBar(
+            selectedEmojis = mySelected,
+            onEmojiSelected = { emoji ->
+              showInlineReactionBar = false
+              coroutineScope.launch {
+                postRepository.togglePostReaction(post.id, emoji)
+              }
+            },
+            onMoreClick = {
+              showInlineReactionBar = false
+              onOpenReactionSheet()
+            }
+          )
+        }
+      }
+
       Spacer(modifier = Modifier.height(14.dp))
       HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
       Spacer(modifier = Modifier.height(8.dp))
 
-      // Actions (Like, Thread)
+      // Actions (Like, Weird React Bar, Thread)
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(onClick = {
-            coroutineScope.launch {
-              postRepository.toggleLike(post.id, isLiked)
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+              onClick = {
+                coroutineScope.launch {
+                  postRepository.toggleLike(post.id, isLiked)
+                }
+              },
+              modifier = Modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+            ) {
+              Icon(
+                imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = strings.likes,
+                tint = if (isLiked) SemanticError else MaterialTheme.colorScheme.onSurfaceVariant
+              )
             }
-          }) {
-            Icon(
-              imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-              contentDescription = strings.likes,
-              tint = if (isLiked) SemanticError else MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+              text = "${post.likesCount}",
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
-          Text(
-            text = "${post.likesCount}",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+
+          Surface(
+            onClick = { showInlineReactionBar = !showInlineReactionBar },
+            shape = RoundedCornerShape(999.dp),
+            color = if (showInlineReactionBar) {
+              MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            } else {
+              MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            },
+            modifier = Modifier
+              .defaultMinSize(minHeight = 36.dp)
+              .testTag("post_react_button_${post.id}")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Outlined.AddReaction,
+                contentDescription = strings.reactAction,
+                tint = if (showInlineReactionBar) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+              )
+              Text(
+                text = strings.reactAction,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (showInlineReactionBar) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false
+              )
+            }
+          }
         }
 
         Row(
           modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable { showThreads = !showThreads }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .testTag("post_comments_toggle_${post.id}"),
           verticalAlignment = Alignment.CenterVertically
         ) {
           Icon(
@@ -414,7 +565,9 @@ private fun PostCard(
             text = "${strings.contextThreads} (${post.commentsCount})",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false
           )
         }
       }
@@ -429,15 +582,45 @@ private fun PostCard(
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
           Spacer(modifier = Modifier.height(8.dp))
 
-          comments.forEach { comment ->
-            val commentAuthor = usersById[comment.authorId]
-            ContextThreadCommentItem(
-              comment = comment,
-              avatarUrl = commentAuthor?.avatarUrl,
-              liveVerified = commentAuthor?.isVerified ?: comment.isAuthorVerified,
-              liveVerifiedTier = commentAuthor?.verifiedTier ?: "BLUE"
+          Text(
+            text = "${strings.postCommentsTitle} (${post.commentsCount})",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+          )
+
+          if (comments.isEmpty()) {
+            Text(
+              text = strings.noPostCommentsYet,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+              modifier = Modifier.padding(vertical = 8.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+          } else {
+            comments.forEach { comment ->
+              val commentAuthor = usersById[comment.authorId]
+              ContextThreadCommentItem(
+                comment = comment,
+                avatarUrl = commentAuthor?.avatarUrl,
+                liveVerified = commentAuthor?.isVerified ?: comment.isAuthorVerified,
+                liveVerifiedTier = commentAuthor?.verifiedTier ?: "BLUE",
+                canDelete = comment.authorId == currentUid,
+                onDelete = {
+                  coroutineScope.launch {
+                    val res = postRepository.deleteComment(post.id, comment.id)
+                    if (res.isFailure) {
+                      Toast.makeText(
+                        context,
+                        res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                        Toast.LENGTH_SHORT
+                      ).show()
+                    }
+                  }
+                }
+              )
+              Spacer(modifier = Modifier.height(8.dp))
+            }
           }
 
           // Thread reply input
@@ -449,7 +632,11 @@ private fun PostCard(
               value = commentInput,
               onValueChange = { commentInput = it },
               placeholder = { Text(strings.writeAComment) },
-              modifier = Modifier.weight(1f),
+              keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+              keyboardActions = KeyboardActions(onSend = { submitComment() }),
+              modifier = Modifier
+                .weight(1f)
+                .testTag("post_comment_input_${post.id}"),
               shape = RoundedCornerShape(16.dp),
               maxLines = 2
             )
@@ -458,7 +645,8 @@ private fun PostCard(
 
             IconButton(
               onClick = { submitComment() },
-              enabled = commentInput.isNotBlank()
+              enabled = commentInput.isNotBlank(),
+              modifier = Modifier.testTag("post_comment_send_${post.id}")
             ) {
               Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
@@ -479,18 +667,21 @@ private fun ContextThreadCommentItem(
   comment: PostComment,
   avatarUrl: String? = null,
   liveVerified: Boolean = comment.isAuthorVerified,
-  liveVerifiedTier: String = "BLUE"
+  liveVerifiedTier: String = "BLUE",
+  canDelete: Boolean = false,
+  onDelete: () -> Unit = {}
 ) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(8.dp))
+      .clip(RoundedCornerShape(10.dp))
       .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-      .padding(8.dp)
+      .padding(8.dp),
+    verticalAlignment = Alignment.Top
   ) {
     AvatarView(name = comment.authorName, avatarUrl = avatarUrl, size = 32.dp)
     Spacer(modifier = Modifier.width(8.dp))
-    Column {
+    Column(modifier = Modifier.weight(1f)) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
           text = comment.authorName,
@@ -514,6 +705,19 @@ private fun ContextThreadCommentItem(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurface
       )
+    }
+    if (canDelete) {
+      IconButton(
+        onClick = onDelete,
+        modifier = Modifier.size(32.dp)
+      ) {
+        Icon(
+          imageVector = Icons.Default.DeleteOutline,
+          contentDescription = "Delete comment",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+          modifier = Modifier.size(16.dp)
+        )
+      }
     }
   }
 }

@@ -171,6 +171,57 @@ class PostRepository(
     return Result.success(Unit)
   }
 
+  suspend fun togglePostReaction(postId: String, emoji: String): Result<Unit> {
+    val cleanEmoji = emoji.trim().take(16)
+    if (cleanEmoji.isBlank()) return Result.success(Unit)
+    val uid = getEffectiveUserId()
+
+    if (auth.currentUser != null) {
+      val postRef = db.collection("posts").document(postId)
+      return try {
+        db.runTransaction { transaction ->
+          val snap = transaction.get(postRef)
+          val currentPost = snap.toObject(Post::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            ?: throw IllegalStateException("Post not found")
+          val updated = currentPost.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+          val list = updated.getOrPut(cleanEmoji) { mutableListOf() }
+          if (list.contains(uid)) {
+            list.remove(uid)
+            if (list.isEmpty()) updated.remove(cleanEmoji)
+          } else {
+            if (updated.size < 40 || updated.containsKey(cleanEmoji)) {
+              list.add(uid)
+            }
+          }
+          transaction.update(
+            postRef,
+            mapOf("reactions" to updated.mapValues { it.value.distinct().take(200) })
+          )
+          Unit
+        }.await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.UPDATE, postRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    localPosts.value = localPosts.value.map { post ->
+      if (post.id == postId) {
+        val updated = post.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+        val list = updated.getOrPut(cleanEmoji) { mutableListOf() }
+        if (list.contains(uid)) {
+          list.remove(uid)
+          if (list.isEmpty()) updated.remove(cleanEmoji)
+        } else {
+          list.add(uid)
+        }
+        post.copy(reactions = updated.mapValues { it.value.distinct() })
+      } else post
+    }
+    return Result.success(Unit)
+  }
+
   fun observePostComments(postId: String): Flow<List<PostComment>> {
     val localFlow = localComments.getOrPut(postId) { MutableStateFlow(emptyList()) }
 
@@ -247,6 +298,31 @@ class PostRepository(
     commentFlow.value = commentFlow.value + newComment
     localPosts.value = localPosts.value.map { post ->
       if (post.id == postId) post.copy(commentsCount = post.commentsCount + 1L) else post
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun deleteComment(postId: String, commentId: String): Result<Unit> {
+    if (auth.currentUser != null) {
+      val postRef = db.collection("posts").document(postId)
+      val commentRef = postRef.collection("comments").document(commentId)
+      return try {
+        val batch = db.batch()
+        batch.delete(commentRef)
+        batch.update(postRef, "commentsCount", FieldValue.increment(-1L))
+        batch.commit().await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.DELETE, commentRef.path, auth)
+        Result.failure(e)
+      }
+    }
+    val commentFlow = localComments[postId]
+    if (commentFlow != null) {
+      commentFlow.value = commentFlow.value.filterNot { it.id == commentId }
+    }
+    localPosts.value = localPosts.value.map { post ->
+      if (post.id == postId) post.copy(commentsCount = (post.commentsCount - 1L).coerceAtLeast(0L)) else post
     }
     return Result.success(Unit)
   }

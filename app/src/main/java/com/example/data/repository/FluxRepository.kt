@@ -12,6 +12,7 @@ import com.example.data.model.FluxComment
 import com.example.data.model.FluxVideo
 import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
+import android.util.Base64
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -20,12 +21,20 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.snapshots
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -34,6 +43,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 class FluxRepository(
   private val db: FirebaseFirestore?,
@@ -49,6 +59,8 @@ class FluxRepository(
   )
 
   private companion object {
+    const val CHUNK_RAW_BYTES = 450 * 1024
+    const val MAX_VIDEO_BYTES = 25L * 1024L * 1024L
     val VALID_TIERS = listOf("BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM")
 
     fun resolveFirestore(context: Context): FirebaseFirestore? = try {
@@ -65,6 +77,9 @@ class FluxRepository(
       null
     }
   }
+
+  private val downloadMutex = Mutex()
+  private val activeDownloads = ConcurrentHashMap<String, Deferred<Result<File>>>()
 
   private val _videos = MutableStateFlow<List<FluxVideo>>(emptyList())
   val videos: Flow<List<FluxVideo>> = _videos.asStateFlow()
@@ -97,6 +112,10 @@ class FluxRepository(
       isAuthorVerified = getBoolean("isAuthorVerified") ?: false,
       caption = getString("caption") ?: "",
       videoUri = getString("videoUri"),
+      mediaId = getString("mediaId"),
+      mediaMimeType = getString("mediaMimeType"),
+      mediaSizeBytes = getLong("mediaSizeBytes") ?: 0L,
+      mediaChunkCount = (getLong("mediaChunkCount") ?: 0L).toInt(),
       audioTitle = getString("audioTitle") ?: "Original Sound",
       likesCount = (getLong("likesCount") ?: 0L).toInt(),
       likedBy = likedBy,
@@ -171,30 +190,228 @@ class FluxRepository(
     }
   }
 
-  private suspend fun persistPickedVideoLocally(fluxId: String, videoUri: String?): String? {
-    if (videoUri.isNullOrBlank()) return null
-    val context = appContext ?: return videoUri
-    if (!videoUri.startsWith("content://")) return videoUri
-    return withContext(Dispatchers.IO) {
-      try {
-        val parsed = Uri.parse(videoUri)
-        val inputStream = context.contentResolver.openInputStream(parsed) ?: return@withContext videoUri
-        val dir = File(context.filesDir, "flux_media").apply { mkdirs() }
-        val destFile = File(dir, "$fluxId.mp4")
-        var bytesWritten = 0L
-        inputStream.use { input ->
-          FileOutputStream(destFile).use { output ->
-            bytesWritten = input.copyTo(output)
-          }
+  private fun getMediaDir(): File? {
+    val ctx = appContext ?: return null
+    return File(ctx.filesDir, "flux_media").apply { mkdirs() }
+  }
+
+  private fun cachedFileForMediaId(mediaId: String): File? {
+    val dir = getMediaDir() ?: return null
+    return File(dir, "$mediaId.mp4")
+  }
+
+  fun peekCachedFluxFile(video: FluxVideo): File? {
+    val mId = video.mediaId
+    if (!mId.isNullOrBlank()) {
+      val cached = cachedFileForMediaId(mId)
+      if (cached != null && cached.exists() && cached.length() > 0L) {
+        if (video.mediaSizeBytes <= 0L || cached.length() == video.mediaSizeBytes) {
+          return cached
         }
-        if (bytesWritten > 0L) Uri.fromFile(destFile).toString() else {
-          destFile.delete()
-          videoUri
-        }
-      } catch (_: Exception) {
-        videoUri
       }
     }
+    val rawUri = video.videoUri
+    if (!rawUri.isNullOrBlank() && rawUri.startsWith("file://")) {
+      val path = Uri.parse(rawUri).path
+      if (!path.isNullOrBlank()) {
+        val file = File(path)
+        if (file.exists() && file.canRead() && file.length() > 0L) return file
+      }
+    }
+    return null
+  }
+
+  suspend fun resolvePlayableFluxFile(
+    video: FluxVideo,
+    onProgress: (Float) -> Unit = {}
+  ): Result<File> {
+    peekCachedFluxFile(video)?.let {
+      onProgress(1f)
+      return Result.success(it)
+    }
+    val mediaId = video.mediaId?.takeIf { it.isNotBlank() && video.mediaChunkCount > 0 }
+      ?: return Result.failure(IllegalStateException("No downloadable video chunks"))
+
+    val deferred = downloadMutex.withLock {
+      activeDownloads[mediaId] ?: kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async {
+        downloadFluxChunksToCache(mediaId, onProgress)
+      }.also { activeDownloads[mediaId] = it }
+    }
+
+    return try {
+      deferred.await()
+    } finally {
+      downloadMutex.withLock {
+        if (activeDownloads[mediaId] === deferred) {
+          activeDownloads.remove(mediaId)
+        }
+      }
+    }
+  }
+
+  private suspend fun downloadFluxChunksToCache(
+    mediaId: String,
+    onProgress: (Float) -> Unit
+  ): Result<File> = withContext(Dispatchers.IO) {
+    val firestore = db ?: return@withContext Result.failure(IllegalStateException("Firestore unavailable"))
+    val finalFile = cachedFileForMediaId(mediaId)
+      ?: return@withContext Result.failure(IllegalStateException("Cache directory unavailable"))
+    val dir = finalFile.parentFile ?: return@withContext Result.failure(IllegalStateException("Cache dir missing"))
+    val tmpFile = File(dir, "${mediaId}_${System.currentTimeMillis()}.tmp")
+
+    try {
+      onProgress(0.08f)
+      val snap = firestore.collection("flux_media")
+        .document(mediaId)
+        .collection("chunks")
+        .orderBy("index", Query.Direction.ASCENDING)
+        .get()
+        .await()
+
+      if (snap.isEmpty) {
+        return@withContext Result.failure(IllegalStateException("Flux video chunks not found"))
+      }
+
+      val docs = snap.documents
+      FileOutputStream(tmpFile).use { fos ->
+        docs.forEachIndexed { idx, doc ->
+          val b64 = doc.getString("data") ?: throw IllegalStateException("Corrupt flux chunk $idx")
+          val decoded = Base64.decode(b64, Base64.DEFAULT)
+          fos.write(decoded)
+          onProgress(0.15f + ((idx + 1).toFloat() / docs.size.toFloat()) * 0.85f)
+        }
+      }
+
+      if (finalFile.exists()) finalFile.delete()
+      if (!tmpFile.renameTo(finalFile)) {
+        tmpFile.copyTo(finalFile, overwrite = true)
+        tmpFile.delete()
+      }
+      onProgress(1f)
+      Result.success(finalFile)
+    } catch (e: Exception) {
+      tmpFile.delete()
+      handleFirestoreError(e, OperationType.LIST, "flux_media/$mediaId/chunks", auth)
+      Result.failure(e)
+    }
+  }
+
+  private data class PreparedFluxUpload(
+    val mediaId: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val chunkCount: Int,
+    val localFile: File
+  )
+
+  private suspend fun prepareAndUploadFluxVideo(
+    sourceUriString: String?,
+    onProgress: (Float) -> Unit
+  ): PreparedFluxUpload? = withContext(Dispatchers.IO) {
+    if (sourceUriString.isNullOrBlank()) return@withContext null
+    val context = appContext ?: return@withContext null
+    if (sourceUriString.startsWith("http://") || sourceUriString.startsWith("https://")) {
+      return@withContext null
+    }
+    val parsed = Uri.parse(sourceUriString)
+    val mediaId = "fm_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}"
+    val destFile = cachedFileForMediaId(mediaId) ?: return@withContext null
+    val resolver = context.contentResolver
+    val mimeType = runCatching { resolver.getType(parsed) }.getOrNull()?.take(128) ?: "video/mp4"
+
+    onProgress(0.04f)
+    val inputStream = try {
+      resolver.openInputStream(parsed)
+    } catch (e: Exception) {
+      if (!isSignedIn()) return@withContext null
+      throw e
+    }
+    if (inputStream == null) {
+      if (!isSignedIn()) return@withContext null
+      throw IllegalStateException("Could not open selected video")
+    }
+    inputStream.use { input ->
+      FileOutputStream(destFile).use { output ->
+        val buf = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+          val read = input.read(buf)
+          if (read < 0) break
+          total += read
+          if (total > MAX_VIDEO_BYTES) {
+            destFile.delete()
+            throw IllegalArgumentException("Video exceeds 25 MB limit")
+          }
+          output.write(buf, 0, read)
+        }
+      }
+    }
+
+    val sizeBytes = destFile.length()
+    if (sizeBytes <= 0L) {
+      destFile.delete()
+      throw IllegalStateException("Selected video is empty")
+    }
+
+    val totalChunks = ((sizeBytes + CHUNK_RAW_BYTES - 1L) / CHUNK_RAW_BYTES).toInt().coerceAtLeast(1)
+
+    if (isSignedIn()) {
+      val uid = auth!!.currentUser!!.uid
+      val chunksCollection = db!!.collection("flux_media")
+        .document(mediaId)
+        .collection("chunks")
+
+      val semaphore = Semaphore(4)
+      var completedChunks = 0
+      val countLock = Mutex()
+
+      coroutineScope {
+        val uploadJobs = mutableListOf<Deferred<Unit>>()
+        FileInputStream(destFile).use { fis ->
+          for (index in 0 until totalChunks) {
+            val buffer = ByteArray(CHUNK_RAW_BYTES)
+            var offset = 0
+            while (offset < buffer.size) {
+              val read = fis.read(buffer, offset, buffer.size - offset)
+              if (read < 0) break
+              offset += read
+            }
+            if (offset <= 0) break
+            val chunkBytes = if (offset == buffer.size) buffer else buffer.copyOf(offset)
+            val encoded = Base64.encodeToString(chunkBytes, Base64.NO_WRAP)
+
+            val job = async {
+              semaphore.withPermit {
+                chunksCollection.document("chunk_$index").set(
+                  mapOf(
+                    "mediaId" to mediaId,
+                    "senderId" to uid,
+                    "index" to index,
+                    "data" to encoded,
+                    "createdAt" to FieldValue.serverTimestamp()
+                  )
+                ).await()
+                countLock.withLock {
+                  completedChunks++
+                  onProgress(0.08f + (completedChunks.toFloat() / totalChunks.toFloat()) * 0.85f)
+                }
+              }
+            }
+            uploadJobs.add(job)
+          }
+        }
+        uploadJobs.awaitAll()
+      }
+    }
+
+    onProgress(0.96f)
+    PreparedFluxUpload(
+      mediaId = mediaId,
+      mimeType = mimeType,
+      sizeBytes = sizeBytes,
+      chunkCount = totalChunks,
+      localFile = destFile
+    )
   }
 
   suspend fun publishFlux(
@@ -206,10 +423,16 @@ class FluxRepository(
     caption: String,
     videoUri: String?,
     audioTitle: String,
-    gradientTheme: String = "BLURPLE"
+    gradientTheme: String = "BLURPLE",
+    onUploadProgress: (Float) -> Unit = {}
   ): FluxVideo {
     val fluxId = "flux_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
-    val persistedUri = persistPickedVideoLocally(fluxId, videoUri)
+    val preparedUpload = prepareAndUploadFluxVideo(videoUri, onUploadProgress)
+    val remoteVideoUrl = if (videoUri?.startsWith("http") == true) videoUri else null
+    val localPlayableUri = preparedUpload?.let { Uri.fromFile(it.localFile).toString() }
+      ?: remoteVideoUrl
+      ?: videoUri?.takeIf { !isSignedIn() }
+
     val extractedTags = Regex("#\\w+").findAll(caption).map { it.value }.take(15).toList()
     val tags = extractedTags.ifEmpty { listOf("#flux") }
     val cleanAudio = audioTitle.ifBlank { "Original Audio - $authorName" }.take(120)
@@ -226,7 +449,11 @@ class FluxRepository(
       authorVerifiedTier = validTier,
       isAuthorVerified = isAuthorVerified,
       caption = caption.trim().ifBlank { "#flux" },
-      videoUri = persistedUri,
+      videoUri = localPlayableUri,
+      mediaId = preparedUpload?.mediaId,
+      mediaMimeType = preparedUpload?.mimeType,
+      mediaSizeBytes = preparedUpload?.sizeBytes ?: 0L,
+      mediaChunkCount = preparedUpload?.chunkCount ?: 0,
       audioTitle = cleanAudio,
       likesCount = 0,
       likedBy = emptyList(),
@@ -253,8 +480,14 @@ class FluxRepository(
         put("isAuthorVerified", isAuthorVerified)
         put("authorVerifiedTier", validTier)
         put("caption", newVideo.caption.take(2000))
-        if (!persistedUri.isNullOrBlank()) {
-          put("videoUri", persistedUri.take(1000))
+        if (!remoteVideoUrl.isNullOrBlank()) {
+          put("videoUri", remoteVideoUrl.take(1000))
+        }
+        if (preparedUpload != null) {
+          put("mediaId", preparedUpload.mediaId)
+          put("mediaMimeType", preparedUpload.mimeType)
+          put("mediaSizeBytes", preparedUpload.sizeBytes)
+          put("mediaChunkCount", preparedUpload.chunkCount)
         }
         put("audioTitle", cleanAudio)
         put("likesCount", 0)
@@ -276,6 +509,7 @@ class FluxRepository(
       }
     }
 
+    onUploadProgress(1f)
     return newVideo
   }
 
@@ -367,26 +601,29 @@ class FluxRepository(
   }
 
   suspend fun saveVideoToGallery(context: Context, video: FluxVideo): Result<Unit> = withContext(Dispatchers.IO) {
-    val rawUri = video.videoUri
-    if (rawUri.isNullOrBlank()) {
-      return@withContext Result.failure(IllegalStateException("No downloadable video file attached"))
-    }
-    val parsed = Uri.parse(rawUri)
+    val resolvedCachedFile = peekCachedFluxFile(video)
+      ?: if (!video.mediaId.isNullOrBlank() && video.mediaChunkCount > 0) {
+        resolvePlayableFluxFile(video).getOrNull()
+      } else null
+
     val resolver = context.applicationContext.contentResolver
-
-    fun openSourceStream(): java.io.InputStream? {
-      return when (parsed.scheme) {
-        "file" -> {
-          val filePath = parsed.path ?: return null
-          val file = File(filePath)
-          if (file.exists() && file.canRead()) FileInputStream(file) else null
+    val sourceStream: java.io.InputStream? = if (resolvedCachedFile != null && resolvedCachedFile.exists()) {
+      FileInputStream(resolvedCachedFile)
+    } else {
+      val rawUri = video.videoUri
+      if (!rawUri.isNullOrBlank()) {
+        val parsed = Uri.parse(rawUri)
+        when (parsed.scheme) {
+          "file" -> parsed.path?.let { File(it) }?.takeIf { it.exists() && it.canRead() }?.let { FileInputStream(it) }
+          "content" -> resolver.openInputStream(parsed)
+          else -> null
         }
-        else -> resolver.openInputStream(parsed)
-      }
+      } else null
     }
 
-    val sourceStream = openSourceStream()
-      ?: return@withContext Result.failure(IllegalStateException("Video file unavailable on this device"))
+    if (sourceStream == null) {
+      return@withContext Result.failure(IllegalStateException("Video file unavailable on this device"))
+    }
 
     val fileName = "Kora_Flux_${video.id}.mp4"
     return@withContext try {
@@ -555,6 +792,10 @@ class FluxRepository(
               isAuthorVerified = obj.optBoolean("isAuthorVerified", false),
               caption = obj.optString("caption", ""),
               videoUri = if (obj.has("videoUri") && !obj.isNull("videoUri")) obj.getString("videoUri") else null,
+              mediaId = if (obj.has("mediaId") && !obj.isNull("mediaId")) obj.getString("mediaId") else null,
+              mediaMimeType = if (obj.has("mediaMimeType") && !obj.isNull("mediaMimeType")) obj.getString("mediaMimeType") else null,
+              mediaSizeBytes = obj.optLong("mediaSizeBytes", 0L),
+              mediaChunkCount = obj.optInt("mediaChunkCount", 0),
               audioTitle = obj.optString("audioTitle", "Original Sound"),
               likesCount = obj.optInt("likesCount", 0),
               likedBy = likedByList,
@@ -589,6 +830,10 @@ class FluxRepository(
         obj.put("isAuthorVerified", v.isAuthorVerified)
         obj.put("caption", v.caption)
         obj.put("videoUri", v.videoUri)
+        obj.put("mediaId", v.mediaId)
+        obj.put("mediaMimeType", v.mediaMimeType)
+        obj.put("mediaSizeBytes", v.mediaSizeBytes)
+        obj.put("mediaChunkCount", v.mediaChunkCount)
         obj.put("audioTitle", v.audioTitle)
         obj.put("likesCount", v.likesCount)
         obj.put("commentsCount", v.commentsCount)

@@ -621,3 +621,158 @@ test("Voice call signaling isolates calls and ICE candidates strictly to the two
   );
 });
 
+test("Messages and posts allow valid multi-emoji reactions while blocking outsiders and field tampering", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_react").set({
+      type: "direct",
+      title: "Bob",
+      isVerified: false,
+      verifiedTier: "BLUE",
+      participantIds: [ALICE_UID, BOB_UID],
+      lastMessageText: "",
+      lastMessageSenderId: "",
+      pinnedBy: [],
+      archivedBy: [],
+      mutedBy: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  const msgRef = aliceDb.collection("conversations").doc("convo_react").collection("messages").doc("msg_r1");
+  await assertSucceeds(
+    msgRef.set({
+      conversationId: "convo_react",
+      senderId: ALICE_UID,
+      senderName: "Alice",
+      isSenderVerified: false,
+      senderVerifiedTier: "BLUE",
+      content: "Wild news!",
+      status: "sent",
+      readBy: [ALICE_UID],
+      isEdited: false,
+      isDeleted: false,
+      reactions: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Bob (participant) reacts with weird emojis
+  await assertSucceeds(
+    bobDb.collection("conversations").doc("convo_react").collection("messages").doc("msg_r1").update({
+      reactions: { "🤯": [BOB_UID], "🫠": [BOB_UID] },
+      updatedAt: new Date(),
+    })
+  );
+
+  // Eve (non-participant) cannot add message reactions
+  await assertFails(
+    eveDb.collection("conversations").doc("convo_react").collection("messages").doc("msg_r1").update({
+      reactions: { "💀": [EVE_UID] },
+      updatedAt: new Date(),
+    })
+  );
+
+  // Post with weird multi-emoji reactions
+  await assertSucceeds(
+    aliceDb.collection("posts").doc("post_react").set({
+      authorId: ALICE_UID,
+      authorName: "Alice",
+      authorHandle: "@alice",
+      content: "Check this out",
+      audience: "public",
+      likedBy: [],
+      likesCount: 0,
+      commentsCount: 0,
+      reactions: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  await assertSucceeds(
+    bobDb.collection("posts").doc("post_react").update({
+      reactions: { "🛸": [BOB_UID], "🦄": [BOB_UID] },
+    })
+  );
+
+  await assertFails(
+    bobDb.collection("posts").doc("post_react").update({
+      reactions: { "🛸": [BOB_UID] },
+      content: "Tampered body",
+    })
+  );
+});
+
+test("Flux video media chunks allow cross-user viewing while blocking sender spoofing and mutations", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+
+  const chunkRef = aliceDb
+    .collection("flux_media")
+    .doc("fluxmedia_1")
+    .collection("chunks")
+    .doc("chunk_0");
+
+  await assertSucceeds(
+    chunkRef.set({
+      mediaId: "fluxmedia_1",
+      senderId: ALICE_UID,
+      index: 0,
+      data: "AAAAIGZ0eXBtcDQy",
+      createdAt: new Date(),
+    })
+  );
+
+  // Author spoofing fails
+  await assertFails(
+    bobDb.collection("flux_media").doc("fluxmedia_1").collection("chunks").doc("chunk_fake").set({
+      mediaId: "fluxmedia_1",
+      senderId: ALICE_UID,
+      index: 1,
+      data: "ZmFrZQ==",
+      createdAt: new Date(),
+    })
+  );
+
+  await assertSucceeds(
+    aliceDb.collection("flux_videos").doc("flux_cloud_1").set({
+      authorId: ALICE_UID,
+      authorName: "Alice",
+      authorHandle: "@alice",
+      isAuthorVerified: false,
+      authorVerifiedTier: "GOLD",
+      caption: "Cloud Flux #kora",
+      mediaId: "fluxmedia_1",
+      mediaMimeType: "video/mp4",
+      mediaSizeBytes: 12000,
+      mediaChunkCount: 1,
+      audioTitle: "Original Audio",
+      likesCount: 0,
+      likedBy: [],
+      commentsCount: 0,
+      sharesCount: 0,
+      savedBy: [],
+      tags: ["#kora"],
+      gradientTheme: "CYBER",
+      createdAt: new Date(),
+    })
+  );
+
+  // Bob (any signed-in viewer) can read both the Flux doc and its video chunks
+  await assertSucceeds(bobDb.collection("flux_videos").doc("flux_cloud_1").get());
+  await assertSucceeds(
+    bobDb.collection("flux_media").doc("fluxmedia_1").collection("chunks").doc("chunk_0").get()
+  );
+
+  // Chunks are immutable
+  await assertFails(chunkRef.update({ data: "tampered" }));
+  await assertFails(chunkRef.delete());
+});
+
+

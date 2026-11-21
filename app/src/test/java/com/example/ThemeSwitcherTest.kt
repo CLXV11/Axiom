@@ -105,4 +105,45 @@ class ThemeSwitcherTest {
     assertEquals(AccentColorChoice.NITRO_PINK.color, scheme.primary)
     assertEquals(AccentColorChoice.NITRO_PINK.color, extended.deepIndigoAccent)
   }
+
+  @Test
+  fun testBuildKoraColorScheme_discordDarkUsesLayeredCharcoalNotPureBlack() {
+    val (scheme, _) = buildKoraColorScheme(
+      preset = AppThemePreset.DISCORD_DARK,
+      isSystemDark = true,
+      amoledPureBlack = false,
+      accentChoice = AccentColorChoice.DEFAULT
+    )
+    assertTrue(scheme.background != Color(0xFF000000))
+    assertTrue(scheme.surface != Color(0xFF000000))
+    assertEquals(Color(0xFF1E1F22), scheme.surfaceContainerLowest)
+    assertEquals(Color(0xFF2B2D31), scheme.background)
+    assertEquals(Color(0xFF313338), scheme.surface)
+  }
+
+  @Test
+  fun testPreferencesManager_persistsExtendedSettingsAndMediaCache() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    prefs.inAppBannersEnabled = false
+    prefs.notificationSoundEnabled = false
+    prefs.fluxStartMuted = true
+    prefs.fluxAutoDownload = false
+    prefs.compactMode = true
+    prefs.callSpeakerDefault = true
+
+    assertFalse(prefs.inAppBannersEnabled)
+    assertFalse(prefs.notificationSoundEnabled)
+    assertTrue(prefs.fluxStartMuted)
+    assertFalse(prefs.fluxAutoDownload)
+    assertTrue(prefs.compactMode)
+    assertTrue(prefs.callSpeakerDefault)
+
+    val fluxDir = java.io.File(context.filesDir, "flux_media").apply { mkdirs() }
+    val sampleFile = java.io.File(fluxDir, "clip_sample.bin").apply { writeBytes(ByteArray(256)) }
+    assertTrue(prefs.calculateMediaCacheBytes(context) >= 256L)
+
+    val cleared = prefs.clearMediaCache(context)
+    assertTrue(cleared >= 256L)
+    assertFalse(sampleFile.exists())
+  }
 }

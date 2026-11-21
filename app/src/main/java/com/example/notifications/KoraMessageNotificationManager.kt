@@ -70,7 +70,8 @@ object KoraMessageNotificationManager {
     conversationId: String,
     senderName: String,
     messagePreview: String,
-    strings: KoraStrings
+    strings: KoraStrings,
+    soundEnabled: Boolean = true
   ) {
     if (!hasNotificationPermission(context)) return
     ensureNotificationChannel(context, strings)
@@ -94,20 +95,33 @@ object KoraMessageNotificationManager {
     }
     val body = messagePreview.ifBlank { strings.newMessageNotificationTitle }
 
-    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentTitle(title)
       .setContentText(body)
       .setStyle(NotificationCompat.BigTextStyle().bigText(body))
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-      .setDefaults(NotificationCompat.DEFAULT_ALL)
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
-      .build()
 
-    runCatching {
+    if (soundEnabled) {
+      builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+    } else {
+      builder.setSilent(true)
+    }
+
+    val notification = builder.build()
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) {
+      return
+    }
+    try {
       NotificationManagerCompat.from(context).notify(notificationId, notification)
+    } catch (_: SecurityException) {
+      // Ignore gracefully if notification permission is revoked asynchronously
     }
   }
 

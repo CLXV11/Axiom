@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -55,8 +56,8 @@ fun KoraTopBar(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .defaultMinSize(minHeight = 60.dp)
-        .padding(horizontal = spacing.small, vertical = 8.dp),
+        .defaultMinSize(minHeight = 62.dp)
+        .padding(horizontal = spacing.small, vertical = 10.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
       if (onBackClick != null) {
@@ -98,7 +99,8 @@ fun KoraTopBar(
             color = colors.onSurface,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
           )
           if (isVerified) {
             Spacer(modifier = Modifier.width(6.dp))
@@ -106,9 +108,9 @@ fun KoraTopBar(
           }
         }
         if (!subtitle.isNullOrBlank()) {
+          Spacer(modifier = Modifier.height(2.dp))
           Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 1.dp)
+            verticalAlignment = Alignment.CenterVertically
           ) {
             if (isOnline == true) {
               Box(
@@ -121,7 +123,7 @@ fun KoraTopBar(
             }
             Text(
               text = subtitle,
-              style = KoraTheme.typography.labelSmall,
+              style = KoraTheme.typography.labelSmall.copy(lineHeight = 16.sp),
               color = colors.onSurfaceVariant,
               maxLines = 2,
               overflow = TextOverflow.Ellipsis

@@ -14,6 +14,10 @@ data class FluxVideo(
   val isAuthorVerified: Boolean = false,
   val caption: String = "",
   val videoUri: String? = null,
+  val mediaId: String? = null,
+  val mediaMimeType: String? = null,
+  val mediaSizeBytes: Long = 0L,
+  val mediaChunkCount: Int = 0,
   val audioTitle: String = "Original Sound",
   val likesCount: Int = 0,
   val likedBy: List<String> = emptyList(),
@@ -23,7 +27,10 @@ data class FluxVideo(
   val tags: List<String> = emptyList(),
   val gradientTheme: String = "BLURPLE", // "BLURPLE", "NITRO", "EMERALD", "SOLAR", "CYBER"
   val createdAt: Long = System.currentTimeMillis()
-)
+) {
+  fun hasVideoContent(): Boolean =
+    (!mediaId.isNullOrBlank() && mediaChunkCount > 0) || !videoUri.isNullOrBlank()
+}
 
 @Keep
 data class FluxComment(

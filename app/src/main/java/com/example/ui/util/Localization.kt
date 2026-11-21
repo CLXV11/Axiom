@@ -363,6 +363,48 @@ interface KoraStrings {
   val startQuietModeToggle: String
   val startQuietModeDesc: String
   val setupStepSubtitle: String
+
+  // Archived Chats, Multi-Emoji Reactions & Flux Upload
+  val filterArchived: String
+  val reactAction: String
+  val emojiPickerTitle: String
+  val weirdReactionsTab: String
+  val classicReactionsTab: String
+  val signalReactionsTab: String
+  val moreReactionsDesc: String
+  val postCommentsTitle: String
+  val noPostCommentsYet: String
+  val uploadingFluxVideoProgress: String
+
+  // Comprehensive Settings Hub & Concise Flux Labels
+  val fluxSaveShort: String
+  val settingsAccountSection: String
+  val settingsEditIdentity: String
+  val settingsEditIdentityDesc: String
+  val settingsAccountEmailLabel: String
+  val settingsPrivacySection: String
+  val settingsNotificationsSection: String
+  val settingsInAppBanners: String
+  val settingsInAppBannersDesc: String
+  val settingsSoundAlerts: String
+  val settingsSoundAlertsDesc: String
+  val settingsMediaFluxSection: String
+  val settingsFluxStartMuted: String
+  val settingsFluxStartMutedDesc: String
+  val settingsFluxAutoDownload: String
+  val settingsFluxAutoDownloadDesc: String
+  val settingsCallSpeakerDefault: String
+  val settingsCallSpeakerDefaultDesc: String
+  val settingsCompactLayout: String
+  val settingsCompactLayoutDesc: String
+  val settingsClearCache: String
+  val settingsClearCacheDesc: String
+  val settingsCacheClearedToast: String
+  val settingsCacheSizeFormat: String
+  val settingsAboutMeLabel: String
+  val settingsFullSettingsCardTitle: String
+  val settingsFullSettingsCardDesc: String
+  val settingsOpenButton: String
 }
 
 object EnglishStrings : KoraStrings {
@@ -664,6 +706,44 @@ object EnglishStrings : KoraStrings {
   override val startQuietModeToggle = "Start in Quiet Focus Mode"
   override val startQuietModeDesc = "Keep alerts soft while you settle into Kora"
   override val setupStepSubtitle = "Customize your look and vibe before entering"
+  override val filterArchived = "Archived"
+  override val reactAction = "React"
+  override val emojiPickerTitle = "Expressive & Weird Reactions"
+  override val weirdReactionsTab = "Weird & Surreal"
+  override val classicReactionsTab = "Classic"
+  override val signalReactionsTab = "Signals & Vibes"
+  override val moreReactionsDesc = "Choose from all iPhone-style expressive & weird emojis"
+  override val postCommentsTitle = "Comments"
+  override val noPostCommentsYet = "No comments yet — start the conversation"
+  override val uploadingFluxVideoProgress = "Uploading video %d%%"
+  override val fluxSaveShort = "Save"
+  override val settingsAccountSection = "Account & Identity"
+  override val settingsEditIdentity = "Edit Profile Details"
+  override val settingsEditIdentityDesc = "Display name, @handle, bio, and specialty"
+  override val settingsAccountEmailLabel = "Signed-in Account"
+  override val settingsPrivacySection = "Privacy & Presence"
+  override val settingsNotificationsSection = "Notifications & Calls"
+  override val settingsInAppBanners = "In-App Message Banners"
+  override val settingsInAppBannersDesc = "Show floating preview banner when a message arrives"
+  override val settingsSoundAlerts = "Alert Sounds & Vibration"
+  override val settingsSoundAlertsDesc = "Play sound and haptics for new messages"
+  override val settingsMediaFluxSection = "Flux, Calls & Storage"
+  override val settingsFluxStartMuted = "Start Flux Videos Muted"
+  override val settingsFluxStartMutedDesc = "Keep audio muted when opening Flux reels"
+  override val settingsFluxAutoDownload = "Auto-Load Flux Videos"
+  override val settingsFluxAutoDownloadDesc = "Automatically buffer shared cloud Flux clips"
+  override val settingsCallSpeakerDefault = "Default to Speakerphone"
+  override val settingsCallSpeakerDefaultDesc = "Enable speaker automatically when joining voice calls"
+  override val settingsCompactLayout = "Compact Chat List"
+  override val settingsCompactLayoutDesc = "Tighter vertical density across conversation rows"
+  override val settingsClearCache = "Clear Media Cache"
+  override val settingsClearCacheDesc = "Free temporary Flux videos and downloaded files"
+  override val settingsCacheClearedToast = "Cleared %.1f MB of cached media"
+  override val settingsCacheSizeFormat = "%.1f MB used"
+  override val settingsAboutMeLabel = "ABOUT ME"
+  override val settingsFullSettingsCardTitle = "All Settings"
+  override val settingsFullSettingsCardDesc = "Account, privacy, calls, notifications & media"
+  override val settingsOpenButton = "Manage"
 }
 
 object ArabicStrings : KoraStrings {
@@ -965,6 +1045,44 @@ object ArabicStrings : KoraStrings {
   override val startQuietModeToggle = "البدء بوضع التركيز الهادئ"
   override val startQuietModeDesc = "تخفيف حدة التنبيهات منذ لحظة دخولك"
   override val setupStepSubtitle = "رتّب هويتك وأسلوبك قبل دخول كورا"
+  override val filterArchived = "المؤرشفة"
+  override val reactAction = "تفاعل"
+  override val emojiPickerTitle = "تفاعلات غريبة ومميزة"
+  override val weirdReactionsTab = "تفاعلات غريبة"
+  override val classicReactionsTab = "كلاسيكية"
+  override val signalReactionsTab = "إشارات وأجواء"
+  override val moreReactionsDesc = "اختر من إموجيات متنوعة وغريبة بأسلوب الآيفون"
+  override val postCommentsTitle = "التعليقات"
+  override val noPostCommentsYet = "لا توجد تعليقات بعد — كن أول المعلّقين"
+  override val uploadingFluxVideoProgress = "جارٍ رفع الفيديو %d%%"
+  override val fluxSaveShort = "حفظ"
+  override val settingsAccountSection = "الحساب والهوية"
+  override val settingsEditIdentity = "تعديل بيانات الحساب"
+  override val settingsEditIdentityDesc = "الاسم، المعرّف، النبذة الشخصية، والتخصص"
+  override val settingsAccountEmailLabel = "الحساب المسجّل"
+  override val settingsPrivacySection = "الخصوصية والحضور"
+  override val settingsNotificationsSection = "الإشعارات والمكالمات"
+  override val settingsInAppBanners = "إشعارات الرسائل المنبثقة"
+  override val settingsInAppBannersDesc = "عرض شريط تنبيه عائم عند وصول رسالة جديدة"
+  override val settingsSoundAlerts = "صوت واهتزاز التنبيهات"
+  override val settingsSoundAlertsDesc = "تفعيل الصوت والاهتزاز للرسائل الواردة"
+  override val settingsMediaFluxSection = "فلوكس والوسائط والتخزين"
+  override val settingsFluxStartMuted = "بدء فلوكس بدون صوت"
+  override val settingsFluxStartMutedDesc = "كتم الصوت تلقائياً عند فتح مقاطع فلوكس"
+  override val settingsFluxAutoDownload = "تحميل تلقائي لمقاطع فلوكس"
+  override val settingsFluxAutoDownloadDesc = "تجهيز وتشغيل المقاطع السحابية تلقائياً"
+  override val settingsCallSpeakerDefault = "مكبر الصوت تلقائياً"
+  override val settingsCallSpeakerDefaultDesc = "تشغيل مكبر الصوت عند بدء أو استقبال مكالمة"
+  override val settingsCompactLayout = "عرض مضغوط للمحادثات"
+  override val settingsCompactLayoutDesc = "مسافات أكثر إحكاماً لعرض محادثات أكثر"
+  override val settingsClearCache = "مسح ذاكرة التخزين المؤقت"
+  override val settingsClearCacheDesc = "حذف الفيديوهات والملفات المؤقتة لتوفير المساحة"
+  override val settingsCacheClearedToast = "تم مسح %.1f ميجابايت من الملفات المؤقتة"
+  override val settingsCacheSizeFormat = "%.1f ميجابايت مستخدمة"
+  override val settingsAboutMeLabel = "نبذة عني"
+  override val settingsFullSettingsCardTitle = "الإعدادات الشاملة"
+  override val settingsFullSettingsCardDesc = "تعديل الحساب، الخصوصية، المكالمات، الإشعارات والوسائط"
+  override val settingsOpenButton = "تعديل"
 }
 
 val LocalAppStrings = compositionLocalOf<KoraStrings> { EnglishStrings }

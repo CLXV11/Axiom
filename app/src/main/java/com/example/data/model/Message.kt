@@ -31,6 +31,7 @@ data class Message(
   val replyToText: String? = null,
   val status: String = "sent", // "sent", "delivered", "read"
   val readBy: List<String> = emptyList(),
+  val reactions: Map<String, List<String>> = emptyMap(),
   @get:PropertyName("isEdited") @PropertyName("isEdited")
   val isEdited: Boolean = false,
   @get:PropertyName("isDeleted") @PropertyName("isDeleted")
@@ -60,6 +61,7 @@ data class Message(
     "replyToText" to replyToText,
     "status" to status,
     "readBy" to readBy,
+    "reactions" to reactions,
     "isEdited" to isEdited,
     "isDeleted" to isDeleted,
     "createdAt" to createdAt,

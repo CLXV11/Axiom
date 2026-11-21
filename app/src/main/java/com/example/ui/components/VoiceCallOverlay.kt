@@ -111,7 +111,8 @@ class VoiceCallController(
   private val currentUserNameProvider: () -> String,
   private val currentAvatarUrlProvider: () -> String?,
   private val repository: VoiceCallRepository,
-  private val scope: CoroutineScope
+  private val scope: CoroutineScope,
+  private val defaultSpeakerProvider: () -> Boolean = { true }
 ) {
   private val _uiState = MutableStateFlow(VoiceCallUiState())
   val uiState: StateFlow<VoiceCallUiState> = _uiState.asStateFlow()
@@ -143,7 +144,7 @@ class VoiceCallController(
             peerName = incoming.callerName,
             peerAvatarUrl = incoming.callerAvatarUrl,
             isMuted = false,
-            isSpeakerOn = true,
+            isSpeakerOn = defaultSpeakerProvider(),
             isMinimized = false,
             durationSeconds = 0
           )
@@ -167,6 +168,7 @@ class VoiceCallController(
     peerVerifiedTier: String? = null
   ) {
     if (_uiState.value.phase != VoiceCallUiPhase.IDLE) return
+    val initialSpeaker = defaultSpeakerProvider()
 
     scope.launch {
       _uiState.value = VoiceCallUiState(
@@ -176,7 +178,7 @@ class VoiceCallController(
         peerVerified = peerVerified,
         peerVerifiedTier = peerVerifiedTier,
         isMuted = false,
-        isSpeakerOn = true,
+        isSpeakerOn = initialSpeaker,
         isMinimized = false,
         durationSeconds = 0
       )
@@ -199,7 +201,7 @@ class VoiceCallController(
 
       _uiState.value = _uiState.value.copy(session = session)
       val engine = createOrResetEngine(activeCallId = session.id)
-      engine.startPeerSession(initialSpeakerOn = true)
+      engine.startPeerSession(initialSpeakerOn = initialSpeaker)
       engine.startRingbackTone()
 
       engine.createOffer(

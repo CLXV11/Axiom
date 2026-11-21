@@ -72,6 +72,52 @@ class ChatRepository(
         "dm_${digest.take(40)}"
       }
     }
+
+    fun deduplicateDirectConversations(
+      list: List<Conversation>,
+      currentUid: String
+    ): List<Conversation> {
+      val nonAi = list.filterNot { it.id == AI_CHATBOT_CONVO_ID }
+      val groups = nonAi.filter { it.type != "direct" }
+      val directs = nonAi.filter { it.type == "direct" }
+
+      val dedupedDirects = directs
+        .groupBy { convo ->
+          convo.participantIds.firstOrNull { it != currentUid }
+            ?: convo.participantIds.firstOrNull()
+            ?: convo.id
+        }
+        .map { (peerId, candidates) ->
+          val canonicalId = canonicalDirectConversationId(currentUid, peerId)
+          candidates.maxWith(
+            Comparator { a, b ->
+              val aHasMsg = if (a.lastMessageText.isNotBlank()) 1 else 0
+              val bHasMsg = if (b.lastMessageText.isNotBlank()) 1 else 0
+              if (aHasMsg != bHasMsg) return@Comparator aHasMsg.compareTo(bHasMsg)
+
+              val aTime = (a.lastMessageTimestamp ?: a.createdAt)?.seconds ?: 0L
+              val bTime = (b.lastMessageTimestamp ?: b.createdAt)?.seconds ?: 0L
+              if (aTime != bTime) return@Comparator aTime.compareTo(bTime)
+
+              val aCanonical = if (a.id == canonicalId) 1 else 0
+              val bCanonical = if (b.id == canonicalId) 1 else 0
+              if (aCanonical != bCanonical) return@Comparator aCanonical.compareTo(bCanonical)
+
+              val aActive = if (!a.archivedBy.contains(currentUid)) 1 else 0
+              val bActive = if (!b.archivedBy.contains(currentUid)) 1 else 0
+              if (aActive != bActive) return@Comparator aActive.compareTo(bActive)
+
+              a.id.compareTo(b.id)
+            }
+          )
+        }
+
+      return (dedupedDirects + groups).sortedWith(
+        compareByDescending<Conversation> { it.pinnedBy.contains(currentUid) }
+          .thenByDescending { (it.lastMessageTimestamp ?: it.createdAt)?.seconds ?: 0L }
+          .thenByDescending { (it.lastMessageTimestamp ?: it.createdAt)?.nanoseconds ?: 0 }
+      )
+    }
   }
 
   private val repositoryScope = CoroutineScope(Dispatchers.Main.immediate)
@@ -151,22 +197,20 @@ class ChatRepository(
           val firestoreList = snapshot.toObjects(
             Conversation::class.java,
             DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
-          ).sortedByDescending {
-            it.lastMessageTimestamp ?: it.createdAt
-          }
-          cachedFirestoreConversations = firestoreList
+          )
+          val dedupedOthers = deduplicateDirectConversations(firestoreList, uid)
+          cachedFirestoreConversations = dedupedOthers
           val aiConvo = localConversations.value.find { it.id == AI_CHATBOT_CONVO_ID }
             ?.copy(participantIds = listOf(uid, AI_CHATBOT_SENDER_ID), pinnedBy = listOf(uid))
             ?: createAiChatbotConversation(uid)
-          val others = firestoreList.filterNot { it.id == AI_CHATBOT_CONVO_ID }
-          listOf(aiConvo) + others
+          listOf(aiConvo) + dedupedOthers
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "conversations", auth)
           val aiConvo = localConversations.value.find { it.id == AI_CHATBOT_CONVO_ID }
             ?.copy(participantIds = listOf(uid, AI_CHATBOT_SENDER_ID), pinnedBy = listOf(uid))
             ?: createAiChatbotConversation(uid)
-          val others = cachedFirestoreConversations.filterNot { it.id == AI_CHATBOT_CONVO_ID }
+          val others = deduplicateDirectConversations(cachedFirestoreConversations, uid)
           emit(listOf(aiConvo) + others)
         }
     } else {
@@ -193,17 +237,20 @@ class ChatRepository(
           Conversation::class.java,
           DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
         )
-        val canonicalExisting = existingList.firstOrNull { it.id == canonicalId }
-        if (canonicalExisting != null) {
-          return Result.success(canonicalExisting.id)
+        val matchingDirects = existingList.filter { convo ->
+          convo.id == canonicalId || (
+            convo.type == "direct" &&
+              convo.participantIds.contains(targetUserId) &&
+              convo.participantIds.size == 2
+            )
         }
-        val legacyExisting = existingList.firstOrNull { convo ->
-          convo.type == "direct" &&
-            convo.participantIds.contains(targetUserId) &&
-            convo.participantIds.size == 2
-        }
-        if (legacyExisting != null) {
-          return Result.success(legacyExisting.id)
+        if (matchingDirects.isNotEmpty()) {
+          val winner = deduplicateDirectConversations(matchingDirects, uid).firstOrNull()
+            ?: matchingDirects.first()
+          if (winner.archivedBy.contains(uid)) {
+            runCatching { toggleArchiveConversation(winner.id, true) }
+          }
+          return Result.success(winner.id)
         }
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.LIST, "conversations", auth)
@@ -892,6 +939,72 @@ class ChatRepository(
         val newMuted = if (currentMuted) convo.mutedBy - uid else convo.mutedBy + uid
         convo.copy(mutedBy = newMuted)
       } else convo
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun toggleMessageReaction(
+    conversationId: String,
+    messageId: String,
+    emoji: String
+  ): Result<Unit> {
+    val cleanEmoji = emoji.trim().take(16)
+    if (cleanEmoji.isBlank()) return Result.success(Unit)
+    val uid = getEffectiveUserId()
+
+    if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val msgRef = db.collection("conversations")
+        .document(conversationId)
+        .collection("messages")
+        .document(messageId)
+      return try {
+        db.runTransaction { transaction ->
+          val snap = transaction.get(msgRef)
+          val currentMsg = snap.toObject(Message::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            ?: throw IllegalStateException("Message not found")
+          if (currentMsg.isDeleted) return@runTransaction Unit
+
+          val updated = currentMsg.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+          val list = updated.getOrPut(cleanEmoji) { mutableListOf() }
+          if (list.contains(uid)) {
+            list.remove(uid)
+            if (list.isEmpty()) updated.remove(cleanEmoji)
+          } else {
+            if (updated.size < 40 || updated.containsKey(cleanEmoji)) {
+              list.add(uid)
+            }
+          }
+          transaction.update(
+            msgRef,
+            mapOf(
+              "reactions" to updated.mapValues { it.value.distinct().take(200) },
+              "updatedAt" to FieldValue.serverTimestamp()
+            )
+          )
+          Unit
+        }.await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.UPDATE, msgRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    val msgFlow = localMessages[conversationId]
+    if (msgFlow != null) {
+      msgFlow.value = msgFlow.value.map { msg ->
+        if (msg.id == messageId && !msg.isDeleted) {
+          val updated = msg.reactions.mapValues { it.value.toMutableList() }.toMutableMap()
+          val list = updated.getOrPut(cleanEmoji) { mutableListOf() }
+          if (list.contains(uid)) {
+            list.remove(uid)
+            if (list.isEmpty()) updated.remove(cleanEmoji)
+          } else {
+            list.add(uid)
+          }
+          msg.copy(reactions = updated.mapValues { it.value.distinct() })
+        } else msg
+      }
     }
     return Result.success(Unit)
   }

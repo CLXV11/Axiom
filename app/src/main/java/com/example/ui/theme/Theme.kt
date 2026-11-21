@@ -54,40 +54,53 @@ fun buildKoraColorScheme(
     PureWhite
   }
 
+  val baseDeepest = if (isDark) {
+    if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF000000)
+    else when (preset) {
+      AppThemePreset.NITRO_MAGENTA -> Color(0xFF1A1420)
+      AppThemePreset.CYBER_EMERALD -> Color(0xFF17201E)
+      AppThemePreset.CRIMSON_RUBY -> Color(0xFF1F171A)
+      AppThemePreset.SOLAR_AMBER -> Color(0xFF1E1B15)
+      else -> DiscordDarkDeepest
+    }
+  } else {
+    Color(0xFFE3E5E8)
+  }
+
   val baseInput = if (isDark) {
     if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF161B24)
     else when (preset) {
-      AppThemePreset.NITRO_MAGENTA -> Color(0xFF281C34)
-      AppThemePreset.CYBER_EMERALD -> Color(0xFF182E28)
-      AppThemePreset.CRIMSON_RUBY -> Color(0xFF301A20)
-      AppThemePreset.SOLAR_AMBER -> Color(0xFF2E2618)
+      AppThemePreset.NITRO_MAGENTA -> Color(0xFF372E40)
+      AppThemePreset.CYBER_EMERALD -> Color(0xFF30403B)
+      AppThemePreset.CRIMSON_RUBY -> Color(0xFF3D2E33)
+      AppThemePreset.SOLAR_AMBER -> Color(0xFF3C362B)
       else -> DiscordDarkInput
     }
   } else {
-    Color(0xFFEDF1F7)
+    Color(0xFFE3E5E8)
   }
 
   val baseBorder = if (isDark) {
     if (amoledPureBlack || preset == AppThemePreset.OLED_MIDNIGHT) Color(0xFF212836)
     else when (preset) {
-      AppThemePreset.NITRO_MAGENTA -> Color(0xFF3B294D)
-      AppThemePreset.CYBER_EMERALD -> Color(0xFF224238)
-      AppThemePreset.CRIMSON_RUBY -> Color(0xFF45242C)
-      AppThemePreset.SOLAR_AMBER -> Color(0xFF423622)
+      AppThemePreset.NITRO_MAGENTA -> Color(0xFF42374D)
+      AppThemePreset.CYBER_EMERALD -> Color(0xFF3A4C46)
+      AppThemePreset.CRIMSON_RUBY -> Color(0xFF4A383E)
+      AppThemePreset.SOLAR_AMBER -> Color(0xFF484134)
       else -> DiscordBorder
     }
   } else {
-    Color(0xFFDCE3EE)
+    Color(0xFFD4D7DC)
   }
 
   val colorScheme = if (isDark) {
     darkColorScheme(
       primary = basePrimary,
       onPrimary = onPrimaryColor,
-      primaryContainer = basePrimary.copy(alpha = 0.20f),
+      primaryContainer = basePrimary.copy(alpha = 0.18f),
       onPrimaryContainer = DiscordTextPrimary,
       secondary = KoraCyanAccent,
-      onSecondary = Color(0xFF0B0F19),
+      onSecondary = Color(0xFF1E1F22),
       secondaryContainer = baseInput,
       onSecondaryContainer = DiscordTextPrimary,
       tertiary = basePrimary,
@@ -98,14 +111,15 @@ fun buildKoraColorScheme(
       onSurface = DiscordTextPrimary,
       surfaceVariant = baseInput,
       onSurfaceVariant = DiscordTextMuted,
-      surfaceContainerLow = baseBg,
+      surfaceContainerLowest = baseDeepest,
+      surfaceContainerLow = baseDeepest,
       surfaceContainer = baseSurface,
       surfaceContainerHigh = baseInput,
-      inverseSurface = Color(0xFF1E293B),
+      inverseSurface = Color(0xFF232428),
       inverseOnSurface = DiscordTextPrimary,
       inversePrimary = basePrimary,
       outline = baseBorder,
-      outlineVariant = baseBorder.copy(alpha = 0.7f),
+      outlineVariant = baseBorder,
       error = SemanticError,
       onError = PureWhite
     )

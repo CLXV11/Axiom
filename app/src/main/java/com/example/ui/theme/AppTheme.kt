@@ -3,7 +3,7 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
- * Curated Kora Luxury Theme Presets
+ * Curated Kora Theme Presets
  */
 enum class AppThemePreset(
   val id: String,
@@ -18,10 +18,10 @@ enum class AppThemePreset(
 ) {
   DISCORD_DARK(
     id = "discord_dark",
-    nameEn = "Midnight Sapphire",
-    nameAr = "كورا الياقوتي (داكن)",
-    subtitleEn = "Deep obsidian navy with luminous indigo",
-    subtitleAr = "كحلي داكن عميق مع لمسات نيلية مشرقة",
+    nameEn = "Discord Ash Charcoal",
+    nameAr = "رمادي ديسكورد المريح (داكن)",
+    subtitleEn = "Layered matte charcoal grays with calm Blurple",
+    subtitleAr = "طبقات رمادية داكنة مريحة للعين مع أزرق هادئ",
     primaryColor = DiscordBlurple,
     backgroundColor = DiscordDarkPrimary,
     surfaceColor = DiscordDarkSecondary,
@@ -42,54 +42,54 @@ enum class AppThemePreset(
     id = "nitro_magenta",
     nameEn = "Velvet Orchid",
     nameAr = "أوركيد مخملي",
-    subtitleEn = "Rich plum slate & radiant rose-violet",
-    subtitleAr = "درجات أرجوانية فاخرة وتباين ناعم",
+    subtitleEn = "Muted plum charcoal & soft rose accent",
+    subtitleAr = "درجات فحمية أرجوانية ناعمة ومريحة",
     primaryColor = DiscordNitroPink,
-    backgroundColor = Color(0xFF120C18),
-    surfaceColor = Color(0xFF1D1426),
+    backgroundColor = Color(0xFF241D2B),
+    surfaceColor = Color(0xFF2D2535),
     isDark = true
   ),
   CYBER_EMERALD(
     id = "cyber_emerald",
-    nameEn = "Emerald Mist",
-    nameAr = "زمردي هادئ",
-    subtitleEn = "Botanical deep forest & fresh jade mint",
-    subtitleAr = "أخضر غابات عميق مع زمردي منعش",
+    nameEn = "Emerald Slate",
+    nameAr = "رمادي زمردي",
+    subtitleEn = "Deep slate pine & calm emerald green",
+    subtitleAr = "رمادي غامق هادئ مع لمسة زمردية",
     primaryColor = DiscordGreen,
-    backgroundColor = Color(0xFF091411),
-    surfaceColor = Color(0xFF11221D),
+    backgroundColor = Color(0xFF1F2A27),
+    surfaceColor = Color(0xFF273430),
     isDark = true
   ),
   CRIMSON_RUBY(
     id = "crimson_ruby",
     nameEn = "Imperial Ruby",
-    nameAr = "ياقوت قرمزي",
-    subtitleEn = "Warm espresso slate & vivid coral ruby",
-    subtitleAr = "فحم دافئ مع أحمر ياقوتي متوازن",
+    nameAr = "رمادي ياقوتي",
+    subtitleEn = "Warm espresso slate & balanced coral",
+    subtitleAr = "فحم دافئ مع أحمر متوازن",
     primaryColor = DiscordRed,
-    backgroundColor = Color(0xFF150B0E),
-    surfaceColor = Color(0xFF221317),
+    backgroundColor = Color(0xFF291F22),
+    surfaceColor = Color(0xFF33272B),
     isDark = true
   ),
   SOLAR_AMBER(
     id = "solar_amber",
-    nameEn = "Desert Gold",
-    nameAr = "ذهب كهرماني",
-    subtitleEn = "Warm charcoal & refined burnished gold",
-    subtitleAr = "رمادي دافئ مع ذهبي كهرماني أنيق",
+    nameEn = "Desert Amber",
+    nameAr = "رمادي كهرماني",
+    subtitleEn = "Warm charcoal & refined matte gold",
+    subtitleAr = "رمادي دافئ مع ذهبي هادئ",
     primaryColor = DiscordYellow,
-    backgroundColor = Color(0xFF14110A),
-    surfaceColor = Color(0xFF211B11),
+    backgroundColor = Color(0xFF28241C),
+    surfaceColor = Color(0xFF322D23),
     isDark = true
   ),
   DISCORD_LIGHT(
     id = "discord_light",
     nameEn = "Porcelain Daylight",
     nameAr = "ضوء الصباح (فاتح)",
-    subtitleEn = "Crisp porcelain white & serene sapphire",
+    subtitleEn = "Crisp porcelain white & serene Blurple",
     subtitleAr = "بياض نقي مريح للعين مع أزرق راقٍ",
-    primaryColor = Color(0xFF4F46E5),
-    backgroundColor = Color(0xFFF8FAFC),
+    primaryColor = Color(0xFF5865F2),
+    backgroundColor = Color(0xFFF2F3F5),
     surfaceColor = PureWhite,
     isDark = false
   ),
@@ -122,13 +122,13 @@ enum class AccentColorChoice(
   val color: Color
 ) {
   DEFAULT("default", "Preset Default", "افتراضي السمة", Color.Unspecified),
-  BLURPLE("blurple", "Sapphire", "ياقوتي", DiscordBlurple),
+  BLURPLE("blurple", "Blurple", "أزرق ديسكورد", DiscordBlurple),
   NITRO_PINK("nitro_pink", "Rose", "وردي", DiscordNitroPink),
-  CYAN("cyan", "Cyan", "سماوي", Color(0xFF06B6D4)),
+  CYAN("cyan", "Cyan", "سماوي", Color(0xFF00A8FC)),
   EMERALD("emerald", "Emerald", "زمردي", DiscordGreen),
-  GOLD("gold", "Amber Gold", "ذهبي", DiscordYellow),
-  VIOLET("violet", "Violet", "بنفسجي", Color(0xFF8B5CF6)),
-  RED("red", "Coral Red", "مرجاني", DiscordRed);
+  GOLD("gold", "Amber", "كهرماني", DiscordYellow),
+  VIOLET("violet", "Violet", "بنفسجي", Color(0xFF7C6CF0)),
+  RED("red", "Coral", "مرجاني", DiscordRed);
 
   companion object {
     fun fromId(id: String?): AccentColorChoice {

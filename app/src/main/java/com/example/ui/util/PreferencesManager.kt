@@ -178,4 +178,75 @@ class PreferencesManager(context: Context) {
     set(value) {
       prefs.edit().putString("key_guest_avatar_url", value).apply()
     }
+
+  var inAppBannersEnabled: Boolean
+    get() = prefs.getBoolean("key_in_app_banners", true)
+    set(value) {
+      prefs.edit().putBoolean("key_in_app_banners", value).apply()
+    }
+
+  var notificationSoundEnabled: Boolean
+    get() = prefs.getBoolean("key_notification_sound", true)
+    set(value) {
+      prefs.edit().putBoolean("key_notification_sound", value).apply()
+    }
+
+  var fluxStartMuted: Boolean
+    get() = prefs.getBoolean("key_flux_start_muted", false)
+    set(value) {
+      prefs.edit().putBoolean("key_flux_start_muted", value).apply()
+    }
+
+  var fluxAutoDownload: Boolean
+    get() = prefs.getBoolean("key_flux_auto_download", true)
+    set(value) {
+      prefs.edit().putBoolean("key_flux_auto_download", value).apply()
+    }
+
+  var compactMode: Boolean
+    get() = prefs.getBoolean("key_compact_mode", false)
+    set(value) {
+      prefs.edit().putBoolean("key_compact_mode", value).apply()
+    }
+
+  var callSpeakerDefault: Boolean
+    get() = prefs.getBoolean("key_call_speaker_default", false)
+    set(value) {
+      prefs.edit().putBoolean("key_call_speaker_default", value).apply()
+    }
+
+  fun calculateMediaCacheBytes(context: Context): Long {
+    val appCtx = context.applicationContext
+    val dirs = listOf(
+      java.io.File(appCtx.filesDir, "flux_media"),
+      java.io.File(appCtx.filesDir, "chat_media"),
+      appCtx.cacheDir
+    )
+    fun dirSize(file: java.io.File?): Long {
+      if (file == null || !file.exists()) return 0L
+      if (file.isFile) return file.length()
+      return file.listFiles()?.sumOf { dirSize(it) } ?: 0L
+    }
+    return dirs.sumOf { dirSize(it) }
+  }
+
+  fun clearMediaCache(context: Context): Long {
+    val before = calculateMediaCacheBytes(context)
+    val appCtx = context.applicationContext
+    val targets = listOf(
+      java.io.File(appCtx.filesDir, "flux_media"),
+      java.io.File(appCtx.filesDir, "chat_media")
+    )
+    targets.forEach { dir ->
+      if (dir.exists()) {
+        dir.listFiles()?.forEach { child ->
+          runCatching { child.deleteRecursively() }
+        }
+      }
+    }
+    appCtx.cacheDir.listFiles()?.forEach { child ->
+      runCatching { child.deleteRecursively() }
+    }
+    return before
+  }
 }

@@ -162,6 +162,12 @@ class MainActivity : ComponentActivity() {
       var isAmoled by remember { mutableStateOf(prefs.amoledPureBlack) }
       var currentAccent by remember { mutableStateOf(prefs.accentChoice) }
       var themeMode by remember { mutableStateOf(prefs.themeMode) }
+      var compactMode by remember { mutableStateOf(prefs.compactMode) }
+      var inAppBannersEnabled by remember { mutableStateOf(prefs.inAppBannersEnabled) }
+      var notificationSoundEnabled by remember { mutableStateOf(prefs.notificationSoundEnabled) }
+      var fluxStartMuted by remember { mutableStateOf(prefs.fluxStartMuted) }
+      var fluxAutoDownload by remember { mutableStateOf(prefs.fluxAutoDownload) }
+      var callSpeakerDefault by remember { mutableStateOf(prefs.callSpeakerDefault) }
       var showLuxuryIntro by remember { mutableStateOf(true) }
 
       val toggleAuthLanguage: () -> Unit = {
@@ -411,6 +417,36 @@ class MainActivity : ComponentActivity() {
                       themeMode = newMode
                       prefs.themeMode = newMode
                     },
+                    compactMode = compactMode,
+                    onCompactModeChanged = { enabled ->
+                      compactMode = enabled
+                      prefs.compactMode = enabled
+                    },
+                    inAppBannersEnabled = inAppBannersEnabled,
+                    onInAppBannersChanged = { enabled ->
+                      inAppBannersEnabled = enabled
+                      prefs.inAppBannersEnabled = enabled
+                    },
+                    notificationSoundEnabled = notificationSoundEnabled,
+                    onNotificationSoundChanged = { enabled ->
+                      notificationSoundEnabled = enabled
+                      prefs.notificationSoundEnabled = enabled
+                    },
+                    fluxStartMuted = fluxStartMuted,
+                    onFluxStartMutedChanged = { enabled ->
+                      fluxStartMuted = enabled
+                      prefs.fluxStartMuted = enabled
+                    },
+                    fluxAutoDownload = fluxAutoDownload,
+                    onFluxAutoDownloadChanged = { enabled ->
+                      fluxAutoDownload = enabled
+                      prefs.fluxAutoDownload = enabled
+                    },
+                    callSpeakerDefault = callSpeakerDefault,
+                    onCallSpeakerDefaultChanged = { enabled ->
+                      callSpeakerDefault = enabled
+                      prefs.callSpeakerDefault = enabled
+                    },
                     onSignOut = signOutAction
                   )
                 }
@@ -445,6 +481,18 @@ fun KoraAppRoot(
   currentAccent: AccentColorChoice,
   onThemeChanged: (AppThemePreset, Boolean, AccentColorChoice) -> Unit,
   onThemeModeChanged: (String) -> Unit,
+  compactMode: Boolean = false,
+  onCompactModeChanged: (Boolean) -> Unit = {},
+  inAppBannersEnabled: Boolean = true,
+  onInAppBannersChanged: (Boolean) -> Unit = {},
+  notificationSoundEnabled: Boolean = true,
+  onNotificationSoundChanged: (Boolean) -> Unit = {},
+  fluxStartMuted: Boolean = false,
+  onFluxStartMutedChanged: (Boolean) -> Unit = {},
+  fluxAutoDownload: Boolean = true,
+  onFluxAutoDownloadChanged: (Boolean) -> Unit = {},
+  callSpeakerDefault: Boolean = false,
+  onCallSpeakerDefaultChanged: (Boolean) -> Unit = {},
   onSignOut: () -> Unit = {}
 ) {
   val context = LocalContext.current
@@ -459,6 +507,7 @@ fun KoraAppRoot(
   val cachedProfile = remember(currentUid) { userRepository.getCachedProfile(currentUid) }
   val currentUserProfile by userRepository.observeUserProfile(currentUid)
     .collectAsState(initial = cachedProfile)
+  val latestCallSpeakerDefault by rememberUpdatedState(callSpeakerDefault)
 
   val voiceCallController = remember(currentUid) {
     VoiceCallController(
@@ -469,7 +518,8 @@ fun KoraAppRoot(
       },
       currentAvatarUrlProvider = { currentUserProfile?.avatarUrl },
       repository = voiceCallRepository,
-      scope = callScope
+      scope = callScope,
+      defaultSpeakerProvider = { latestCallSpeakerDefault }
     )
   }
   val voiceCallState by voiceCallController.uiState.collectAsState()
@@ -529,9 +579,11 @@ fun KoraAppRoot(
   }
 
   // Real-time incoming message detector -> System Notification + In-App Alert Banner
-  val latestActiveConvoId by androidx.compose.runtime.rememberUpdatedState(activeConversation?.id)
-  val latestStrings by androidx.compose.runtime.rememberUpdatedState(strings)
-  val latestDirectory by androidx.compose.runtime.rememberUpdatedState(directoryUsers)
+  val latestActiveConvoId by rememberUpdatedState(activeConversation?.id)
+  val latestStrings by rememberUpdatedState(strings)
+  val latestDirectory by rememberUpdatedState(directoryUsers)
+  val latestBannersEnabled by rememberUpdatedState(inAppBannersEnabled)
+  val latestSoundEnabled by rememberUpdatedState(notificationSoundEnabled)
 
   LaunchedEffect(currentUid, chatRepository) {
     var baselineInitialized = false
@@ -563,15 +615,18 @@ fun KoraAppRoot(
           conversationId = convo.id,
           senderName = senderName,
           messagePreview = preview,
-          strings = latestStrings
+          strings = latestStrings,
+          soundEnabled = latestSoundEnabled
         )
 
-        inAppMessageAlert = IncomingMessageAlert(
-          conversation = convo,
-          senderName = senderName,
-          senderAvatarUrl = senderProfile?.avatarUrl,
-          messagePreview = preview
-        )
+        if (latestBannersEnabled) {
+          inAppMessageAlert = IncomingMessageAlert(
+            conversation = convo,
+            senderName = senderName,
+            senderAvatarUrl = senderProfile?.avatarUrl,
+            messagePreview = preview
+          )
+        }
       }
     }
   }
@@ -635,13 +690,17 @@ fun KoraAppRoot(
           onOpenConversation = { convo -> activeConversation = convo },
           onNewChatClicked = { showNewChatDialog = true },
           onLanguageToggle = { toggleLanguage() },
-          onOpenStore = { showStore = true }
+          onOpenStore = { showStore = true },
+          onOpenSettings = { currentTab = NavigationTab.SETTINGS },
+          compactMode = compactMode
         )
 
         NavigationTab.FLUX -> com.example.ui.screens.FluxScreen(
           fluxRepository = fluxRepository,
           userRepository = userRepository,
-          onLanguageToggle = { toggleLanguage() }
+          onLanguageToggle = { toggleLanguage() },
+          initialMuted = fluxStartMuted,
+          autoLoadVideos = fluxAutoDownload
         )
 
         NavigationTab.FEED -> FeedScreen(
@@ -674,7 +733,22 @@ fun KoraAppRoot(
             currentAccent = currentAccent,
             onThemeChanged = onThemeChanged,
             onThemeModeChanged = onThemeModeChanged,
-            onLanguageChanged = onLanguageChanged
+            onLanguageChanged = onLanguageChanged,
+            userRepository = userRepository,
+            compactMode = compactMode,
+            onCompactModeChanged = onCompactModeChanged,
+            inAppBannersEnabled = inAppBannersEnabled,
+            onInAppBannersChanged = onInAppBannersChanged,
+            notificationSoundEnabled = notificationSoundEnabled,
+            onNotificationSoundChanged = onNotificationSoundChanged,
+            fluxStartMuted = fluxStartMuted,
+            onFluxStartMutedChanged = onFluxStartMutedChanged,
+            fluxAutoDownload = fluxAutoDownload,
+            onFluxAutoDownloadChanged = onFluxAutoDownloadChanged,
+            callSpeakerDefault = callSpeakerDefault,
+            onCallSpeakerDefaultChanged = onCallSpeakerDefaultChanged,
+            onBackClick = { currentTab = NavigationTab.PROFILE },
+            onSignOut = onSignOut
           )
         }
       }
@@ -683,6 +757,7 @@ fun KoraAppRoot(
         NewChatDialog(
           userRepository = userRepository,
           chatRepository = chatRepository,
+          existingConversations = conversations,
           onDismiss = { showNewChatDialog = false },
           onConversationCreated = { convo ->
             showNewChatDialog = false
@@ -703,10 +778,10 @@ fun KoraAppRoot(
     }
   }
 
-  // In-app Floating New Message Notification Banner (hidden during active call UI)
+  // In-app Floating New Message Notification Banner (hidden during active call UI or when disabled)
   NewMessageBanner(
     alert = inAppMessageAlert,
-    visible = inAppMessageAlert != null && voiceCallState.phase == VoiceCallUiPhase.IDLE,
+    visible = inAppBannersEnabled && inAppMessageAlert != null && voiceCallState.phase == VoiceCallUiPhase.IDLE,
     onOpenChat = { alert ->
       inAppMessageAlert = null
       showStore = false

@@ -15,16 +15,11 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.DynamicFeed
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DynamicFeed
 import androidx.compose.material.icons.outlined.PersonOutline
-import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationRail
@@ -76,27 +71,27 @@ fun KoraMainScaffold(
     Row(modifier = Modifier.fillMaxSize()) {
       if (useNavigationRail) {
         NavigationRail(
-          containerColor = colors.surface,
+          containerColor = colors.surfaceContainerLowest,
           contentColor = colors.onSurface,
           modifier = Modifier
             .fillMaxHeight()
             .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.navigationBars))
         ) {
           val railItems = listOf(
-            Triple(NavigationTab.CHATS, strings.navChats, Pair(Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)),
-            Triple(NavigationTab.FLUX, strings.navFlux, Pair(Icons.Filled.PlayArrow, Icons.Outlined.PlayArrow)),
-            Triple(NavigationTab.FEED, strings.navFeed, Pair(Icons.Filled.DynamicFeed, Icons.Outlined.DynamicFeed)),
-            Triple(NavigationTab.MEMORY, strings.navMemory, Pair(Icons.Filled.Bookmark, Icons.Outlined.BookmarkBorder)),
-            Triple(NavigationTab.PROFILE, strings.navProfile, Pair(Icons.Filled.Person, Icons.Outlined.PersonOutline))
+            Triple(NavigationTab.CHATS, strings.navChats, Icons.Outlined.ChatBubbleOutline),
+            Triple(NavigationTab.FLUX, strings.navFlux, Icons.Outlined.PlayCircle),
+            Triple(NavigationTab.FEED, strings.navFeed, Icons.Outlined.DynamicFeed),
+            Triple(NavigationTab.MEMORY, strings.navMemory, Icons.Outlined.BookmarkBorder),
+            Triple(NavigationTab.PROFILE, strings.navProfile, Icons.Outlined.PersonOutline)
           )
-          railItems.forEach { (tab, label, icons) ->
-            val selected = currentTab == tab
+          railItems.forEach { (tab, label, icon) ->
+            val selected = currentTab == tab || (tab == NavigationTab.PROFILE && currentTab == NavigationTab.SETTINGS)
             NavigationRailItem(
               selected = selected,
               onClick = { onTabSelected(tab) },
               icon = {
                 Icon(
-                  imageVector = if (selected) icons.first else icons.second,
+                  imageVector = icon,
                   contentDescription = label
                 )
               },
@@ -108,8 +103,8 @@ fun KoraMainScaffold(
                 )
               },
               colors = NavigationRailItemDefaults.colors(
-                selectedIconColor = colors.onPrimary,
-                indicatorColor = colors.primary,
+                selectedIconColor = colors.primary,
+                indicatorColor = colors.primary.copy(alpha = 0.16f),
                 selectedTextColor = colors.primary,
                 unselectedIconColor = colors.onSurfaceVariant,
                 unselectedTextColor = colors.onSurfaceVariant
@@ -161,7 +156,8 @@ fun KoraMainScaffold(
           }
         },
         containerColor = colors.background,
-        contentColor = colors.onBackground
+        contentColor = colors.onBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
       ) { paddingValues ->
         Box(
           modifier = Modifier

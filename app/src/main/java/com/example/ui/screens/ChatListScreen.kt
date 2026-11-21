@@ -4,12 +4,15 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,22 +22,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Contacts
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,7 +58,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -74,7 +76,12 @@ import com.example.ui.components.KoraTopBar
 import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
 import com.example.ui.util.LocalAppStrings
+import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,10 +91,13 @@ fun ChatListScreen(
   onOpenConversation: (Conversation) -> Unit,
   onNewChatClicked: () -> Unit,
   onLanguageToggle: () -> Unit,
-  onOpenStore: () -> Unit = {}
+  onOpenStore: () -> Unit = {},
+  onOpenSettings: (() -> Unit)? = null,
+  compactMode: Boolean = false
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   val coroutineScope = rememberCoroutineScope()
   val currentUid = userRepository.requireUserId()
   val conversations by chatRepository.observeConversations().collectAsState(initial = emptyList())
@@ -130,8 +140,22 @@ fun ChatListScreen(
     return usersById[peerId] ?: extraPeers[peerId]
   }
 
+  val archivedCount = remember(conversations, currentUid) {
+    conversations.count { it.archivedBy.contains(currentUid) }
+  }
+  val activeCount = remember(conversations, archivedCount) {
+    (conversations.size - archivedCount).coerceAtLeast(0)
+  }
+
+  LaunchedEffect(archivedCount, selectedFilter) {
+    if (selectedFilter == "archived" && archivedCount == 0) {
+      selectedFilter = "all"
+    }
+  }
+
   val filteredConversations = conversations.filter { convo ->
     val isAi = convo.id == ChatRepository.AI_CHATBOT_CONVO_ID
+    val isArchived = !isAi && convo.archivedBy.contains(currentUid)
     val peer = resolvePeer(convo)
     val displayTitle = when {
       isAi -> strings.aiAssistantName
@@ -139,9 +163,10 @@ fun ChatListScreen(
       else -> convo.title
     }
     val matchesFilter = when (selectedFilter) {
-      "direct" -> convo.type == "direct"
-      "group" -> convo.type == "group"
-      else -> true
+      "direct" -> !isArchived && convo.type == "direct"
+      "group" -> !isArchived && convo.type == "group"
+      "archived" -> isArchived
+      else -> !isArchived
     }
     val matchesSearch = if (searchQuery.isBlank()) true else {
       displayTitle.contains(searchQuery, ignoreCase = true) ||
@@ -154,11 +179,12 @@ fun ChatListScreen(
   }
 
   Scaffold(
-    containerColor = MaterialTheme.colorScheme.background,
+    containerColor = colors.background,
+    contentWindowInsets = WindowInsets(0, 0, 0, 0),
     topBar = {
       KoraTopBar(
         title = strings.conversations,
-        subtitle = if (conversations.size <= 1) strings.aiAssistantSubtitle else String.format(strings.activeChatsCount, conversations.size),
+        subtitle = if (activeCount <= 1) strings.aiAssistantSubtitle else String.format(strings.activeChatsCount, activeCount),
         onLanguageToggle = onLanguageToggle,
         actions = {
           IconButton(
@@ -166,17 +192,27 @@ fun ChatListScreen(
             modifier = Modifier.testTag("open_contact_directory_button")
           ) {
             Icon(
-              imageVector = Icons.Default.Contacts,
+              imageVector = Icons.Outlined.Contacts,
               contentDescription = strings.contactDirectoryTitle,
-              tint = MaterialTheme.colorScheme.primary
+              tint = colors.onSurfaceVariant
             )
           }
-          IconButton(onClick = onOpenStore) {
-            Icon(
-              imageVector = Icons.Default.AutoAwesome,
-              contentDescription = strings.customDecoration,
-              tint = MaterialTheme.colorScheme.primary
-            )
+          if (onOpenSettings != null) {
+            IconButton(onClick = onOpenSettings) {
+              Icon(
+                imageVector = Icons.Outlined.Settings,
+                contentDescription = strings.settingsTitle,
+                tint = colors.onSurfaceVariant
+              )
+            }
+          } else {
+            IconButton(onClick = onOpenStore) {
+              Icon(
+                imageVector = Icons.Outlined.AutoAwesome,
+                contentDescription = strings.customDecoration,
+                tint = colors.onSurfaceVariant
+              )
+            }
           }
         }
       )
@@ -184,9 +220,9 @@ fun ChatListScreen(
     floatingActionButton = {
       FloatingActionButton(
         onClick = onNewChatClicked,
-        containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        shape = CircleShape,
+        containerColor = colors.primary,
+        contentColor = colors.onPrimary,
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.testTag("new_chat_fab")
       ) {
         Icon(imageVector = Icons.Default.Add, contentDescription = strings.newChat)
@@ -197,131 +233,127 @@ fun ChatListScreen(
       modifier = Modifier
         .fillMaxSize()
         .padding(paddingValues)
-        .background(MaterialTheme.colorScheme.background),
+        .background(colors.background),
       contentAlignment = Alignment.TopCenter
     ) {
-    Column(
-      modifier = Modifier
-        .fillMaxSize()
-        .widthIn(max = 840.dp)
-    ) {
-      // Soft Search Bar Capsule
-      OutlinedTextField(
-        value = searchQuery,
-        onValueChange = { searchQuery = it },
-        placeholder = {
-          Text(
-            text = strings.searchChats,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium
-          )
-        },
-        leadingIcon = {
-          Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(16.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-          focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-          unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
-          focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
-          unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-          focusedTextColor = MaterialTheme.colorScheme.onSurface,
-          unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-        ),
+      Column(
         modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 10.dp)
-          .testTag("search_conversations_input")
-      )
-
-      // Calm Filter Chips
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+          .fillMaxSize()
+          .widthIn(max = 840.dp)
       ) {
-        val chipColors = FilterChipDefaults.filterChipColors(
-          containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-          labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-          selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-          selectedLabelColor = MaterialTheme.colorScheme.primary
-        )
-        val chipBorder = FilterChipDefaults.filterChipBorder(
-          enabled = true,
-          selected = false,
-          borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        // Recessed Discord-style Search Bar
+        OutlinedTextField(
+          value = searchQuery,
+          onValueChange = { searchQuery = it },
+          placeholder = {
+            Text(
+              text = strings.searchChats,
+              color = colors.onSurfaceVariant,
+              style = MaterialTheme.typography.bodyMedium,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          },
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Outlined.Search,
+              contentDescription = null,
+              tint = colors.onSurfaceVariant,
+              modifier = Modifier.size(20.dp)
+            )
+          },
+          singleLine = true,
+          shape = RoundedCornerShape(12.dp),
+          colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = colors.surfaceContainerLowest,
+            unfocusedContainerColor = colors.surfaceContainerLowest,
+            focusedBorderColor = colors.primary.copy(alpha = 0.7f),
+            unfocusedBorderColor = colors.outlineVariant.copy(alpha = 0.55f),
+            focusedTextColor = colors.onSurface,
+            unfocusedTextColor = colors.onSurface
+          ),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .testTag("search_conversations_input")
         )
 
-        FilterChip(
-          selected = selectedFilter == "all",
-          onClick = { selectedFilter = "all" },
-          label = { Text(strings.filterAll, fontWeight = FontWeight.SemiBold) },
-          colors = chipColors,
-          border = chipBorder,
-          shape = RoundedCornerShape(12.dp)
-        )
-        FilterChip(
-          selected = selectedFilter == "direct",
-          onClick = { selectedFilter = "direct" },
-          label = { Text(strings.directChats, fontWeight = FontWeight.SemiBold) },
-          colors = chipColors,
-          border = chipBorder,
-          shape = RoundedCornerShape(12.dp)
-        )
-        FilterChip(
-          selected = selectedFilter == "group",
-          onClick = { selectedFilter = "group" },
-          label = { Text(strings.groupChats, fontWeight = FontWeight.SemiBold) },
-          colors = chipColors,
-          border = chipBorder,
-          shape = RoundedCornerShape(12.dp)
-        )
-      }
-
-      if (filteredConversations.isEmpty()) {
-        EmptyStateView(
-          icon = Icons.Default.ChatBubbleOutline,
-          title = strings.noChatsYet,
-          description = strings.startFirstConversation,
-          actionLabel = strings.newChat,
-          onAction = onNewChatClicked
-        )
-      } else {
-        LazyColumn(
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp)
+        // Uniform Filter Pill Strip
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          items(filteredConversations, key = { it.id }) { convo ->
-            val typingUsers by chatRepository.observeTyping(convo.id).collectAsState(initial = emptyList())
-            val peerUser = resolvePeer(convo)
-            ConversationRow(
-              conversation = convo,
-              peerUser = peerUser,
-              isAiChatbot = chatRepository.isAiChatbotConversation(convo.id),
-              currentUserId = currentUid,
-              typingUsers = typingUsers,
-              onClick = { onOpenConversation(convo) },
-              onTogglePin = { pin ->
-                coroutineScope.launch { chatRepository.togglePin(convo.id, pin) }
-              },
-              onToggleArchive = { archive ->
-                coroutineScope.launch { chatRepository.toggleArchive(convo.id, archive) }
-              },
-              onToggleMute = { mute ->
-                coroutineScope.launch { chatRepository.toggleMute(convo.id, mute) }
-              }
+          DiscordFilterPill(
+            label = strings.filterAll,
+            selected = selectedFilter == "all",
+            onClick = { selectedFilter = "all" }
+          )
+          DiscordFilterPill(
+            label = strings.directChats,
+            selected = selectedFilter == "direct",
+            onClick = { selectedFilter = "direct" }
+          )
+          DiscordFilterPill(
+            label = strings.groupChats,
+            selected = selectedFilter == "group",
+            onClick = { selectedFilter = "group" }
+          )
+          if (archivedCount > 0) {
+            DiscordFilterPill(
+              label = "${strings.filterArchived} ($archivedCount)",
+              selected = selectedFilter == "archived",
+              onClick = { selectedFilter = "archived" }
             )
           }
         }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        if (filteredConversations.isEmpty()) {
+          EmptyStateView(
+            icon = Icons.Outlined.ChatBubbleOutline,
+            title = strings.noChatsYet,
+            description = strings.startFirstConversation,
+            actionLabel = strings.newChat,
+            onAction = onNewChatClicked
+          )
+        } else {
+          LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+              horizontal = 14.dp,
+              vertical = if (compactMode) 4.dp else 8.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (compactMode) 6.dp else 8.dp)
+          ) {
+            items(filteredConversations, key = { it.id }) { convo ->
+              val typingUsers by chatRepository.observeTyping(convo.id).collectAsState(initial = emptyList())
+              val peerUser = resolvePeer(convo)
+              ConversationRow(
+                conversation = convo,
+                peerUser = peerUser,
+                isAiChatbot = chatRepository.isAiChatbotConversation(convo.id),
+                currentUserId = currentUid,
+                typingUsers = typingUsers,
+                compactMode = compactMode,
+                onClick = { onOpenConversation(convo) },
+                onTogglePin = { pin ->
+                  coroutineScope.launch { chatRepository.togglePin(convo.id, pin) }
+                },
+                onToggleArchive = { archive ->
+                  coroutineScope.launch { chatRepository.toggleArchive(convo.id, archive) }
+                },
+                onToggleMute = { mute ->
+                  coroutineScope.launch { chatRepository.toggleMute(convo.id, mute) }
+                }
+              )
+            }
+          }
+        }
       }
-    }
     }
   }
 
@@ -365,18 +397,53 @@ fun ChatListScreen(
 }
 
 @Composable
+private fun DiscordFilterPill(
+  label: String,
+  selected: Boolean,
+  onClick: () -> Unit
+) {
+  val colors = MaterialTheme.colorScheme
+  Surface(
+    onClick = onClick,
+    shape = RoundedCornerShape(10.dp),
+    color = if (selected) colors.primary.copy(alpha = 0.18f) else colors.surface,
+    border = BorderStroke(
+      width = 1.dp,
+      color = if (selected) colors.primary.copy(alpha = 0.6f) else colors.outlineVariant.copy(alpha = 0.65f)
+    ),
+    modifier = Modifier.defaultMinSize(minHeight = 34.dp)
+  ) {
+    Box(
+      modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+      contentAlignment = Alignment.Center
+    ) {
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) colors.primary else colors.onSurfaceVariant,
+        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        maxLines = 1,
+        softWrap = false
+      )
+    }
+  }
+}
+
+@Composable
 private fun ConversationRow(
   conversation: Conversation,
   peerUser: UserProfile? = null,
   isAiChatbot: Boolean,
   currentUserId: String,
   typingUsers: List<String> = emptyList(),
+  compactMode: Boolean = false,
   onClick: () -> Unit,
   onTogglePin: (Boolean) -> Unit,
   onToggleArchive: (Boolean) -> Unit,
   onToggleMute: (Boolean) -> Unit
 ) {
   val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
   var showMenu by remember { mutableStateOf(false) }
 
   val isPinned = conversation.pinnedBy.contains(currentUserId)
@@ -392,54 +459,41 @@ private fun ConversationRow(
   }
   val isRowVerified = peerUser?.isVerified ?: conversation.isVerified
   val rowVerifiedTier = peerUser?.verifiedTier ?: conversation.verifiedTier
-
-  val containerColor = if (isAiChatbot) {
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-  } else {
-    MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-  }
-
-  val borderColor = if (isAiChatbot) {
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-  } else {
-    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+  val formattedTime = remember(conversation.lastMessageTimestamp, conversation.createdAt) {
+    formatConversationTimestamp(conversation.lastMessageTimestamp ?: conversation.createdAt)
   }
 
   Surface(
-    shape = RoundedCornerShape(18.dp),
-    color = containerColor,
-    border = BorderStroke(1.dp, borderColor),
+    shape = RoundedCornerShape(14.dp),
+    color = colors.surface,
+    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.6f)),
     modifier = Modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(18.dp))
+      .clip(RoundedCornerShape(14.dp))
       .clickable(onClick = onClick)
       .testTag(if (isAiChatbot) "ai_chatbot_conversation_card" else "conversation_card_${conversation.id}")
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 14.dp, vertical = 12.dp),
+        .padding(
+          horizontal = 14.dp,
+          vertical = if (compactMode) 9.dp else 12.dp
+        ),
       verticalAlignment = Alignment.CenterVertically
     ) {
       if (isAiChatbot) {
         Box(
           modifier = Modifier
-            .size(48.dp)
+            .size(if (compactMode) 42.dp else 46.dp)
             .clip(CircleShape)
-            .background(
-              Brush.linearGradient(
-                listOf(
-                  MaterialTheme.colorScheme.primary,
-                  MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                )
-              )
-            ),
+            .background(colors.primary.copy(alpha = 0.16f)),
           contentAlignment = Alignment.Center
         ) {
           Icon(
-            imageVector = Icons.Default.AutoAwesome,
+            imageVector = Icons.Outlined.AutoAwesome,
             contentDescription = title,
-            tint = MaterialTheme.colorScheme.onPrimary,
+            tint = colors.primary,
             modifier = Modifier.size(22.dp)
           )
         }
@@ -447,7 +501,7 @@ private fun ConversationRow(
         AvatarView(
           name = title,
           avatarUrl = peerUser?.avatarUrl,
-          size = 48.dp,
+          size = if (compactMode) 42.dp else 46.dp,
           showPresence = conversation.type == "direct",
           isOnline = true
         )
@@ -463,29 +517,30 @@ private fun ConversationRow(
         ) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false)
+            modifier = Modifier.weight(1f)
           ) {
             if (isPinned && !isAiChatbot) {
               Icon(
-                imageVector = Icons.Default.PushPin,
+                imageVector = Icons.Outlined.PushPin,
                 contentDescription = "Pinned",
-                tint = MaterialTheme.colorScheme.primary,
+                tint = colors.primary,
                 modifier = Modifier.size(14.dp)
               )
               Spacer(modifier = Modifier.width(4.dp))
             }
             Text(
               text = title,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface,
+              style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+              fontWeight = FontWeight.SemiBold,
+              color = colors.onSurface,
               maxLines = 1,
-              overflow = TextOverflow.Ellipsis
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f, fill = false)
             )
             if (isRowVerified) {
-              Spacer(modifier = Modifier.width(6.dp))
+              Spacer(modifier = Modifier.width(5.dp))
               VerifiedBadge(
-                size = 15.dp,
+                size = 14.dp,
                 tierKey = rowVerifiedTier,
                 showDialogOnClick = true
               )
@@ -494,12 +549,12 @@ private fun ConversationRow(
               Spacer(modifier = Modifier.width(6.dp))
               Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                color = colors.primary.copy(alpha = 0.16f)
               ) {
                 Text(
                   text = strings.aiBotBadge,
                   style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                  color = MaterialTheme.colorScheme.primary,
+                  color = colors.primary,
                   fontWeight = FontWeight.Bold,
                   modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
@@ -507,92 +562,115 @@ private fun ConversationRow(
             }
           }
 
-          if (isMuted) {
-            Icon(
-              imageVector = Icons.Default.NotificationsOff,
-              contentDescription = "Muted",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(16.dp)
+          if (formattedTime.isNotBlank()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+              text = formattedTime,
+              style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+              color = colors.onSurfaceVariant,
+              maxLines = 1,
+              softWrap = false
             )
           }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(3.dp))
 
-        if (typingUsers.isNotEmpty()) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 2.dp)
-          ) {
-            TypingDotsIndicator(
-              dotSize = 4.dp,
-              travelDistance = 2.dp,
-              dotColor = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            val typingText = if (isAiChatbot) {
-              strings.aiThinking
-            } else when {
-              typingUsers.size == 1 -> String.format(strings.typingSingle, typingUsers.first())
-              typingUsers.size == 2 -> "${typingUsers[0]} & ${typingUsers[1]} ${strings.isTyping}"
-              else -> strings.typingMultiple
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          if (typingUsers.isNotEmpty()) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.weight(1f)
+            ) {
+              TypingDotsIndicator(
+                dotSize = 4.dp,
+                travelDistance = 2.dp,
+                dotColor = colors.primary
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              val typingText = if (isAiChatbot) {
+                strings.aiThinking
+              } else when {
+                typingUsers.size == 1 -> String.format(strings.typingSingle, typingUsers.first())
+                typingUsers.size == 2 -> "${typingUsers[0]} & ${typingUsers[1]} ${strings.isTyping}"
+                else -> strings.typingMultiple
+              }
+              Text(
+                text = typingText,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.primary,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+          } else {
+            val previewLine = when {
+              conversation.lastMessageText.isNotBlank() -> conversation.lastMessageText
+              isAiChatbot -> strings.aiWelcomeTitle
+              else -> strings.startFirstConversation
             }
             Text(
-              text = typingText,
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.primary,
-              fontWeight = FontWeight.SemiBold,
+              text = previewLine,
+              style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+              color = colors.onSurfaceVariant,
               maxLines = 1,
-              overflow = TextOverflow.Ellipsis
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f)
             )
           }
-        } else {
-          val previewLine = when {
-            conversation.lastMessageText.isNotBlank() -> conversation.lastMessageText
-            isAiChatbot -> strings.aiWelcomeTitle
-            else -> strings.startFirstConversation
+
+          if (isMuted) {
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+              imageVector = Icons.Outlined.NotificationsOff,
+              contentDescription = "Muted",
+              tint = colors.onSurfaceVariant,
+              modifier = Modifier.size(14.dp)
+            )
           }
-          Text(
-            text = previewLine,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
         }
       }
 
       if (!isAiChatbot) {
         Box {
-          IconButton(onClick = { showMenu = true }) {
+          IconButton(
+            onClick = { showMenu = true },
+            modifier = Modifier.size(48.dp)
+          ) {
             Icon(
               imageVector = Icons.Default.MoreVert,
               contentDescription = "Actions",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
+              tint = colors.onSurfaceVariant,
+              modifier = Modifier.size(19.dp)
             )
           }
 
           DropdownMenu(
             expanded = showMenu,
             onDismissRequest = { showMenu = false },
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            modifier = Modifier.background(colors.surfaceContainerHigh)
           ) {
             DropdownMenuItem(
-              text = { Text(if (isPinned) strings.unpinChat else strings.pinChat, color = MaterialTheme.colorScheme.onSurface) },
+              text = { Text(if (isPinned) strings.unpinChat else strings.pinChat, color = colors.onSurface) },
               onClick = {
                 showMenu = false
                 onTogglePin(!isPinned)
               }
             )
             DropdownMenuItem(
-              text = { Text(if (isArchived) strings.unarchiveChat else strings.archiveChat, color = MaterialTheme.colorScheme.onSurface) },
+              text = { Text(if (isArchived) strings.unarchiveChat else strings.archiveChat, color = colors.onSurface) },
               onClick = {
                 showMenu = false
                 onToggleArchive(!isArchived)
               }
             )
             DropdownMenuItem(
-              text = { Text(if (isMuted) strings.unmuteChat else strings.muteChat, color = MaterialTheme.colorScheme.onSurface) },
+              text = { Text(if (isMuted) strings.unmuteChat else strings.muteChat, color = colors.onSurface) },
               onClick = {
                 showMenu = false
                 onToggleMute(!isMuted)
@@ -602,5 +680,19 @@ private fun ConversationRow(
         }
       }
     }
+  }
+}
+
+private fun formatConversationTimestamp(ts: Timestamp?): String {
+  val date = ts?.toDate() ?: return ""
+  val now = Calendar.getInstance()
+  val msgCal = Calendar.getInstance().apply { time = date }
+  return if (
+    now.get(Calendar.YEAR) == msgCal.get(Calendar.YEAR) &&
+    now.get(Calendar.DAY_OF_YEAR) == msgCal.get(Calendar.DAY_OF_YEAR)
+  ) {
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+  } else {
+    SimpleDateFormat("dd/MM", Locale.getDefault()).format(date)
   }
 }

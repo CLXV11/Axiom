@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
@@ -18,16 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.DynamicFeed
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DynamicFeed
 import androidx.compose.material.icons.outlined.PersonOutline
-import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.ui.theme.KoraTheme
 import com.example.ui.util.LocalAppStrings
 
@@ -61,64 +58,59 @@ fun KoraBottomNav(
   modifier: Modifier = Modifier
 ) {
   val strings = LocalAppStrings.current
-  val spacing = KoraTheme.spacing
+  val colors = KoraTheme.colors
 
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .background(KoraTheme.colors.surface)
+      .background(colors.surfaceContainerLowest)
       .windowInsetsPadding(WindowInsets.navigationBars)
   ) {
     HorizontalDivider(
       thickness = 1.dp,
-      color = KoraTheme.colors.outlineVariant.copy(alpha = 0.45f)
+      color = colors.outlineVariant.copy(alpha = 0.6f)
     )
 
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .defaultMinSize(minHeight = 64.dp)
-        .padding(horizontal = spacing.compact, vertical = 4.dp),
-      horizontalArrangement = Arrangement.SpaceAround,
+        .padding(horizontal = 6.dp, vertical = 6.dp),
+      horizontalArrangement = Arrangement.SpaceEvenly,
       verticalAlignment = Alignment.CenterVertically
     ) {
       NavItem(
         label = strings.navChats,
-        selectedIcon = Icons.Filled.ChatBubble,
-        unselectedIcon = Icons.Outlined.ChatBubbleOutline,
+        icon = Icons.Outlined.ChatBubbleOutline,
         isSelected = currentTab == NavigationTab.CHATS,
         onClick = { onTabSelected(NavigationTab.CHATS) }
       )
 
       NavItem(
         label = strings.navFlux,
-        selectedIcon = Icons.Filled.PlayArrow,
-        unselectedIcon = Icons.Outlined.PlayArrow,
+        icon = Icons.Outlined.PlayCircle,
         isSelected = currentTab == NavigationTab.FLUX,
         onClick = { onTabSelected(NavigationTab.FLUX) }
       )
 
       NavItem(
         label = strings.navFeed,
-        selectedIcon = Icons.Filled.DynamicFeed,
-        unselectedIcon = Icons.Outlined.DynamicFeed,
+        icon = Icons.Outlined.DynamicFeed,
         isSelected = currentTab == NavigationTab.FEED,
         onClick = { onTabSelected(NavigationTab.FEED) }
       )
 
       NavItem(
         label = strings.navMemory,
-        selectedIcon = Icons.Filled.Bookmark,
-        unselectedIcon = Icons.Outlined.BookmarkBorder,
+        icon = Icons.Outlined.BookmarkBorder,
         isSelected = currentTab == NavigationTab.MEMORY,
         onClick = { onTabSelected(NavigationTab.MEMORY) }
       )
 
       NavItem(
         label = strings.navProfile,
-        selectedIcon = Icons.Filled.Person,
-        unselectedIcon = Icons.Outlined.PersonOutline,
-        isSelected = currentTab == NavigationTab.PROFILE,
+        icon = Icons.Outlined.PersonOutline,
+        isSelected = currentTab == NavigationTab.PROFILE || currentTab == NavigationTab.SETTINGS,
         onClick = { onTabSelected(NavigationTab.PROFILE) }
       )
     }
@@ -126,10 +118,9 @@ fun KoraBottomNav(
 }
 
 @Composable
-private fun NavItem(
+private fun RowScope.NavItem(
   label: String,
-  selectedIcon: ImageVector,
-  unselectedIcon: ImageVector,
+  icon: ImageVector,
   isSelected: Boolean,
   onClick: () -> Unit
 ) {
@@ -138,42 +129,43 @@ private fun NavItem(
 
   Column(
     modifier = Modifier
-      .defaultMinSize(minWidth = 56.dp, minHeight = 48.dp)
-      .clip(RoundedCornerShape(16.dp))
+      .weight(1f)
+      .defaultMinSize(minHeight = 52.dp)
+      .clip(RoundedCornerShape(12.dp))
       .clickable(
         interactionSource = interactionSource,
-        indication = ripple(bounded = true, radius = 28.dp),
+        indication = ripple(bounded = true, radius = 32.dp),
         onClick = onClick
       )
-      .padding(horizontal = 6.dp, vertical = 4.dp),
+      .padding(horizontal = 2.dp, vertical = 4.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center
   ) {
     Box(
       modifier = Modifier
         .size(width = 48.dp, height = 28.dp)
-        .clip(RoundedCornerShape(14.dp))
+        .clip(RoundedCornerShape(10.dp))
         .background(
-          if (isSelected) colors.primary
+          if (isSelected) colors.primary.copy(alpha = 0.16f)
           else Color.Transparent
         ),
       contentAlignment = Alignment.Center
     ) {
       Icon(
-        imageVector = if (isSelected) selectedIcon else unselectedIcon,
+        imageVector = icon,
         contentDescription = label,
-        modifier = Modifier.size(20.dp),
-        tint = if (isSelected) colors.onPrimary else colors.onSurfaceVariant
+        modifier = Modifier.size(21.dp),
+        tint = if (isSelected) colors.primary else colors.onSurfaceVariant
       )
     }
 
-    Spacer(modifier = Modifier.height(2.dp))
+    Spacer(modifier = Modifier.height(3.dp))
 
     Text(
       text = label,
-      style = KoraTheme.typography.labelSmall,
+      style = KoraTheme.typography.labelSmall.copy(fontSize = 11.sp),
       color = if (isSelected) colors.primary else colors.onSurfaceVariant,
-      fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+      fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
       maxLines = 1,
       softWrap = false,
       overflow = TextOverflow.Ellipsis

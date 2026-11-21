@@ -22,6 +22,7 @@ data class Post(
   val likedBy: List<String> = emptyList(),
   val likesCount: Long = 0L,
   val commentsCount: Long = 0L,
+  val reactions: Map<String, List<String>> = emptyMap(),
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -36,6 +37,7 @@ data class Post(
     "likedBy" to likedBy,
     "likesCount" to likesCount,
     "commentsCount" to commentsCount,
+    "reactions" to reactions,
     "createdAt" to createdAt,
     "updatedAt" to updatedAt
   ).filterValues { it != null }

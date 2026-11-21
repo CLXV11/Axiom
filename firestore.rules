@@ -31,6 +31,10 @@ service cloud.firestore {
       return arr is list && arr.size() <= maxLen && (arr.size() == 0 || arr[0] is string);
     }
 
+    function isValidReactionsMap(reactions) {
+      return reactions is map && reactions.size() <= 40;
+    }
+
     function isConvoParticipant(conversationId) {
       return isSignedIn() &&
              exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
@@ -100,6 +104,7 @@ service cloud.firestore {
              (!('readBy' in data) || isValidStringList(data.readBy, 50)) &&
              (!('isEdited' in data) || data.isEdited is bool) &&
              (!('isDeleted' in data) || data.isDeleted is bool) &&
+             (!('reactions' in data) || isValidReactionsMap(data.reactions)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
              !('id' in data);
@@ -116,6 +121,7 @@ service cloud.firestore {
              (!('likedBy' in data) || isValidStringList(data.likedBy, 200)) &&
              (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
              (!('commentsCount' in data) || (data.commentsCount is int && data.commentsCount >= 0)) &&
+             (!('reactions' in data) || isValidReactionsMap(data.reactions)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
              !('id' in data);
@@ -151,6 +157,10 @@ service cloud.firestore {
              (!('authorVerifiedTier' in data) || (data.authorVerifiedTier is string && isValidTier(data.authorVerifiedTier))) &&
              data.caption is string && data.caption.size() >= 1 && data.caption.size() <= 2000 &&
              (!('videoUri' in data) || data.videoUri == null || (data.videoUri is string && data.videoUri.size() <= 1000)) &&
+             (!('mediaId' in data) || data.mediaId == null || (data.mediaId is string && isValidId(data.mediaId))) &&
+             (!('mediaMimeType' in data) || data.mediaMimeType == null || (data.mediaMimeType is string && data.mediaMimeType.size() <= 128)) &&
+             (!('mediaSizeBytes' in data) || (data.mediaSizeBytes is int && data.mediaSizeBytes >= 0 && data.mediaSizeBytes <= 26214400)) &&
+             (!('mediaChunkCount' in data) || (data.mediaChunkCount is int && data.mediaChunkCount >= 0 && data.mediaChunkCount <= 100)) &&
              (!('audioTitle' in data) || data.audioTitle == null || (data.audioTitle is string && data.audioTitle.size() <= 120)) &&
              (!('likesCount' in data) || (data.likesCount is int && data.likesCount >= 0)) &&
              (!('likedBy' in data) || isValidStringList(data.likedBy, 200)) &&
@@ -418,7 +428,7 @@ service cloud.firestore {
                            'content', 'mediaType', 'mediaId', 'mediaFileName', 'mediaMimeType',
                            'mediaSizeBytes', 'mediaChunkCount', 'mediaDurationMs',
                            'replyToId', 'replyToSender', 'replyToText', 'status', 'readBy',
-                           'isEdited', 'isDeleted', 'createdAt', 'updatedAt'
+                           'isEdited', 'isDeleted', 'reactions', 'createdAt', 'updatedAt'
                          ]) &&
                          isConvoParticipant(conversationId);
 
@@ -433,7 +443,8 @@ service cloud.firestore {
                          (
                            (existing().senderId == request.auth.uid &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['content', 'isEdited', 'isDeleted', 'updatedAt'])) ||
-                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'readBy', 'updatedAt'])
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'readBy', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'updatedAt'])
                          );
 
         allow delete: if false;
@@ -475,7 +486,7 @@ service cloud.firestore {
                        incoming().keys().hasAll(['authorId', 'authorName', 'authorHandle', 'content', 'audience', 'createdAt']) &&
                        incoming().keys().hasOnly([
                          'authorId', 'authorName', 'authorHandle', 'isAuthorVerified', 'authorVerifiedTier',
-                         'content', 'audience', 'likedBy', 'likesCount', 'commentsCount', 'createdAt', 'updatedAt'
+                         'content', 'audience', 'likedBy', 'likesCount', 'commentsCount', 'reactions', 'createdAt', 'updatedAt'
                        ]);
 
       allow update: if isSignedIn() &&
@@ -487,7 +498,8 @@ service cloud.firestore {
                          (existing().authorId == request.auth.uid &&
                           incoming().diff(existing()).affectedKeys().hasOnly(['content', 'audience', 'updatedAt'])) ||
                          incoming().diff(existing()).affectedKeys().hasOnly(['likedBy', 'likesCount']) ||
-                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount'])
+                         incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount']) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])
                        );
 
       allow delete: if isSignedIn() && isValidId(postId) && existing().authorId == request.auth.uid;
@@ -539,7 +551,8 @@ service cloud.firestore {
                        incoming().keys().hasAll(['authorId', 'authorName', 'authorHandle', 'caption', 'createdAt']) &&
                        incoming().keys().hasOnly([
                          'authorId', 'authorName', 'authorHandle', 'isAuthorVerified', 'authorVerifiedTier',
-                         'caption', 'videoUri', 'audioTitle', 'likesCount', 'likedBy', 'commentsCount',
+                         'caption', 'videoUri', 'mediaId', 'mediaMimeType', 'mediaSizeBytes', 'mediaChunkCount',
+                         'audioTitle', 'likesCount', 'likedBy', 'commentsCount',
                          'sharesCount', 'savedBy', 'tags', 'gradientTheme', 'createdAt'
                        ]);
 
@@ -579,6 +592,24 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isSignedIn() && isValidId(fluxId) && isValidId(commentId) && existing().authorId == request.auth.uid;
       }
+    }
+
+    // Chunked Flux Video Media Storage (Cross-user readable, author-created, immutable)
+    match /flux_media/{mediaId}/chunks/{chunkId} {
+      allow get, list: if isSignedIn() && isValidId(mediaId);
+
+      allow create: if isSignedIn() &&
+                       isValidId(mediaId) &&
+                       isValidId(chunkId) &&
+                       incoming().senderId == request.auth.uid &&
+                       incoming().mediaId == mediaId &&
+                       incoming().index is int && incoming().index >= 0 && incoming().index < 100 &&
+                       incoming().data is string && incoming().data.size() >= 1 && incoming().data.size() <= 750000 &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().keys().hasAll(['mediaId', 'senderId', 'index', 'data', 'createdAt']) &&
+                       incoming().keys().hasOnly(['mediaId', 'senderId', 'index', 'data', 'createdAt']);
+
+      allow update, delete: if false;
     }
 
     // Two-Party Voice Calls & WebRTC Signaling (Strict Participant Isolation)

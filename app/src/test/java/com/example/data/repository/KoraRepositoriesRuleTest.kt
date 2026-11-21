@@ -1,7 +1,10 @@
 package com.example.data.repository
 
 import com.example.base.FirestoreEmulatorTestBase
+import com.example.data.model.Conversation
+import com.example.data.model.FluxVideo
 import com.example.data.model.UserProfile
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -248,6 +251,118 @@ class KoraRepositoriesRuleTest : FirestoreEmulatorTestBase() {
       FirebaseFirestoreException.Code.PERMISSION_DENIED,
       unauthConvos.exceptionOrNull()?.unwrapFirestoreException()?.code
     )
+  }
+
+  @Test
+  fun deduplicateDirectConversations_keepsSingleBestConversationPerPeer() {
+    val olderWithMessage = Conversation(
+      id = "dm_old_with_msg",
+      type = "direct",
+      title = "Bob",
+      participantIds = listOf("alice", "bob"),
+      lastMessageText = "Earlier real chat",
+      lastMessageTimestamp = Timestamp(1000L, 0)
+    )
+    val newerEmptyDuplicate = Conversation(
+      id = "dm_alice_bob",
+      type = "direct",
+      title = "Bob",
+      participantIds = listOf("alice", "bob"),
+      lastMessageText = "",
+      lastMessageTimestamp = Timestamp(2000L, 0)
+    )
+    val groupWithBob = Conversation(
+      id = "grp_1",
+      type = "group",
+      title = "Team Kora",
+      participantIds = listOf("alice", "bob", "carol"),
+      lastMessageTimestamp = Timestamp(3000L, 0)
+    )
+
+    val result = ChatRepository.deduplicateDirectConversations(
+      list = listOf(newerEmptyDuplicate, olderWithMessage, groupWithBob),
+      currentUid = "alice"
+    )
+    assertEquals(2, result.size)
+    assertTrue("Group chat must be kept", result.any { it.id == "grp_1" })
+    assertEquals(
+      "Non-blank active DM must beat empty duplicate",
+      listOf("dm_old_with_msg"),
+      result.filter { it.type == "direct" }.map { it.id }
+    )
+  }
+
+  @Test
+  fun messageAndPostWeirdReactions_andCommentDelete_roundTripInEmulator() = runBlocking {
+    val suffix = UUID.randomUUID().toString().take(6)
+    val aliceUid = signInTestUser("alice_rx_$suffix@kora.test")
+    val bobUid = signInTestUser("bob_rx_$suffix@kora.test")
+
+    signInTestUser("alice_rx_$suffix@kora.test")
+    val aliceChat = ChatRepository(firestore, null, AiChatService(), auth)
+    val alicePost = PostRepository(firestore, null, auth)
+
+    val convoId = withTimeout(TIMEOUT_MS) {
+      aliceChat.findOrCreateDirectConversation(bobUid, "Bob").getOrThrow()
+    }
+    withTimeout(TIMEOUT_MS) {
+      aliceChat.sendMessage(convoId, "React to this!", "Alice").getOrThrow()
+    }
+    val msg = withTimeout(FLOW_TIMEOUT_MS) {
+      aliceChat.observeMessages(convoId).first { it.isNotEmpty() }
+    }.first()
+
+    // Alice adds weird emoji reaction 🤯
+    assertTrue(withTimeout(TIMEOUT_MS) { aliceChat.toggleMessageReaction(convoId, msg.id, "🤯") }.isSuccess)
+    // Bob adds same emoji + another 🫠
+    signInTestUser("bob_rx_$suffix@kora.test")
+    val bobChat = ChatRepository(firestore, null, AiChatService(), auth)
+    assertTrue(withTimeout(TIMEOUT_MS) { bobChat.toggleMessageReaction(convoId, msg.id, "🤯") }.isSuccess)
+    assertTrue(withTimeout(TIMEOUT_MS) { bobChat.toggleMessageReaction(convoId, msg.id, "🫠") }.isSuccess)
+
+    val updatedMsg = withTimeout(FLOW_TIMEOUT_MS) {
+      bobChat.observeMessages(convoId).first { list ->
+        list.firstOrNull { it.id == msg.id }?.reactions?.get("🫠")?.contains(bobUid) == true
+      }
+    }.first { it.id == msg.id }
+    assertEquals(setOf(aliceUid, bobUid), updatedMsg.reactions["🤯"]?.toSet())
+
+    // Posts multi-emoji reactions & comment deletion
+    signInTestUser("alice_rx_$suffix@kora.test")
+    withTimeout(TIMEOUT_MS) {
+      alicePost.createPost("Reactions post #$suffix", "public", "Alice", "@alice").getOrThrow()
+    }
+    val post = withTimeout(FLOW_TIMEOUT_MS) {
+      alicePost.observePosts("all").first { list -> list.any { it.content.contains(suffix) } }
+    }.first { it.content.contains(suffix) }
+
+    assertTrue(withTimeout(TIMEOUT_MS) { alicePost.togglePostReaction(post.id, "🦄") }.isSuccess)
+    signInTestUser("bob_rx_$suffix@kora.test")
+    val bobPost = PostRepository(firestore, null, auth)
+    assertTrue(withTimeout(TIMEOUT_MS) { bobPost.togglePostReaction(post.id, "🛸") }.isSuccess)
+
+    val reactedPost = withTimeout(FLOW_TIMEOUT_MS) {
+      bobPost.observePosts("all").first { list ->
+        list.firstOrNull { it.id == post.id }?.reactions?.containsKey("🛸") == true
+      }
+    }.first { it.id == post.id }
+    assertEquals(listOf(aliceUid), reactedPost.reactions["🦄"])
+    assertEquals(listOf(bobUid), reactedPost.reactions["🛸"])
+
+    assertTrue(
+      withTimeout(TIMEOUT_MS) { bobPost.addComment(post.id, "Temp comment", "Bob", "@bob") }.isSuccess
+    )
+    val comments = withTimeout(FLOW_TIMEOUT_MS) {
+      bobPost.observeComments(post.id).first { it.isNotEmpty() }
+    }
+    assertTrue(withTimeout(TIMEOUT_MS) { bobPost.deleteComment(post.id, comments.first().id) }.isSuccess)
+    val afterDelete = withTimeout(FLOW_TIMEOUT_MS) {
+      bobPost.observeComments(post.id).first { it.isEmpty() }
+    }
+    assertTrue(afterDelete.isEmpty())
+
+    // Cross-user Flux metadata & chunk verification
+    assertTrue(FluxVideo(id = "f1", mediaId = "m1", mediaChunkCount = 2).hasVideoContent())
   }
 
   private companion object {

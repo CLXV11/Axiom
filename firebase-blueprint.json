@@ -71,6 +71,7 @@
         "readBy": { "type": "array" },
         "isEdited": { "type": "boolean" },
         "isDeleted": { "type": "boolean" },
+        "reactions": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -91,6 +92,7 @@
         "likedBy": { "type": "array" },
         "likesCount": { "type": "integer" },
         "commentsCount": { "type": "integer" },
+        "reactions": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -138,6 +140,10 @@
         "authorVerifiedTier": { "type": "string" },
         "caption": { "type": "string" },
         "videoUri": { "type": "string" },
+        "mediaId": { "type": "string" },
+        "mediaMimeType": { "type": "string" },
+        "mediaSizeBytes": { "type": "integer" },
+        "mediaChunkCount": { "type": "integer" },
         "audioTitle": { "type": "string" },
         "likesCount": { "type": "integer" },
         "likedBy": { "type": "array" },
@@ -279,6 +285,10 @@
     "/flux_videos/{fluxId}/comments/{commentId}": {
       "schema": "FluxComment",
       "description": "Comments on Flux video clips"
+    },
+    "/flux_media/{mediaId}/chunks/{chunkId}": {
+      "schema": "MediaChunk",
+      "description": "Binary video chunks for cross-user Flux playback"
     }
   }
 }

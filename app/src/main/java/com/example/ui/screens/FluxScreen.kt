@@ -2,7 +2,6 @@ package com.example.ui.screens
 
 import android.net.Uri
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,22 +50,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -76,6 +75,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -84,9 +84,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,6 +109,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.example.data.model.FluxComment
 import com.example.data.model.FluxVideo
 import com.example.data.model.UserProfile
@@ -119,7 +127,6 @@ import com.example.ui.util.LocalAppStrings
 import com.example.ui.util.formatHandleForDisplay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -134,7 +141,9 @@ private enum class FluxFeedFilter {
 fun FluxScreen(
   fluxRepository: FluxRepository,
   userRepository: UserRepository,
-  onLanguageToggle: () -> Unit
+  onLanguageToggle: () -> Unit,
+  initialMuted: Boolean = false,
+  autoLoadVideos: Boolean = true
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
@@ -147,10 +156,33 @@ fun FluxScreen(
     .collectAsState(initial = userRepository.getDirectoryUsers())
   val currentUserProfile by userRepository.observeUserProfile(currentUid)
     .collectAsState(initial = userRepository.getCachedProfile(currentUid))
-  val usersById = remember(directoryUsers, currentUserProfile, currentUid) {
-    val map = directoryUsers.associateBy { it.id }.toMutableMap()
+  var extraUsers by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
+
+  LaunchedEffect(Unit) {
+    userRepository.fetchDirectoryUsers()
+  }
+
+  val usersById = remember(directoryUsers, currentUserProfile, currentUid, extraUsers) {
+    val map = extraUsers.toMutableMap()
+    directoryUsers.forEach { map[it.id] = it }
     currentUserProfile?.let { map[currentUid] = it }
     map
+  }
+
+  LaunchedEffect(videos, directoryUsers) {
+    val missingAuthorIds = videos.map { it.authorId }
+      .distinct()
+      .filter { it != currentUid && directoryUsers.none { u -> u.id == it } && extraUsers[it] == null }
+    if (missingAuthorIds.isNotEmpty()) {
+      val fetched = mutableMapOf<String, UserProfile>()
+      for (aid in missingAuthorIds) {
+        val loaded = runCatching { userRepository.getUserProfile(aid) }.getOrNull()
+        if (loaded != null) fetched[aid] = loaded
+      }
+      if (fetched.isNotEmpty()) {
+        extraUsers = extraUsers + fetched
+      }
+    }
   }
 
   var selectedFilter by remember { mutableStateOf(FluxFeedFilter.ALL) }
@@ -168,15 +200,15 @@ fun FluxScreen(
 
   var showCreateSheet by remember { mutableStateOf(false) }
   var activeCommentsFlux by remember { mutableStateOf<FluxVideo?>(null) }
-  var isAudioMuted by remember { mutableStateOf(false) }
+  var isAudioMuted by remember(initialMuted) { mutableStateOf(initialMuted) }
 
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color.Black)
+      .background(Color(0xFF1E1F22))
   ) {
     if (filteredVideos.isEmpty()) {
-      // Empty state
+      // Calm Discord Charcoal Empty State
       Column(
         modifier = Modifier
           .fillMaxSize()
@@ -184,17 +216,26 @@ fun FluxScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
       ) {
-        Icon(
-          imageVector = if (selectedFilter == FluxFeedFilter.SAVED) Icons.Default.BookmarkBorder else Icons.Default.Videocam,
-          contentDescription = null,
-          tint = colors.primary,
-          modifier = Modifier.size(64.dp)
-        )
+        Box(
+          modifier = Modifier
+            .size(72.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF313338))
+            .border(1.dp, Color(0xFF3F4147), CircleShape),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = if (selectedFilter == FluxFeedFilter.SAVED) Icons.Outlined.BookmarkBorder else Icons.Outlined.Videocam,
+            contentDescription = null,
+            tint = colors.primary,
+            modifier = Modifier.size(34.dp)
+          )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         Text(
           text = if (selectedFilter == FluxFeedFilter.SAVED) strings.noSavedFluxYet else strings.noFluxYet,
           style = KoraTheme.typography.titleLarge,
-          color = Color.White,
+          color = Color(0xFFF2F3F5),
           fontWeight = FontWeight.Bold,
           textAlign = TextAlign.Center
         )
@@ -202,14 +243,15 @@ fun FluxScreen(
         Text(
           text = if (selectedFilter == FluxFeedFilter.SAVED) strings.noSavedFluxDesc else strings.beFirstToPublishFlux,
           style = KoraTheme.typography.bodyMedium,
-          color = Color.White.copy(alpha = 0.72f),
+          color = Color(0xFFB5BAC1),
           textAlign = TextAlign.Center,
           modifier = Modifier.padding(horizontal = 16.dp)
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(22.dp))
         if (selectedFilter == FluxFeedFilter.SAVED) {
           Button(
             onClick = { selectedFilter = FluxFeedFilter.ALL },
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
               containerColor = colors.primary,
               contentColor = colors.onPrimary
@@ -220,6 +262,7 @@ fun FluxScreen(
         } else {
           Button(
             onClick = { showCreateSheet = true },
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
               containerColor = colors.primary,
               contentColor = colors.onPrimary
@@ -227,7 +270,7 @@ fun FluxScreen(
           ) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(strings.newFlux)
+            Text(strings.newFlux, fontWeight = FontWeight.Bold)
           }
         }
       }
@@ -245,10 +288,15 @@ fun FluxScreen(
         )
 
         FluxItemPage(
-          video = liveVideo,
+          video = liveVideo.copy(
+            authorName = authorProfile?.displayName?.takeIf { it.isNotBlank() } ?: liveVideo.authorName,
+            authorHandle = authorProfile?.handle?.takeIf { it.isNotBlank() } ?: liveVideo.authorHandle
+          ),
           authorAvatarUrl = authorProfile?.avatarUrl,
+          fluxRepository = fluxRepository,
           isCurrentPage = pagerState.currentPage == pageIndex,
           isMuted = isAudioMuted,
+          autoLoadVideos = autoLoadVideos,
           currentUserId = currentUid,
           onToggleLike = {
             coroutineScope.launch {
@@ -303,107 +351,92 @@ fun FluxScreen(
       }
     }
 
-    // Top Overlay Bar
-    Column(
+    // Clean Single-Row Top Overlay Bar (non-intrusive to video)
+    Row(
       modifier = Modifier
         .fillMaxWidth()
         .statusBarsPadding()
-        .padding(horizontal = 16.dp, vertical = 12.dp)
+        .padding(horizontal = 14.dp, vertical = 10.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
     ) {
+      val savedCount = videos.count { it.savedBy.contains(currentUid) }
+      Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFF1E1F22).copy(alpha = 0.76f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+      ) {
+        Row(
+          modifier = Modifier.padding(3.dp),
+          horizontalArrangement = Arrangement.spacedBy(2.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          FluxOverlayFilterChip(
+            label = strings.fluxFilterAll,
+            selected = selectedFilter == FluxFeedFilter.ALL,
+            onClick = { selectedFilter = FluxFeedFilter.ALL },
+            testTag = "flux_filter_all"
+          )
+          FluxOverlayFilterChip(
+            label = if (savedCount > 0) "${strings.fluxFilterSaved} ($savedCount)" else strings.fluxFilterSaved,
+            selected = selectedFilter == FluxFeedFilter.SAVED,
+            onClick = { selectedFilter = FluxFeedFilter.SAVED },
+            testTag = "flux_filter_saved"
+          )
+        }
+      }
+
       Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Text(
-            text = "FLUX",
-            style = KoraTheme.typography.titleLarge.copy(
-              fontSize = 22.sp,
-              letterSpacing = 2.sp
-            ),
-            color = Color.White,
-            fontWeight = FontWeight.Black
-          )
-          Spacer(modifier = Modifier.width(6.dp))
+        IconButton(
+          onClick = { isAudioMuted = !isAudioMuted },
+          modifier = Modifier.size(48.dp)
+        ) {
           Box(
             modifier = Modifier
-              .clip(RoundedCornerShape(4.dp))
-              .background(colors.primary)
-              .padding(horizontal = 6.dp, vertical = 2.dp)
+              .size(38.dp)
+              .clip(CircleShape)
+              .background(Color(0xFF1E1F22).copy(alpha = 0.76f))
+              .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
           ) {
-            Text(
-              text = "LIVE",
-              style = KoraTheme.typography.labelSmall.copy(fontSize = 9.sp),
-              color = colors.onPrimary,
-              fontWeight = FontWeight.Bold
+            Icon(
+              imageVector = if (isAudioMuted) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp,
+              contentDescription = "Mute",
+              tint = Color(0xFFF2F3F5),
+              modifier = Modifier.size(19.dp)
             )
           }
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          // Mute / Unmute
-          IconButton(
-            onClick = { isAudioMuted = !isAudioMuted },
-            modifier = Modifier
-              .size(40.dp)
-              .clip(CircleShape)
-              .background(Color.Black.copy(alpha = 0.5f))
-          ) {
-            Icon(
-              imageVector = if (isAudioMuted) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
-              contentDescription = "Mute",
-              tint = Color.White,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-
-          Spacer(modifier = Modifier.width(10.dp))
-
-          // Create Flux Button
+        Surface(
+          onClick = { showCreateSheet = true },
+          shape = RoundedCornerShape(18.dp),
+          color = colors.primary,
+          contentColor = colors.onPrimary,
+          modifier = Modifier.defaultMinSize(minHeight = 38.dp)
+        ) {
           Row(
-            modifier = Modifier
-              .defaultMinSize(minHeight = 40.dp)
-              .clip(RoundedCornerShape(20.dp))
-              .background(colors.primary)
-              .clickable { showCreateSheet = true }
-              .padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
               imageVector = Icons.Default.Add,
               contentDescription = strings.newFlux,
-              tint = colors.onPrimary,
               modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
               text = strings.newFlux,
               style = KoraTheme.typography.labelMedium,
-              color = colors.onPrimary,
-              fontWeight = FontWeight.Bold
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              softWrap = false
             )
           }
         }
-      }
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      // All / Saved Filter Pills
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        val savedCount = videos.count { it.savedBy.contains(currentUid) }
-        FluxOverlayFilterChip(
-          label = strings.fluxFilterAll,
-          selected = selectedFilter == FluxFeedFilter.ALL,
-          onClick = { selectedFilter = FluxFeedFilter.ALL },
-          testTag = "flux_filter_all"
-        )
-        FluxOverlayFilterChip(
-          label = if (savedCount > 0) "${strings.fluxFilterSaved} ($savedCount)" else strings.fluxFilterSaved,
-          selected = selectedFilter == FluxFeedFilter.SAVED,
-          onClick = { selectedFilter = FluxFeedFilter.SAVED },
-          testTag = "flux_filter_saved"
-        )
       }
     }
 
@@ -444,27 +477,19 @@ private fun FluxOverlayFilterChip(
   val colors = MaterialTheme.colorScheme
   Box(
     modifier = Modifier
-      .defaultMinSize(minHeight = 32.dp)
-      .clip(RoundedCornerShape(16.dp))
-      .background(
-        if (selected) colors.primary
-        else Color.Black.copy(alpha = 0.55f)
-      )
-      .border(
-        width = 1.dp,
-        color = if (selected) colors.primary else Color.White.copy(alpha = 0.25f),
-        shape = RoundedCornerShape(16.dp)
-      )
+      .defaultMinSize(minHeight = 30.dp)
+      .clip(RoundedCornerShape(14.dp))
+      .background(if (selected) colors.primary else Color.Transparent)
       .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp, vertical = 6.dp)
+      .padding(horizontal = 12.dp, vertical = 5.dp)
       .testTag(testTag),
     contentAlignment = Alignment.Center
   ) {
     Text(
       text = label,
       style = KoraTheme.typography.labelMedium,
-      color = if (selected) colors.onPrimary else Color.White,
-      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+      color = if (selected) colors.onPrimary else Color(0xFFDBDEE1),
+      fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
       maxLines = 1,
       softWrap = false
     )
@@ -475,8 +500,10 @@ private fun FluxOverlayFilterChip(
 private fun FluxItemPage(
   video: FluxVideo,
   authorAvatarUrl: String?,
+  fluxRepository: FluxRepository,
   isCurrentPage: Boolean,
   isMuted: Boolean,
+  autoLoadVideos: Boolean,
   currentUserId: String,
   onToggleLike: () -> Unit,
   onToggleSave: () -> Unit,
@@ -495,20 +522,41 @@ private fun FluxItemPage(
   val isLiked = video.likedBy.contains(currentUserId)
   val isSaved = video.savedBy.contains(currentUserId)
 
-  val hasPlayableVideo = remember(video.videoUri, context) {
+  var resolvedVideoFile by remember(video.id, video.mediaId, video.videoUri) {
+    mutableStateOf(fluxRepository.peekCachedFluxFile(video))
+  }
+  var isBufferingVideo by remember(video.id) { mutableStateOf(false) }
+  var downloadProgress by remember(video.id) { mutableFloatStateOf(0f) }
+
+  val directPlayableUri = remember(video.videoUri, context) {
     val raw = video.videoUri
-    if (raw.isNullOrBlank()) false
+    if (raw.isNullOrBlank()) null
     else {
       val parsed = Uri.parse(raw)
       when (parsed.scheme) {
-        "file" -> parsed.path?.let { File(it).exists() } == true
+        "http", "https" -> parsed
         "content" -> runCatching {
-          context.contentResolver.openFileDescriptor(parsed, "r")?.use { true } ?: false
-        }.getOrDefault(false)
-        "http", "https" -> true
-        else -> false
+          context.contentResolver.openFileDescriptor(parsed, "r")?.use { parsed }
+        }.getOrNull()
+        else -> null
       }
     }
+  }
+
+  LaunchedEffect(video.id, video.mediaId, video.mediaChunkCount, resolvedVideoFile, autoLoadVideos, isCurrentPage) {
+    val shouldLoad = autoLoadVideos || isCurrentPage
+    if (shouldLoad && resolvedVideoFile == null && !video.mediaId.isNullOrBlank() && video.mediaChunkCount > 0) {
+      isBufferingVideo = true
+      val res = fluxRepository.resolvePlayableFluxFile(video) { progress ->
+        downloadProgress = progress
+      }
+      isBufferingVideo = false
+      resolvedVideoFile = res.getOrNull()
+    }
+  }
+
+  val playableUri: Uri? = remember(resolvedVideoFile, directPlayableUri) {
+    resolvedVideoFile?.let { Uri.fromFile(it) } ?: directPlayableUri
   }
 
   val infiniteTransition = rememberInfiniteTransition(label = "disc_spin")
@@ -541,9 +589,9 @@ private fun FluxItemPage(
       }
   ) {
     // Media Playback Layer
-    if (hasPlayableVideo && !video.videoUri.isNullOrBlank()) {
+    if (playableUri != null) {
       VideoPlayerSurface(
-        videoUri = Uri.parse(video.videoUri),
+        videoUri = playableUri,
         isPlaying = isPlaying && isCurrentPage,
         isMuted = isMuted
       )
@@ -555,17 +603,44 @@ private fun FluxItemPage(
       )
     }
 
-    // Subtle dark gradient overlays for maximum contrast
+    if (isBufferingVideo) {
+      Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color(0xFF1E1F22).copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
+        modifier = Modifier.align(Alignment.Center)
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+          CircularProgressIndicator(
+            color = colors.primary,
+            strokeWidth = 2.5.dp,
+            modifier = Modifier.size(18.dp)
+          )
+          Text(
+            text = "${(downloadProgress * 100).toInt().coerceIn(1, 99)}%",
+            style = KoraTheme.typography.labelMedium,
+            color = Color(0xFFF2F3F5),
+            fontWeight = FontWeight.Bold
+          )
+        }
+      }
+    }
+
+    // Soft Discord charcoal gradient scrims for crisp legibility (no pure #000000)
     Box(
       modifier = Modifier
         .fillMaxSize()
         .background(
           Brush.verticalGradient(
             colors = listOf(
-              Color.Black.copy(alpha = 0.6f),
+              Color(0xFF1E1F22).copy(alpha = 0.45f),
               Color.Transparent,
               Color.Transparent,
-              Color.Black.copy(alpha = 0.85f)
+              Color(0xFF1E1F22).copy(alpha = 0.88f)
             )
           )
         )
@@ -586,16 +661,17 @@ private fun FluxItemPage(
     ) {
       Box(
         modifier = Modifier
-          .size(68.dp)
+          .size(64.dp)
           .clip(CircleShape)
-          .background(Color.Black.copy(alpha = 0.6f)),
+          .background(Color(0xFF1E1F22).copy(alpha = 0.78f))
+          .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape),
         contentAlignment = Alignment.Center
       ) {
         Icon(
           imageVector = if (isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
           contentDescription = null,
-          tint = Color.White,
-          modifier = Modifier.size(36.dp)
+          tint = Color(0xFFF2F3F5),
+          modifier = Modifier.size(32.dp)
         )
       }
     }
@@ -617,156 +693,151 @@ private fun FluxItemPage(
         imageVector = Icons.Default.Favorite,
         contentDescription = "Heart",
         tint = Color(0xFFF43F5E),
-        modifier = Modifier.size(110.dp)
+        modifier = Modifier.size(104.dp)
       )
     }
 
-    // Bottom Left Details & Creator info
+    // Bottom Start Creator + Caption + Audio Metadata Stack
     Column(
       modifier = Modifier
         .align(Alignment.BottomStart)
-        .fillMaxWidth(0.76f)
-        .padding(horizontal = 16.dp, vertical = 24.dp)
+        .navigationBarsPadding()
+        .fillMaxWidth(0.75f)
+        .padding(start = 16.dp, end = 8.dp, bottom = 20.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-      // Author handle & badge
       Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
       ) {
         Text(
           text = video.authorName,
           style = KoraTheme.typography.titleMedium,
           fontWeight = FontWeight.Bold,
-          color = Color.White,
+          color = Color(0xFFF2F3F5),
           maxLines = 1,
-          overflow = TextOverflow.Ellipsis
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.weight(1f, fill = false)
         )
         if (video.isAuthorVerified) {
-          Spacer(modifier = Modifier.width(6.dp))
           VerifiedBadge(
-            size = 16.dp,
+            size = 15.dp,
             tierKey = video.authorVerifiedTier,
             showDialogOnClick = true
           )
         }
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          text = formatHandleForDisplay(video.authorHandle),
-          style = KoraTheme.typography.bodySmall,
-          color = Color.White.copy(alpha = 0.72f),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
       }
+      Text(
+        text = formatHandleForDisplay(video.authorHandle),
+        style = KoraTheme.typography.labelMedium,
+        color = Color(0xFFB5BAC1),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
 
-      // Caption
       Text(
         text = video.caption,
         style = KoraTheme.typography.bodyMedium,
-        color = Color.White,
+        color = Color(0xFFDBDEE1),
         maxLines = 3,
         overflow = TextOverflow.Ellipsis,
-        lineHeight = 20.sp,
-        modifier = Modifier.padding(bottom = 10.dp)
+        lineHeight = 20.sp
       )
 
-      // Audio marquee track pill
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-          .clip(RoundedCornerShape(14.dp))
-          .background(Color.Black.copy(alpha = 0.5f))
-          .padding(horizontal = 10.dp, vertical = 5.dp)
+      Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF1E1F22).copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
       ) {
-        Icon(
-          imageVector = Icons.Default.MusicNote,
-          contentDescription = null,
-          tint = colors.primary,
-          modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-          text = video.audioTitle,
-          style = KoraTheme.typography.labelSmall,
-          color = Color.White,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        ) {
+          Icon(
+            imageVector = Icons.Outlined.MusicNote,
+            contentDescription = null,
+            tint = colors.primary,
+            modifier = Modifier.size(14.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(
+            text = video.audioTitle,
+            style = KoraTheme.typography.labelSmall,
+            color = Color(0xFFF2F3F5),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
       }
     }
 
-    // Right Action Bar
+    // Uniform Right Action Rail
     Column(
       modifier = Modifier
         .align(Alignment.BottomEnd)
-        .padding(end = 12.dp, bottom = 28.dp),
+        .navigationBarsPadding()
+        .padding(end = 12.dp, bottom = 20.dp)
+        .width(56.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(14.dp)
+      verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-      // Author Avatar
       AvatarView(
         name = video.authorName,
         avatarUrl = authorAvatarUrl,
-        size = 46.dp
+        size = 44.dp
       )
 
-      // Like Button
       FluxActionButton(
-        icon = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+        icon = if (isLiked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
         countText = formatCount(video.likesCount),
-        tint = if (isLiked) Color(0xFFF43F5E) else Color.White,
+        tint = if (isLiked) Color(0xFFF43F5E) else Color(0xFFF2F3F5),
         onClick = onToggleLike
       )
 
-      // Comments Button
       FluxActionButton(
-        icon = Icons.Default.ChatBubble,
+        icon = Icons.Outlined.ChatBubbleOutline,
         countText = formatCount(video.commentsCount),
-        tint = Color.White,
+        tint = Color(0xFFF2F3F5),
         onClick = onOpenComments
       )
 
-      // Save / Bookmark Button
       FluxActionButton(
-        icon = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+        icon = if (isSaved) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
         countText = formatCount(video.savedBy.size),
-        tint = if (isSaved) Color(0xFFF0B232) else Color.White,
+        tint = if (isSaved) Color(0xFFF0B232) else Color(0xFFF2F3F5),
         onClick = onToggleSave,
         testTag = "flux_bookmark_button_${video.id}"
       )
 
-      // Export to Device Gallery (when playable local video file exists)
-      if (hasPlayableVideo && !video.videoUri.isNullOrBlank()) {
+      if (video.hasVideoContent()) {
         FluxActionButton(
-          icon = Icons.Default.Download,
-          countText = strings.saveToGallery,
-          tint = Color.White,
+          icon = Icons.Outlined.Download,
+          countText = strings.fluxSaveShort,
+          tint = Color(0xFFF2F3F5),
           onClick = onSaveToGallery,
           testTag = "flux_gallery_save_button_${video.id}"
         )
       }
 
-      // Share Button
       FluxActionButton(
-        icon = Icons.Default.Share,
+        icon = Icons.Outlined.Share,
         countText = formatCount(video.sharesCount),
-        tint = Color.White,
+        tint = Color(0xFFF2F3F5),
         onClick = onShare
       )
 
-      // Rotating Audio Vinyl Disc
       Box(
         modifier = Modifier
-          .size(42.dp)
+          .size(38.dp)
           .rotate(discRotation)
           .clip(CircleShape)
-          .background(Color(0xFF111214))
-          .border(2.dp, Color.White.copy(alpha = 0.25f), CircleShape),
+          .background(Color(0xFF1E1F22))
+          .border(1.5.dp, Color.White.copy(alpha = 0.25f), CircleShape),
         contentAlignment = Alignment.Center
       ) {
         Box(
           modifier = Modifier
-            .size(16.dp)
+            .size(14.dp)
             .clip(CircleShape)
             .background(colors.primary)
         )
@@ -792,25 +863,27 @@ private fun FluxActionButton(
   ) {
     Box(
       modifier = Modifier
-        .size(44.dp)
+        .size(42.dp)
         .clip(CircleShape)
-        .background(Color.Black.copy(alpha = 0.45f)),
+        .background(Color(0xFF1E1F22).copy(alpha = 0.72f))
+        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
       contentAlignment = Alignment.Center
     ) {
       Icon(
         imageVector = icon,
         contentDescription = countText,
         tint = tint,
-        modifier = Modifier.size(24.dp)
+        modifier = Modifier.size(20.dp)
       )
     }
-    Spacer(modifier = Modifier.height(4.dp))
+    Spacer(modifier = Modifier.height(3.dp))
     Text(
       text = countText,
-      style = KoraTheme.typography.labelSmall,
-      color = Color.White,
-      fontWeight = FontWeight.Bold,
+      style = KoraTheme.typography.labelSmall.copy(fontSize = 11.sp),
+      color = Color(0xFFF2F3F5),
+      fontWeight = FontWeight.SemiBold,
       maxLines = 1,
+      softWrap = false,
       overflow = TextOverflow.Ellipsis
     )
   }
@@ -825,32 +898,47 @@ private fun formatCount(num: Int): String {
 }
 
 /**
- * Android VideoView integration for playing device-selected or URI videos
+ * Media3 ExoPlayer surface for smooth full-bleed looping Flux playback.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoPlayerSurface(
   videoUri: Uri,
   isPlaying: Boolean,
   isMuted: Boolean
 ) {
+  val context = LocalContext.current
+  val exoPlayer = remember(videoUri) {
+    ExoPlayer.Builder(context).build().apply {
+      setMediaItem(MediaItem.fromUri(videoUri))
+      repeatMode = Player.REPEAT_MODE_ONE
+      prepare()
+    }
+  }
+
+  LaunchedEffect(exoPlayer, isPlaying, isMuted) {
+    exoPlayer.volume = if (isMuted) 0f else 1f
+    exoPlayer.playWhenReady = isPlaying
+  }
+
+  DisposableEffect(exoPlayer) {
+    onDispose {
+      exoPlayer.release()
+    }
+  }
+
   AndroidView(
     modifier = Modifier.fillMaxSize(),
     factory = { ctx ->
-      VideoView(ctx).apply {
-        setVideoURI(videoUri)
-        setOnErrorListener { _, _, _ -> true }
-        setOnPreparedListener { mp ->
-          mp.isLooping = true
-          if (isMuted) mp.setVolume(0f, 0f) else mp.setVolume(1f, 1f)
-          if (isPlaying) mp.start()
-        }
+      PlayerView(ctx).apply {
+        player = exoPlayer
+        useController = false
+        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
       }
     },
-    update = { videoView ->
-      if (isPlaying) {
-        if (!videoView.isPlaying) videoView.start()
-      } else {
-        if (videoView.isPlaying) videoView.pause()
+    update = { playerView ->
+      if (playerView.player !== exoPlayer) {
+        playerView.player = exoPlayer
       }
     }
   )
@@ -935,6 +1023,7 @@ private fun CreateFluxSheet(
   var audioText by remember { mutableStateOf("") }
   var selectedTheme by remember { mutableStateOf("BLURPLE") }
   var isPublishing by remember { mutableStateOf(false) }
+  var uploadProgress by remember { mutableFloatStateOf(0f) }
 
   // Zero-permission Android Photo/Video Picker
   val videoPickerLauncher = rememberLauncherForActivityResult(
@@ -1006,7 +1095,7 @@ private fun CreateFluxSheet(
             contentAlignment = Alignment.Center
           ) {
             Icon(
-              imageVector = Icons.Default.Videocam,
+              imageVector = Icons.Outlined.Videocam,
               contentDescription = null,
               tint = colors.primary,
               modifier = Modifier.size(24.dp)
@@ -1081,7 +1170,7 @@ private fun CreateFluxSheet(
         onValueChange = { audioText = it },
         placeholder = { Text(strings.fluxAudioPlaceholder, color = colors.onSurfaceVariant) },
         leadingIcon = {
-          Icon(Icons.Default.GraphicEq, contentDescription = null, tint = colors.onSurfaceVariant)
+          Icon(Icons.Outlined.GraphicEq, contentDescription = null, tint = colors.onSurfaceVariant)
         },
         colors = OutlinedTextFieldDefaults.colors(
           focusedContainerColor = colors.surfaceVariant.copy(alpha = 0.4f),
@@ -1138,6 +1227,28 @@ private fun CreateFluxSheet(
         }
       }
 
+      AnimatedVisibility(visible = isPublishing && selectedVideoUri != null) {
+        Column(modifier = Modifier.padding(top = 14.dp)) {
+          Text(
+            text = String.format(
+              strings.uploadingFluxVideoProgress,
+              (uploadProgress * 100).toInt().coerceIn(1, 99)
+            ),
+            style = KoraTheme.typography.labelMedium,
+            color = colors.primary,
+            fontWeight = FontWeight.SemiBold
+          )
+          Spacer(modifier = Modifier.height(6.dp))
+          LinearProgressIndicator(
+            progress = { uploadProgress.coerceIn(0.05f, 1f) },
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(5.dp)
+              .clip(RoundedCornerShape(3.dp))
+          )
+        }
+      }
+
       Spacer(modifier = Modifier.height(20.dp))
 
       // Publish Action Button
@@ -1147,6 +1258,7 @@ private fun CreateFluxSheet(
             captionText = "New Flux clip #flux"
           }
           isPublishing = true
+          uploadProgress = 0.05f
           coroutineScope.launch {
             try {
               val userProfile = userRepository.getCachedProfile(currentUid)
@@ -1160,16 +1272,25 @@ private fun CreateFluxSheet(
                 caption = captionText.trim(),
                 videoUri = selectedVideoUri?.toString(),
                 audioTitle = audioText.trim(),
-                gradientTheme = selectedTheme
+                gradientTheme = selectedTheme,
+                onUploadProgress = { uploadProgress = it }
               )
               isPublishing = false
+              uploadProgress = 0f
               onPublished()
             } catch (e: Exception) {
               isPublishing = false
+              uploadProgress = 0f
+              val msg = e.message.orEmpty()
+              val display = if (msg.contains("25 MB", ignoreCase = true)) {
+                strings.fileTooLargeLimit
+              } else {
+                e.localizedMessage ?: strings.errorOccurred
+              }
               Toast.makeText(
                 context,
-                e.localizedMessage ?: strings.errorOccurred,
-                Toast.LENGTH_SHORT
+                display,
+                Toast.LENGTH_LONG
               ).show()
             }
           }
