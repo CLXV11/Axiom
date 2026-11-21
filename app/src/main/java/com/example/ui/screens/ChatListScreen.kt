@@ -93,6 +93,7 @@ fun ChatListScreen(
   onLanguageToggle: () -> Unit,
   onOpenStore: () -> Unit = {},
   onOpenSettings: (() -> Unit)? = null,
+  onInspectUser: (UserProfile) -> Unit = {},
   compactMode: Boolean = false
 ) {
   val context = LocalContext.current
@@ -332,14 +333,30 @@ fun ChatListScreen(
             items(filteredConversations, key = { it.id }) { convo ->
               val typingUsers by chatRepository.observeTyping(convo.id).collectAsState(initial = emptyList())
               val peerUser = resolvePeer(convo)
+              val isAiConvo = chatRepository.isAiChatbotConversation(convo.id)
+              val peerId = if (!isAiConvo && convo.type == "direct") {
+                convo.participantIds.firstOrNull { it != currentUid }
+              } else null
               ConversationRow(
                 conversation = convo,
                 peerUser = peerUser,
-                isAiChatbot = chatRepository.isAiChatbotConversation(convo.id),
+                isAiChatbot = isAiConvo,
                 currentUserId = currentUid,
                 typingUsers = typingUsers,
                 compactMode = compactMode,
                 onClick = { onOpenConversation(convo) },
+                onInspectPeer = if (peerId != null) {
+                  {
+                    onInspectUser(
+                      peerUser ?: UserProfile(
+                        id = peerId,
+                        displayName = convo.title,
+                        isVerified = convo.isVerified,
+                        verifiedTier = convo.verifiedTier
+                      )
+                    )
+                  }
+                } else null,
                 onTogglePin = { pin ->
                   coroutineScope.launch { chatRepository.togglePin(convo.id, pin) }
                 },
@@ -391,6 +408,10 @@ fun ChatListScreen(
             ).show()
           }
         }
+      },
+      onInspectUser = { user ->
+        showContactDirectorySheet = false
+        onInspectUser(user)
       }
     )
   }
@@ -438,6 +459,7 @@ private fun ConversationRow(
   typingUsers: List<String> = emptyList(),
   compactMode: Boolean = false,
   onClick: () -> Unit,
+  onInspectPeer: (() -> Unit)? = null,
   onTogglePin: (Boolean) -> Unit,
   onToggleArchive: (Boolean) -> Unit,
   onToggleMute: (Boolean) -> Unit
@@ -502,8 +524,19 @@ private fun ConversationRow(
           name = title,
           avatarUrl = peerUser?.avatarUrl,
           size = if (compactMode) 42.dp else 46.dp,
+          frameStyleKey = peerUser?.equippedFrame,
           showPresence = conversation.type == "direct",
-          isOnline = true
+          isOnline = !(peerUser?.quietMode ?: false),
+          isQuiet = peerUser?.quietMode == true,
+          modifier = Modifier
+            .clip(CircleShape)
+            .then(
+              if (onInspectPeer != null) {
+                Modifier
+                  .clickable(onClick = onInspectPeer)
+                  .testTag("inspect_peer_avatar_${conversation.id}")
+              } else Modifier
+            )
         )
       }
 
@@ -655,6 +688,15 @@ private fun ConversationRow(
             onDismissRequest = { showMenu = false },
             modifier = Modifier.background(colors.surfaceContainerHigh)
           ) {
+            if (onInspectPeer != null) {
+              DropdownMenuItem(
+                text = { Text(strings.inspectProfileAction, color = colors.onSurface) },
+                onClick = {
+                  showMenu = false
+                  onInspectPeer()
+                }
+              )
+            }
             DropdownMenuItem(
               text = { Text(if (isPinned) strings.unpinChat else strings.pinChat, color = colors.onSurface) },
               onClick = {

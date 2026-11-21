@@ -17,6 +17,7 @@
         "verifiedTier": { "type": "string", "enum": ["BLUE", "GOLD", "EMERALD", "ROSE_GOLD", "AMETHYST", "ONYX", "PLATINUM"] },
         "equippedFrame": { "type": "string" },
         "equippedNameplate": { "type": "string" },
+        "equippedWall": { "type": "string" },
         "quietMode": { "type": "boolean" },
         "readReceiptsEnabled": { "type": "boolean" },
         "lastSeen": { "type": "string", "format": "date-time" },
@@ -41,6 +42,9 @@
         "pinnedBy": { "type": "array" },
         "archivedBy": { "type": "array" },
         "mutedBy": { "type": "array" },
+        "pinnedMessageId": { "type": "string" },
+        "pinnedMessageText": { "type": "string" },
+        "pinnedMessageSender": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -57,13 +61,18 @@
         "isSenderVerified": { "type": "boolean" },
         "senderVerifiedTier": { "type": "string" },
         "content": { "type": "string" },
-        "mediaType": { "type": "string", "enum": ["text", "image", "video", "file"] },
+        "mediaType": { "type": "string", "enum": ["text", "image", "video", "file", "audio", "poll"] },
         "mediaId": { "type": "string" },
         "mediaFileName": { "type": "string" },
         "mediaMimeType": { "type": "string" },
         "mediaSizeBytes": { "type": "integer" },
         "mediaChunkCount": { "type": "integer" },
         "mediaDurationMs": { "type": "integer" },
+        "pollQuestion": { "type": "string" },
+        "pollOptions": { "type": "array" },
+        "pollVotes": { "type": "object" },
+        "isSpoiler": { "type": "boolean" },
+        "forwardedFromName": { "type": "string" },
         "replyToId": { "type": "string" },
         "replyToSender": { "type": "string" },
         "replyToText": { "type": "string" },
@@ -76,6 +85,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["conversationId", "senderId", "senderName", "content", "createdAt"]
+    },
+    "TypingIndicator": {
+      "title": "TypingIndicator",
+      "description": "Ephemeral per-user live typing presence inside a conversation",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "isTyping": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "isTyping", "updatedAt"]
     },
     "Post": {
       "title": "Post",
@@ -183,6 +203,7 @@
         "lastDailyClaimAt": { "type": "string", "format": "date-time" },
         "equippedFrame": { "type": "string" },
         "equippedNameplate": { "type": "string" },
+        "equippedWall": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -253,6 +274,10 @@
     "/conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages inside conversation"
+    },
+    "/conversations/{conversationId}/typing/{userId}": {
+      "schema": "TypingIndicator",
+      "description": "Real-time per-user typing presence within a conversation"
     },
     "/conversations/{conversationId}/media/{mediaId}/chunks/{chunkId}": {
       "schema": "MediaChunk",

@@ -442,6 +442,44 @@ test("Store wallet enforces 500 starting coins, cooldowns, 1-time milestones, ex
       updatedAt: serverTimestamp(),
     })
   );
+
+  // Alice buys 'haunted_spirits' (100 -> 700), 'np_midnight_rose' (100 -> 600), and 'wall_crimson_forest' (200 -> 400)
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 700,
+      ownedItemIds: ["cat_bell", "haunted_spirits"],
+      equippedFrame: "haunted_spirits",
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 600,
+      ownedItemIds: ["cat_bell", "haunted_spirits", "np_midnight_rose"],
+      equippedNameplate: "np_midnight_rose",
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertSucceeds(
+    aliceWallet.update({
+      coinBalance: 400,
+      ownedItemIds: ["cat_bell", "haunted_spirits", "np_midnight_rose", "wall_crimson_forest"],
+      equippedWall: "wall_crimson_forest",
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertSucceeds(
+    aliceWallet.update({
+      equippedWall: null,
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await assertFails(
+    aliceWallet.update({
+      equippedWall: "wall_dusk_castle",
+      updatedAt: serverTimestamp(),
+    })
+  );
 });
 
 test("Conversation media chunks and media messages enforce participant isolation, immutable chunks, and size caps", async () => {
@@ -774,5 +812,139 @@ test("Flux video media chunks allow cross-user viewing while blocking sender spo
   await assertFails(chunkRef.update({ data: "tampered" }));
   await assertFails(chunkRef.delete());
 });
+
+test("Conversations support live typing indicators, polls, voice audio notes, pinned messages, spoilers, and forwarding", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_nextgen").set({
+      type: "direct",
+      title: "Bob",
+      isVerified: false,
+      verifiedTier: "BLUE",
+      participantIds: [ALICE_UID, BOB_UID],
+      lastMessageText: "",
+      lastMessageSenderId: "",
+      pinnedBy: [],
+      archivedBy: [],
+      mutedBy: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Live typing indicator: Alice writes her own doc, Bob reads, Bob cannot spoof Alice, Eve blocked
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_nextgen").collection("typing").doc(ALICE_UID).set({
+      displayName: "Alice",
+      isTyping: true,
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+  await assertSucceeds(
+    bobDb.collection("conversations").doc("convo_nextgen").collection("typing").get()
+  );
+  await assertFails(
+    bobDb.collection("conversations").doc("convo_nextgen").collection("typing").doc(ALICE_UID).set({
+      displayName: "Spoof",
+      isTyping: true,
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+  await assertFails(
+    eveDb.collection("conversations").doc("convo_nextgen").collection("typing").doc(EVE_UID).set({
+      displayName: "Eve",
+      isTyping: true,
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  // Voice Note ('audio') message
+  await assertSucceeds(
+    aliceDb.collection("conversations").doc("convo_nextgen").collection("messages").doc("msg_voice").set({
+      conversationId: "convo_nextgen",
+      senderId: ALICE_UID,
+      senderName: "Alice",
+      content: "🎤 Voice Note",
+      mediaType: "audio",
+      mediaId: "m_voice_1",
+      mediaFileName: "voice_1.m4a",
+      mediaMimeType: "audio/mp4",
+      mediaSizeBytes: 24500,
+      mediaChunkCount: 1,
+      mediaDurationMs: 6500,
+      status: "sent",
+      readBy: [ALICE_UID],
+      isEdited: false,
+      isDeleted: false,
+      createdAt: new Date(Date.now() - 1000),
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  // Interactive Poll message creation & participant voting
+  const pollRef = aliceDb.collection("conversations").doc("convo_nextgen").collection("messages").doc("msg_poll");
+  await assertSucceeds(
+    pollRef.set({
+      conversationId: "convo_nextgen",
+      senderId: ALICE_UID,
+      senderName: "Alice",
+      content: "📊 Best meetup time?",
+      mediaType: "poll",
+      pollQuestion: "Best meetup time?",
+      pollOptions: ["7 PM", "9 PM"],
+      pollVotes: {},
+      status: "sent",
+      readBy: [ALICE_UID],
+      isEdited: false,
+      isDeleted: false,
+      createdAt: new Date(Date.now() - 1000),
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+  await assertSucceeds(
+    bobDb.collection("conversations").doc("convo_nextgen").collection("messages").doc("msg_poll").update({
+      pollVotes: { "1": [BOB_UID] },
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+  await assertFails(
+    eveDb.collection("conversations").doc("convo_nextgen").collection("messages").doc("msg_poll").update({
+      pollVotes: { "0": [EVE_UID] },
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  // Pinning a message inside conversation
+  await assertSucceeds(
+    bobDb.collection("conversations").doc("convo_nextgen").update({
+      pinnedMessageId: "msg_poll",
+      pinnedMessageText: "Best meetup time?",
+      pinnedMessageSender: "Alice",
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  // Spoiler & Forwarded message
+  await assertSucceeds(
+    bobDb.collection("conversations").doc("convo_nextgen").collection("messages").doc("msg_spoiler").set({
+      conversationId: "convo_nextgen",
+      senderId: BOB_UID,
+      senderName: "Bob",
+      content: "Secret plot twist!",
+      isSpoiler: true,
+      forwardedFromName: "Alice",
+      status: "sent",
+      readBy: [BOB_UID],
+      isEdited: false,
+      isDeleted: false,
+      createdAt: new Date(Date.now() - 1000),
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+});
+
 
 

@@ -31,24 +31,45 @@ class StoreRepositoryTest {
   }
 
   @Test
-  fun testStoreCatalog_containsFramesAndNameplates() {
+  fun testStoreCatalog_containsFramesNameplatesAndWalls() {
     val catalog = storeRepository.catalog
     assertTrue(catalog.isNotEmpty())
 
     val frames = catalog.filter { it.type == DecorationType.AVATAR_FRAME }
     val nameplates = catalog.filter { it.type == DecorationType.ROLE_NAMEPLATE }
+    val walls = catalog.filter { it.type == DecorationType.ACHIEVEMENT_WALL }
 
-    assertTrue("Catalog must contain avatar frames", frames.isNotEmpty())
-    assertTrue("Catalog must contain role nameplates", nameplates.isNotEmpty())
+    assertEquals(18, frames.size)
+    assertEquals(13, nameplates.size)
+    assertEquals(6, walls.size)
 
-    assertNotNull(catalog.find { it.styleKey == "celestial_wings" })
-    assertNotNull(catalog.find { it.styleKey == "imperial_gold" })
-    assertNotNull(catalog.find { it.styleKey == "future_mech" })
-    assertNotNull(catalog.find { it.styleKey == "skull_eye" })
-    assertNotNull(catalog.find { it.styleKey == "octopus_crown" })
-    assertNotNull(catalog.find { it.styleKey == "sakura_tide" })
-    assertNotNull(catalog.find { it.styleKey == "cat_bell" })
-    assertNotNull(catalog.find { it.styleKey == "violet_night" })
+    // Classic & newly added collector avatar frames
+    listOf(
+      "haunted_spirits", "cat_bell", "violet_night", "violet_wreath",
+      "sakura_tide", "sunlit_pattern", "crimson_silver", "skull_eye",
+      "octopus_crown", "violet_butterfly", "steampunk_engine", "feather_totem",
+      "sunlit_garden", "future_mech", "celestial_wings", "imperial_gold",
+      "dragon_flame", "cosmic_swirl"
+    ).forEach { key ->
+      assertNotNull("Expected frame $key", catalog.find { it.styleKey == key })
+    }
+
+    // Illustrated role nameplates
+    listOf(
+      "np_peachy_bubble", "np_pear_bubbles", "np_midnight_rose",
+      "np_midnight_haunt", "np_aurora", "np_prismatic", "np_golden",
+      "np_cracked_stone", "np_deep_space", "np_raven_engraving"
+    ).forEach { key ->
+      assertNotNull("Expected nameplate $key", catalog.find { it.styleKey == key })
+    }
+
+    // Achievement wall backgrounds
+    listOf(
+      "wall_moonlight_holo", "wall_digital_matrix", "wall_crimson_forest",
+      "wall_dusk_castle", "wall_neon_nexus", "wall_dragon_throne"
+    ).forEach { key ->
+      assertNotNull("Expected wall $key", catalog.find { it.styleKey == key })
+    }
   }
 
   @Test
@@ -104,5 +125,26 @@ class StoreRepositoryTest {
     val reEquipResult = storeRepository.equipItem(testItem)
     assertTrue(reEquipResult.isSuccess)
     assertEquals(testItem.id, storeRepository.equippedFrame.value)
+  }
+
+  @Test
+  fun testBuyAndEquipAchievementWall_updatesEquippedWallState() = runTest {
+    val wallItem = storeRepository.catalog.first { it.id == "wall_crimson_forest" }
+    val initialCoins = storeRepository.coinBalance.value
+
+    val purchased = storeRepository.buyItem(wallItem)
+    assertTrue(purchased.isSuccess)
+    assertEquals(true, purchased.getOrNull())
+    assertTrue(storeRepository.isOwned(wallItem.id))
+    assertEquals(wallItem.id, storeRepository.equippedWall.value)
+    assertEquals(initialCoins - wallItem.price, storeRepository.coinBalance.value)
+
+    val unequipResult = storeRepository.unequipWall()
+    assertTrue(unequipResult.isSuccess)
+    assertEquals(null, storeRepository.equippedWall.value)
+
+    val reEquipResult = storeRepository.equipItem(wallItem)
+    assertTrue(reEquipResult.isSuccess)
+    assertEquals(wallItem.id, storeRepository.equippedWall.value)
   }
 }

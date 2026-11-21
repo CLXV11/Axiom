@@ -72,6 +72,7 @@ fun ContactDirectorySheet(
   userRepository: UserRepository,
   onDismiss: () -> Unit,
   onSelectUserToMessage: (UserProfile) -> Unit,
+  onInspectUser: (UserProfile) -> Unit = onSelectUserToMessage,
   sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 ) {
   val strings = LocalAppStrings.current
@@ -250,7 +251,10 @@ fun ContactDirectorySheet(
         ) {
           items(contacts, key = { it.id }) { user ->
             Card(
-              onClick = { onSelectUserToMessage(user) },
+              onClick = {
+                onDismiss()
+                onInspectUser(user)
+              },
               shape = RoundedCornerShape(14.dp),
               colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -274,8 +278,10 @@ fun ContactDirectorySheet(
                   name = user.displayName,
                   avatarUrl = user.avatarUrl,
                   size = 46.dp,
+                  frameStyleKey = user.equippedFrame,
                   showPresence = true,
-                  isOnline = true
+                  isOnline = !user.quietMode,
+                  isQuiet = user.quietMode
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))

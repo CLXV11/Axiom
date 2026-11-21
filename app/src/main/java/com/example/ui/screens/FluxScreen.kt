@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -58,6 +59,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Download
@@ -78,6 +80,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -89,6 +92,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -118,6 +122,7 @@ import androidx.media3.ui.PlayerView
 import com.example.data.model.FluxComment
 import com.example.data.model.FluxVideo
 import com.example.data.model.UserProfile
+import com.example.data.repository.ChatMediaRepository
 import com.example.data.repository.FluxRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
@@ -143,7 +148,8 @@ fun FluxScreen(
   userRepository: UserRepository,
   onLanguageToggle: () -> Unit,
   initialMuted: Boolean = false,
-  autoLoadVideos: Boolean = true
+  autoLoadVideos: Boolean = true,
+  onInspectUser: (UserProfile) -> Unit = {}
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
@@ -201,6 +207,11 @@ fun FluxScreen(
   var showCreateSheet by remember { mutableStateOf(false) }
   var activeCommentsFlux by remember { mutableStateOf<FluxVideo?>(null) }
   var isAudioMuted by remember(initialMuted) { mutableStateOf(initialMuted) }
+  var isRefreshingFeed by remember { mutableStateOf(false) }
+
+  LaunchedEffect(Unit) {
+    fluxRepository.refreshVideosFromServer()
+  }
 
   Box(
     modifier = Modifier
@@ -260,17 +271,40 @@ fun FluxScreen(
             Text(strings.fluxFilterAll, fontWeight = FontWeight.Bold)
           }
         } else {
-          Button(
-            onClick = { showCreateSheet = true },
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-              containerColor = colors.primary,
-              contentColor = colors.onPrimary
-            )
-          ) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(strings.newFlux, fontWeight = FontWeight.Bold)
+          Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+              onClick = {
+                if (!isRefreshingFeed) {
+                  isRefreshingFeed = true
+                  coroutineScope.launch {
+                    fluxRepository.refreshVideosFromServer()
+                    isRefreshingFeed = false
+                  }
+                }
+              },
+              shape = RoundedCornerShape(12.dp),
+              border = BorderStroke(1.dp, Color(0xFF3F4147))
+            ) {
+              if (isRefreshingFeed) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+              } else {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+              }
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(strings.refreshFluxFeed, color = Color(0xFFF2F3F5))
+            }
+            Button(
+              onClick = { showCreateSheet = true },
+              shape = RoundedCornerShape(12.dp),
+              colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary
+              )
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(strings.newFlux, fontWeight = FontWeight.Bold)
+            }
           }
         }
       }
@@ -278,6 +312,7 @@ fun FluxScreen(
       // Fullscreen Vertical Pager
       VerticalPager(
         state = pagerState,
+        key = { idx -> filteredVideos[idx].id },
         modifier = Modifier.fillMaxSize()
       ) { pageIndex ->
         val rawVideo = filteredVideos[pageIndex]
@@ -346,6 +381,16 @@ fun FluxScreen(
               fluxRepository.incrementShare(liveVideo.id)
             }
             Toast.makeText(context, strings.fluxLinkCopied, Toast.LENGTH_SHORT).show()
+          },
+          onInspectAuthor = {
+            val target = authorProfile ?: UserProfile(
+              id = liveVideo.authorId,
+              displayName = liveVideo.authorName,
+              handle = liveVideo.authorHandle,
+              isVerified = liveVideo.isAuthorVerified,
+              verifiedTier = liveVideo.authorVerifiedTier
+            )
+            onInspectUser(target)
           }
         )
       }
@@ -387,9 +432,48 @@ fun FluxScreen(
       }
 
       Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
+        IconButton(
+          onClick = {
+            if (!isRefreshingFeed) {
+              isRefreshingFeed = true
+              coroutineScope.launch {
+                fluxRepository.refreshVideosFromServer()
+                isRefreshingFeed = false
+              }
+            }
+          },
+          modifier = Modifier
+            .size(48.dp)
+            .testTag("flux_refresh_button")
+        ) {
+          Box(
+            modifier = Modifier
+              .size(38.dp)
+              .clip(CircleShape)
+              .background(Color(0xFF1E1F22).copy(alpha = 0.76f))
+              .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
+          ) {
+            if (isRefreshingFeed) {
+              CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                color = colors.primary,
+                modifier = Modifier.size(16.dp)
+              )
+            } else {
+              Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = strings.refreshFluxFeed,
+                tint = Color(0xFFF2F3F5),
+                modifier = Modifier.size(18.dp)
+              )
+            }
+          }
+        }
+
         IconButton(
           onClick = { isAudioMuted = !isAudioMuted },
           modifier = Modifier.size(48.dp)
@@ -449,6 +533,12 @@ fun FluxScreen(
         onPublished = {
           showCreateSheet = false
           selectedFilter = FluxFeedFilter.ALL
+          coroutineScope.launch {
+            fluxRepository.refreshVideosFromServer()
+            if (pagerState.pageCount > 0) {
+              pagerState.animateScrollToPage(0)
+            }
+          }
           Toast.makeText(context, strings.fluxPublished, Toast.LENGTH_SHORT).show()
         }
       )
@@ -461,6 +551,7 @@ fun FluxScreen(
         fluxRepository = fluxRepository,
         userRepository = userRepository,
         usersById = usersById,
+        onInspectUser = onInspectUser,
         onDismiss = { activeCommentsFlux = null }
       )
     }
@@ -509,7 +600,8 @@ private fun FluxItemPage(
   onToggleSave: () -> Unit,
   onSaveToGallery: () -> Unit,
   onOpenComments: () -> Unit,
-  onShare: () -> Unit
+  onShare: () -> Unit,
+  onInspectAuthor: () -> Unit
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
@@ -527,6 +619,9 @@ private fun FluxItemPage(
   }
   var isBufferingVideo by remember(video.id) { mutableStateOf(false) }
   var downloadProgress by remember(video.id) { mutableFloatStateOf(0f) }
+  var videoLoadError by remember(video.id) { mutableStateOf<String?>(null) }
+  var manualLoadRequested by remember(video.id) { mutableStateOf(false) }
+  var loadRetryCount by remember(video.id) { mutableIntStateOf(0) }
 
   val directPlayableUri = remember(video.videoUri, context) {
     val raw = video.videoUri
@@ -543,15 +638,20 @@ private fun FluxItemPage(
     }
   }
 
-  LaunchedEffect(video.id, video.mediaId, video.mediaChunkCount, resolvedVideoFile, autoLoadVideos, isCurrentPage) {
-    val shouldLoad = autoLoadVideos || isCurrentPage
+  LaunchedEffect(video.id, video.mediaId, video.mediaChunkCount, resolvedVideoFile, autoLoadVideos, isCurrentPage, manualLoadRequested, loadRetryCount) {
+    val shouldLoad = (autoLoadVideos && isCurrentPage) || manualLoadRequested
     if (shouldLoad && resolvedVideoFile == null && !video.mediaId.isNullOrBlank() && video.mediaChunkCount > 0) {
       isBufferingVideo = true
+      videoLoadError = null
       val res = fluxRepository.resolvePlayableFluxFile(video) { progress ->
         downloadProgress = progress
       }
       isBufferingVideo = false
-      resolvedVideoFile = res.getOrNull()
+      res.onSuccess { file ->
+        resolvedVideoFile = file
+      }.onFailure { err ->
+        videoLoadError = err.localizedMessage ?: strings.fluxVideoLoadFailed
+      }
     }
   }
 
@@ -625,6 +725,39 @@ private fun FluxItemPage(
             style = KoraTheme.typography.labelMedium,
             color = Color(0xFFF2F3F5),
             fontWeight = FontWeight.Bold
+          )
+        }
+      }
+    } else if (playableUri == null && !video.mediaId.isNullOrBlank() && video.mediaChunkCount > 0) {
+      Surface(
+        onClick = {
+          manualLoadRequested = true
+          loadRetryCount++
+        },
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF1E1F22).copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+        modifier = Modifier
+          .align(Alignment.Center)
+          .testTag("flux_retry_load_${video.id}")
+      ) {
+        Column(
+          modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          Icon(
+            imageVector = if (videoLoadError != null) Icons.Default.Refresh else Icons.Default.PlayArrow,
+            contentDescription = strings.fluxTapToLoadVideo,
+            tint = colors.primary,
+            modifier = Modifier.size(28.dp)
+          )
+          Text(
+            text = if (videoLoadError != null) strings.fluxVideoLoadFailed else strings.fluxTapToLoadVideo,
+            style = KoraTheme.typography.labelMedium,
+            color = Color(0xFFF2F3F5),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
           )
         }
       }
@@ -706,34 +839,42 @@ private fun FluxItemPage(
         .padding(start = 16.dp, end = 8.dp, bottom = 20.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+      Column(
+        modifier = Modifier
+          .clip(RoundedCornerShape(10.dp))
+          .clickable(onClick = onInspectAuthor)
+          .padding(vertical = 2.dp, horizontal = 2.dp)
+          .testTag("flux_author_header_${video.id}")
       ) {
-        Text(
-          text = video.authorName,
-          style = KoraTheme.typography.titleMedium,
-          fontWeight = FontWeight.Bold,
-          color = Color(0xFFF2F3F5),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.weight(1f, fill = false)
-        )
-        if (video.isAuthorVerified) {
-          VerifiedBadge(
-            size = 15.dp,
-            tierKey = video.authorVerifiedTier,
-            showDialogOnClick = true
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          Text(
+            text = video.authorName,
+            style = KoraTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFF2F3F5),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
           )
+          if (video.isAuthorVerified) {
+            VerifiedBadge(
+              size = 15.dp,
+              tierKey = video.authorVerifiedTier,
+              showDialogOnClick = true
+            )
+          }
         }
+        Text(
+          text = formatHandleForDisplay(video.authorHandle),
+          style = KoraTheme.typography.labelMedium,
+          color = Color(0xFFB5BAC1),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
       }
-      Text(
-        text = formatHandleForDisplay(video.authorHandle),
-        style = KoraTheme.typography.labelMedium,
-        color = Color(0xFFB5BAC1),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis
-      )
 
       Text(
         text = video.caption,
@@ -784,7 +925,11 @@ private fun FluxItemPage(
       AvatarView(
         name = video.authorName,
         avatarUrl = authorAvatarUrl,
-        size = 44.dp
+        size = 48.dp,
+        modifier = Modifier
+          .clip(CircleShape)
+          .clickable(onClick = onInspectAuthor)
+          .testTag("flux_author_avatar_${video.id}")
       )
 
       FluxActionButton(
@@ -1015,27 +1160,43 @@ private fun CreateFluxSheet(
   val strings = LocalAppStrings.current
   val colors = MaterialTheme.colorScheme
   val coroutineScope = rememberCoroutineScope()
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  var isPublishing by remember { mutableStateOf(false) }
+  val sheetState = rememberModalBottomSheetState(
+    skipPartiallyExpanded = true,
+    confirmValueChange = { !isPublishing }
+  )
   val currentUid = userRepository.requireUserId()
 
   var selectedVideoUri by remember { mutableStateOf<Uri?>(null) }
+  var selectedVideoError by remember { mutableStateOf<String?>(null) }
   var captionText by remember { mutableStateOf("") }
   var audioText by remember { mutableStateOf("") }
   var selectedTheme by remember { mutableStateOf("BLURPLE") }
-  var isPublishing by remember { mutableStateOf(false) }
   var uploadProgress by remember { mutableFloatStateOf(0f) }
 
-  // Zero-permission Android Photo/Video Picker
+  // Zero-permission Android Photo/Video Picker with immediate 25 MB validation
   val videoPickerLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.PickVisualMedia()
   ) { uri: Uri? ->
     if (uri != null) {
-      selectedVideoUri = uri
+      val fileSize = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+          val col = c.getColumnIndex(OpenableColumns.SIZE)
+          if (c.moveToFirst() && col >= 0) c.getLong(col) else null
+        } ?: context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+      }.getOrNull() ?: 0L
+      if (fileSize > ChatMediaRepository.MAX_MEDIA_BYTES) {
+        selectedVideoUri = null
+        selectedVideoError = strings.fluxVideoTooLargeInline
+      } else {
+        selectedVideoError = null
+        selectedVideoUri = uri
+      }
     }
   }
 
   ModalBottomSheet(
-    onDismissRequest = onDismiss,
+    onDismissRequest = { if (!isPublishing) onDismiss() },
     sheetState = sheetState,
     containerColor = colors.surface,
     contentColor = colors.onSurface
@@ -1061,7 +1222,7 @@ private fun CreateFluxSheet(
           fontWeight = FontWeight.Bold,
           color = colors.onSurface
         )
-        IconButton(onClick = onDismiss) {
+        IconButton(onClick = { if (!isPublishing) onDismiss() }, enabled = !isPublishing) {
           Icon(Icons.Default.Close, contentDescription = strings.cancel, tint = colors.onSurfaceVariant)
         }
       }
@@ -1117,6 +1278,23 @@ private fun CreateFluxSheet(
               overflow = TextOverflow.Ellipsis
             )
           }
+        }
+      }
+
+      if (selectedVideoError != null) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = colors.errorContainer.copy(alpha = 0.85f),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Text(
+            text = selectedVideoError!!,
+            style = KoraTheme.typography.bodySmall,
+            color = colors.onErrorContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+          )
         }
       }
 
@@ -1326,6 +1504,7 @@ private fun FluxCommentsSheet(
   fluxRepository: FluxRepository,
   userRepository: UserRepository,
   usersById: Map<String, UserProfile>,
+  onInspectUser: (UserProfile) -> Unit = {},
   onDismiss: () -> Unit
 ) {
   val context = LocalContext.current
@@ -1404,7 +1583,18 @@ private fun FluxCommentsSheet(
                 isAuthorVerified = authorProfile?.isVerified ?: comment.isAuthorVerified,
                 authorVerifiedTier = authorProfile?.verifiedTier ?: comment.authorVerifiedTier
               ),
-              authorAvatarUrl = authorProfile?.avatarUrl
+              authorAvatarUrl = authorProfile?.avatarUrl,
+              onInspectAuthor = {
+                val target = authorProfile ?: UserProfile(
+                  id = comment.authorId,
+                  displayName = comment.authorName,
+                  handle = comment.authorHandle,
+                  isVerified = comment.isAuthorVerified,
+                  verifiedTier = comment.authorVerifiedTier
+                )
+                onDismiss()
+                onInspectUser(target)
+              }
             )
           }
         }
@@ -1490,7 +1680,8 @@ private fun FluxCommentsSheet(
 @Composable
 private fun FluxCommentItem(
   comment: FluxComment,
-  authorAvatarUrl: String? = null
+  authorAvatarUrl: String? = null,
+  onInspectAuthor: () -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val formattedTime = remember(comment.timestamp) {
@@ -1502,7 +1693,11 @@ private fun FluxCommentItem(
   }
 
   Row(
-    modifier = Modifier.fillMaxWidth(),
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(10.dp))
+      .clickable(onClick = onInspectAuthor)
+      .padding(4.dp),
     verticalAlignment = Alignment.Top
   ) {
     AvatarView(name = comment.authorName, avatarUrl = authorAvatarUrl, size = 36.dp)

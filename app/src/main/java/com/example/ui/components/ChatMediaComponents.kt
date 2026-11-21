@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
@@ -38,7 +39,10 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
@@ -51,6 +55,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -60,6 +66,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -83,6 +90,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -93,6 +101,7 @@ import com.example.data.model.Message
 import com.example.data.repository.ChatMediaRepository
 import com.example.ui.util.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -103,7 +112,8 @@ fun ChatMediaAttachmentSheet(
   onDismiss: () -> Unit,
   onPickPhoto: () -> Unit,
   onPickVideo: () -> Unit,
-  onPickFile: () -> Unit
+  onPickFile: () -> Unit,
+  onCreatePoll: () -> Unit = {}
 ) {
   val strings = LocalAppStrings.current
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -161,6 +171,18 @@ fun ChatMediaAttachmentSheet(
         onClick = {
           onDismiss()
           onPickFile()
+        }
+      )
+
+      AttachmentOptionTile(
+        icon = Icons.Default.Poll,
+        title = strings.createPollAction,
+        subtitle = "Live vote with instant percentages",
+        accentColor = Color(0xFFF59E0B),
+        testTag = "attach_poll_option",
+        onClick = {
+          onDismiss()
+          onCreatePoll()
         }
       )
 
@@ -553,6 +575,18 @@ fun MediaMessageBubbleContent(
             }
           }
         }
+      }
+
+      "audio" -> {
+        VoiceNoteBubblePlayer(
+          messageId = message.id,
+          file = resolvedFile,
+          durationHintMs = message.mediaDurationMs,
+          isLoading = isLoading,
+          progress = progress,
+          loadError = loadError,
+          onRetry = { retryCounter++ }
+        )
       }
 
       "file" -> {
@@ -1074,5 +1108,334 @@ private suspend fun extractVideoFrameBitmap(file: File): Bitmap? = withContext(D
     null
   } finally {
     runCatching { retriever.release() }
+  }
+}
+
+@Composable
+private fun VoiceNoteBubblePlayer(
+  messageId: String,
+  file: File?,
+  durationHintMs: Long,
+  isLoading: Boolean,
+  progress: Float,
+  loadError: String?,
+  onRetry: () -> Unit
+) {
+  val context = LocalContext.current
+  val strings = LocalAppStrings.current
+  var isPlaying by remember(messageId) { mutableStateOf(false) }
+  var speedIndex by remember(messageId) { mutableIntStateOf(0) }
+  val speeds = remember { listOf(1.0f, 1.5f, 2.0f) }
+  val speedLabels = remember { listOf("1x", "1.5x", "2x") }
+  var currentPositionMs by remember(messageId) { mutableLongStateOf(0L) }
+  var totalDurationMs by remember(messageId, durationHintMs) { mutableLongStateOf(durationHintMs.coerceAtLeast(0L)) }
+
+  val exoPlayer = remember(file?.absolutePath) {
+    file?.let { audioFile ->
+      ExoPlayer.Builder(context).build().apply {
+        setMediaItem(MediaItem.fromUri(Uri.fromFile(audioFile)))
+        prepare()
+      }
+    }
+  }
+
+  DisposableEffect(exoPlayer) {
+    val listener = object : Player.Listener {
+      override fun onPlaybackStateChanged(playbackState: Int) {
+        if (exoPlayer != null && playbackState == Player.STATE_READY && exoPlayer.duration > 0L) {
+          totalDurationMs = exoPlayer.duration
+        }
+        if (playbackState == Player.STATE_ENDED) {
+          isPlaying = false
+          currentPositionMs = 0L
+          exoPlayer?.pause()
+          exoPlayer?.seekTo(0L)
+        }
+      }
+
+      override fun onIsPlayingChanged(playing: Boolean) {
+        isPlaying = playing
+      }
+    }
+    exoPlayer?.addListener(listener)
+    onDispose {
+      exoPlayer?.removeListener(listener)
+      exoPlayer?.release()
+    }
+  }
+
+  LaunchedEffect(exoPlayer, speedIndex) {
+    exoPlayer?.playbackParameters = PlaybackParameters(speeds[speedIndex])
+  }
+
+  LaunchedEffect(exoPlayer, isPlaying) {
+    while (exoPlayer != null && isPlaying) {
+      currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+      if (exoPlayer.duration > 0L) {
+        totalDurationMs = exoPlayer.duration
+      }
+      delay(120L)
+    }
+  }
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+    modifier = Modifier
+      .fillMaxWidth()
+      .testTag("chat_media_audio_$messageId")
+  ) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        if (file != null && exoPlayer != null) {
+          IconButton(
+            onClick = {
+              if (isPlaying) {
+                exoPlayer.pause()
+                isPlaying = false
+              } else {
+                exoPlayer.play()
+                isPlaying = true
+              }
+            },
+            modifier = Modifier
+              .size(44.dp)
+              .clip(CircleShape)
+              .background(MaterialTheme.colorScheme.primary)
+              .testTag("voice_note_play_toggle_$messageId")
+          ) {
+            Icon(
+              imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+              contentDescription = strings.voiceNoteLabel,
+              tint = MaterialTheme.colorScheme.onPrimary,
+              modifier = Modifier.size(22.dp)
+            )
+          }
+        } else if (loadError != null) {
+          IconButton(
+            onClick = onRetry,
+            modifier = Modifier
+              .size(44.dp)
+              .clip(CircleShape)
+              .background(MaterialTheme.colorScheme.error.copy(alpha = 0.16f))
+          ) {
+            Icon(
+              imageVector = Icons.Default.Refresh,
+              contentDescription = strings.retry,
+              tint = MaterialTheme.colorScheme.error
+            )
+          }
+        } else {
+          Box(
+            modifier = Modifier.size(44.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            if (isLoading) {
+              CircularProgressIndicator(
+                progress = { progress.coerceIn(0.08f, 1f) },
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(24.dp)
+              )
+            } else {
+              Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = strings.voiceNoteLabel,
+                tint = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+          val maxDur = totalDurationMs.coerceAtLeast(1000L).toFloat()
+          Slider(
+            value = currentPositionMs.toFloat().coerceIn(0f, maxDur),
+            onValueChange = { target ->
+              currentPositionMs = target.toLong()
+              exoPlayer?.seekTo(target.toLong())
+            },
+            valueRange = 0f..maxDur,
+            enabled = exoPlayer != null,
+            colors = SliderDefaults.colors(
+              thumbColor = MaterialTheme.colorScheme.primary,
+              activeTrackColor = MaterialTheme.colorScheme.primary,
+              inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(26.dp)
+          )
+
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            val timeText = if (isPlaying || currentPositionMs > 0L) {
+              "${ChatMediaRepository.formatDuration(currentPositionMs)} / ${ChatMediaRepository.formatDuration(totalDurationMs)}"
+            } else {
+              ChatMediaRepository.formatDuration(totalDurationMs)
+            }
+            Text(
+              text = timeText,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              fontWeight = FontWeight.Medium
+            )
+
+            Surface(
+              onClick = { speedIndex = (speedIndex + 1) % speeds.size },
+              shape = RoundedCornerShape(999.dp),
+              color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+              modifier = Modifier.testTag("voice_note_speed_$messageId")
+            ) {
+              Text(
+                text = speedLabels[speedIndex],
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp),
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+fun PollMessageCard(
+  message: Message,
+  currentUid: String,
+  onVoteOption: (Int) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  val question = message.pollQuestion?.takeIf { it.isNotBlank() } ?: message.content
+  val totalVotes = remember(message.pollVotes) {
+    message.pollVotes.values.sumOf { it.size }
+  }
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = colors.surface.copy(alpha = 0.72f),
+    border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.45f)),
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("poll_card_${message.id}")
+  ) {
+    Column(
+      modifier = Modifier.padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          imageVector = Icons.Default.Poll,
+          contentDescription = null,
+          tint = colors.primary,
+          modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = question,
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = colors.onSurface
+        )
+      }
+
+      message.pollOptions.forEachIndexed { index, optionText ->
+        val voters = message.pollVotes[index.toString()].orEmpty()
+        val isVotedByMe = voters.contains(currentUid)
+        val fraction = if (totalVotes > 0) voters.size.toFloat() / totalVotes.toFloat() else 0f
+        val percent = (fraction * 100f).toInt()
+
+        Surface(
+          onClick = { onVoteOption(index) },
+          shape = RoundedCornerShape(10.dp),
+          color = colors.surfaceVariant.copy(alpha = 0.55f),
+          border = BorderStroke(
+            width = if (isVotedByMe) 1.5.dp else 1.dp,
+            color = if (isVotedByMe) colors.primary else colors.outlineVariant.copy(alpha = 0.45f)
+          ),
+          modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 46.dp)
+            .testTag("poll_option_${message.id}_$index")
+        ) {
+          Box(modifier = Modifier.fillMaxWidth()) {
+            if (fraction > 0f) {
+              Box(
+                modifier = Modifier
+                  .matchParentSize()
+                  .fillMaxWidth(fraction)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                      if (isVotedByMe) colors.primary.copy(alpha = 0.22f)
+                      else colors.onSurface.copy(alpha = 0.08f)
+                    )
+                )
+              }
+            }
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+              ) {
+                if (isVotedByMe) {
+                  Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(16.dp)
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                  text = optionText,
+                  style = MaterialTheme.typography.bodyMedium,
+                  fontWeight = if (isVotedByMe) FontWeight.Bold else FontWeight.Medium,
+                  color = colors.onSurface,
+                  maxLines = 2,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+              if (totalVotes > 0) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                  text = "$percent% (${voters.size})",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = if (isVotedByMe) colors.primary else colors.onSurfaceVariant
+                )
+              }
+            }
+          }
+        }
+      }
+
+      Text(
+        text = String.format(strings.pollVotesCountFormat, totalVotes),
+        style = MaterialTheme.typography.labelSmall,
+        color = colors.onSurfaceVariant
+      )
+    }
   }
 }

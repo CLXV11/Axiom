@@ -68,6 +68,7 @@ class PreferencesManager(context: Context) {
       put("verifiedTier", profile.verifiedTier)
       put("equippedFrame", profile.equippedFrame ?: "")
       put("equippedNameplate", profile.equippedNameplate ?: "")
+      put("equippedWall", profile.equippedWall ?: "")
       put("quietMode", profile.quietMode)
       put("readReceiptsEnabled", profile.readReceiptsEnabled)
     }
@@ -82,6 +83,7 @@ class PreferencesManager(context: Context) {
       if (json.optString("id") != uid) return null
       val frame = json.optString("equippedFrame", "").ifBlank { null }
       val nameplate = json.optString("equippedNameplate", "").ifBlank { null }
+      val wall = json.optString("equippedWall", "").ifBlank { null }
       UserProfile(
         id = uid,
         displayName = json.optString("displayName", ""),
@@ -96,6 +98,7 @@ class PreferencesManager(context: Context) {
         verifiedTier = json.optString("verifiedTier", "BLUE"),
         equippedFrame = frame,
         equippedNameplate = nameplate,
+        equippedWall = wall,
         quietMode = json.optBoolean("quietMode", false),
         readReceiptsEnabled = json.optBoolean("readReceiptsEnabled", true)
       )

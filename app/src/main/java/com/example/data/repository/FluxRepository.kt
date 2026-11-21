@@ -20,17 +20,22 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.snapshots
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -158,12 +163,45 @@ class FluxRepository(
             saveVideosToPrefs(serverList)
           }
         }
+        .onStart {
+          if (_videos.value.isNotEmpty()) {
+            emit(_videos.value)
+          }
+        }
+        .retryWhen { cause, attempt ->
+          val isTransient = attempt < 2 && cause !is CancellationException
+          if (isTransient) {
+            delay(700L * (attempt + 1))
+          }
+          isTransient
+        }
         .catch { e ->
           handleFirestoreError(e, OperationType.LIST, "flux_videos", auth)
           emit(_videos.value)
         }
     }
     return videos
+  }
+
+  suspend fun refreshVideosFromServer(): Result<List<FluxVideo>> {
+    if (!isSignedIn()) return Result.success(_videos.value)
+    val query = db!!.collection("flux_videos")
+      .orderBy("createdAt", Query.Direction.DESCENDING)
+      .limit(50)
+    return try {
+      val snapshot = try {
+        query.get(Source.SERVER).await()
+      } catch (_: Exception) {
+        query.get(Source.DEFAULT).await()
+      }
+      val list = snapshot.documents.mapNotNull { it.toFluxVideoOrNull() }
+      _videos.value = list
+      saveVideosToPrefs(list)
+      Result.success(list)
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.LIST, "flux_videos", auth)
+      Result.failure(e)
+    }
   }
 
   fun observeComments(fluxId: String): Flow<List<FluxComment>> {
@@ -234,7 +272,12 @@ class FluxRepository(
 
     val deferred = downloadMutex.withLock {
       activeDownloads[mediaId] ?: kotlinx.coroutines.CoroutineScope(Dispatchers.IO).async {
-        downloadFluxChunksToCache(mediaId, onProgress)
+        downloadFluxChunksToCache(
+          mediaId = mediaId,
+          expectedChunkCount = video.mediaChunkCount,
+          expectedSizeBytes = video.mediaSizeBytes,
+          onProgress = onProgress
+        )
       }.also { activeDownloads[mediaId] = it }
     }
 
@@ -251,6 +294,8 @@ class FluxRepository(
 
   private suspend fun downloadFluxChunksToCache(
     mediaId: String,
+    expectedChunkCount: Int,
+    expectedSizeBytes: Long,
     onProgress: (Float) -> Unit
   ): Result<File> = withContext(Dispatchers.IO) {
     val firestore = db ?: return@withContext Result.failure(IllegalStateException("Firestore unavailable"))
@@ -260,26 +305,72 @@ class FluxRepository(
     val tmpFile = File(dir, "${mediaId}_${System.currentTimeMillis()}.tmp")
 
     try {
-      onProgress(0.08f)
-      val snap = firestore.collection("flux_media")
+      onProgress(0.06f)
+      val chunksCollection = firestore.collection("flux_media")
         .document(mediaId)
         .collection("chunks")
-        .orderBy("index", Query.Direction.ASCENDING)
-        .get()
-        .await()
 
-      if (snap.isEmpty) {
+      val orderedChunkBytes: List<ByteArray> = if (expectedChunkCount > 0) {
+        val semaphore = Semaphore(4)
+        var fetchedCount = 0
+        val countLock = Mutex()
+        coroutineScope {
+          val jobs = (0 until expectedChunkCount).map { idx ->
+            async {
+              semaphore.withPermit {
+                var lastErr: Exception? = null
+                var bytes: ByteArray? = null
+                for (attempt in 0..1) {
+                  try {
+                    val doc = chunksCollection.document("chunk_$idx").get().await()
+                    val b64 = doc.getString("data")
+                      ?: throw IllegalStateException("Flux chunk $idx missing")
+                    bytes = Base64.decode(b64, Base64.DEFAULT)
+                    break
+                  } catch (e: Exception) {
+                    lastErr = e
+                    if (attempt == 0) delay(300L)
+                  }
+                }
+                val resolved = bytes ?: throw (lastErr ?: IllegalStateException("Failed chunk $idx"))
+                countLock.withLock {
+                  fetchedCount++
+                  onProgress(0.08f + (fetchedCount.toFloat() / expectedChunkCount.toFloat()) * 0.80f)
+                }
+                idx to resolved
+              }
+            }
+          }
+          jobs.awaitAll().sortedBy { it.first }.map { it.second }
+        }
+      } else {
+        val snap = chunksCollection.orderBy("index", Query.Direction.ASCENDING).get().await()
+        if (snap.isEmpty) {
+          return@withContext Result.failure(IllegalStateException("Flux video chunks not found"))
+        }
+        snap.documents.mapIndexed { idx, doc ->
+          val b64 = doc.getString("data") ?: throw IllegalStateException("Corrupt flux chunk $idx")
+          Base64.decode(b64, Base64.DEFAULT)
+        }
+      }
+
+      if (orderedChunkBytes.isEmpty()) {
         return@withContext Result.failure(IllegalStateException("Flux video chunks not found"))
       }
 
-      val docs = snap.documents
+      var writtenBytes = 0L
       FileOutputStream(tmpFile).use { fos ->
-        docs.forEachIndexed { idx, doc ->
-          val b64 = doc.getString("data") ?: throw IllegalStateException("Corrupt flux chunk $idx")
-          val decoded = Base64.decode(b64, Base64.DEFAULT)
+        orderedChunkBytes.forEach { decoded ->
           fos.write(decoded)
-          onProgress(0.15f + ((idx + 1).toFloat() / docs.size.toFloat()) * 0.85f)
+          writtenBytes += decoded.size
         }
+      }
+
+      if (writtenBytes <= 0L || (expectedSizeBytes > 0L && writtenBytes != expectedSizeBytes)) {
+        tmpFile.delete()
+        return@withContext Result.failure(
+          IllegalStateException("Downloaded video size mismatch ($writtenBytes vs $expectedSizeBytes)")
+        )
       }
 
       if (finalFile.exists()) finalFile.delete()
@@ -291,7 +382,7 @@ class FluxRepository(
       Result.success(finalFile)
     } catch (e: Exception) {
       tmpFile.delete()
-      handleFirestoreError(e, OperationType.LIST, "flux_media/$mediaId/chunks", auth)
+      handleFirestoreError(e, OperationType.GET, "flux_media/$mediaId/chunks", auth)
       Result.failure(e)
     }
   }
@@ -433,7 +524,11 @@ class FluxRepository(
       ?: remoteVideoUrl
       ?: videoUri?.takeIf { !isSignedIn() }
 
-    val extractedTags = Regex("#\\w+").findAll(caption).map { it.value }.take(15).toList()
+    val extractedTags = Regex("#[\\p{L}\\p{N}_]+").findAll(caption)
+      .map { it.value.lowercase(java.util.Locale.ROOT) }
+      .distinct()
+      .take(15)
+      .toList()
     val tags = extractedTags.ifEmpty { listOf("#flux") }
     val cleanAudio = audioTitle.ifBlank { "Original Audio - $authorName" }.take(120)
     val validTier = if (authorVerifiedTier in VALID_TIERS) authorVerifiedTier else "BLUE"

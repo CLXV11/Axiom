@@ -84,13 +84,16 @@ class UserRepository(
 
   fun observeUserProfile(userId: String): Flow<UserProfile?> {
     if (auth.currentUser != null) {
+      val isCurrentUser = userId == auth.currentUser?.uid
       val docRef = db.collection("users").document(userId)
       return docRef.snapshots()
         .map { snapshot ->
           if (snapshot.exists()) {
             snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
-              localUserProfileFlow.value = it
-              prefsManager?.saveCachedProfile(it)
+              if (isCurrentUser) {
+                localUserProfileFlow.value = it
+                prefsManager?.saveCachedProfile(it)
+              }
             }
           } else {
             null
@@ -101,21 +104,22 @@ class UserRepository(
         }
         .catch { e ->
           handleFirestoreError(e, OperationType.GET, docRef.path, auth)
-          emit(prefsManager?.getCachedProfile(userId) ?: localUserProfileFlow.value)
+          emit(prefsManager?.getCachedProfile(userId) ?: if (isCurrentUser) localUserProfileFlow.value else null)
         }
     } else {
-      return localUserProfileFlow.asStateFlow()
+      return if (userId == getEffectiveUserId()) localUserProfileFlow.asStateFlow() else flowOf(null)
     }
   }
 
   suspend fun getUserProfile(userId: String): UserProfile? {
     if (auth.currentUser != null) {
+      val isCurrentUser = userId == auth.currentUser?.uid
       val docRef = db.collection("users").document(userId)
       return try {
         val snapshot = docRef.get().await()
         if (snapshot.exists()) {
           snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.also {
-            if (userId == auth.currentUser?.uid) {
+            if (isCurrentUser) {
               localUserProfileFlow.value = it
               prefsManager?.saveCachedProfile(it)
             }
@@ -128,7 +132,7 @@ class UserRepository(
         throw e
       }
     }
-    return localUserProfileFlow.value
+    return if (userId == getEffectiveUserId()) localUserProfileFlow.value else null
   }
 
   suspend fun createOrUpdateProfile(profile: UserProfile): Result<Unit> {
@@ -171,6 +175,7 @@ class UserRepository(
             "verifiedTier" to normalizedProfile.verifiedTier,
             "equippedFrame" to normalizedProfile.equippedFrame,
             "equippedNameplate" to normalizedProfile.equippedNameplate,
+            "equippedWall" to normalizedProfile.equippedWall,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -191,6 +196,7 @@ class UserRepository(
             "verifiedTier" to normalizedProfile.verifiedTier,
             "equippedFrame" to normalizedProfile.equippedFrame,
             "equippedNameplate" to normalizedProfile.equippedNameplate,
+            "equippedWall" to normalizedProfile.equippedWall,
             "quietMode" to normalizedProfile.quietMode,
             "readReceiptsEnabled" to normalizedProfile.readReceiptsEnabled,
             "lastSeen" to FieldValue.serverTimestamp(),

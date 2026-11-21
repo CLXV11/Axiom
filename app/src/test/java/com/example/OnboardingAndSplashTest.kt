@@ -2,6 +2,8 @@ package com.example
 
 import com.example.ui.screens.AuthFeatureHighlight
 import com.example.ui.screens.AuthOnboardingDefaults
+import com.example.ui.screens.mapFirebaseAuthError
+import com.example.ui.screens.mapFirebaseAuthErrorCode
 import com.example.ui.theme.AppThemePreset
 import com.example.ui.util.ArabicStrings
 import com.example.ui.util.EnglishStrings
@@ -29,7 +31,30 @@ class OnboardingAndSplashTest {
       assertTrue(strings.startQuietModeToggle.isNotBlank())
       assertTrue(strings.startQuietModeDesc.isNotBlank())
       assertTrue(strings.setupStepSubtitle.isNotBlank())
+      assertTrue(strings.authSignInTab.isNotBlank())
+      assertTrue(strings.authCreateAccountTab.isNotBlank())
+      assertTrue(strings.authEmailLabel.isNotBlank())
+      assertTrue(strings.authPasswordLabel.isNotBlank())
+      assertTrue(strings.authConfirmPasswordLabel.isNotBlank())
+      assertTrue(strings.authForgotPassword.isNotBlank())
+      assertTrue(strings.authRecoverAccount.isNotBlank())
+      assertTrue(strings.authSendResetLink.isNotBlank())
+      assertTrue(strings.authRecoverViaEmailBtn.isNotBlank())
+      assertTrue(strings.authRecoverViaGoogleBtn.isNotBlank())
+      assertTrue(strings.authBackToSignIn.isNotBlank())
     }
+  }
+
+  @Test
+  fun testMapFirebaseAuthError_returnsLocalizedMessages() {
+    assertTrue(mapFirebaseAuthErrorCode("ERROR_USER_NOT_FOUND", null, isArabic = true).contains("لا يوجد حساب"))
+    assertTrue(mapFirebaseAuthErrorCode("ERROR_USER_NOT_FOUND", null, isArabic = false).contains("No account found"))
+    assertTrue(mapFirebaseAuthErrorCode("ERROR_EMAIL_ALREADY_IN_USE", null, isArabic = true).contains("مسجّل"))
+    assertTrue(mapFirebaseAuthErrorCode("ERROR_WEAK_PASSWORD", null, isArabic = false).contains("6 characters"))
+    assertEquals(
+      "Custom error",
+      mapFirebaseAuthError(IllegalStateException("Custom error"), isArabic = false)
+    )
   }
 
   @Test

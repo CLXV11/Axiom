@@ -86,8 +86,11 @@ import com.example.data.model.UserProfile
 import com.example.data.repository.FluxRepository
 import com.example.data.repository.StoreRepository
 import com.example.data.repository.UserRepository
+import com.example.ui.components.AchievementWallView
 import com.example.ui.components.AvatarView
+import com.example.ui.components.CollectorDecorationCard
 import com.example.ui.components.RoleNameplateView
+import com.example.ui.components.StoreFilterChip
 import com.example.ui.util.AppLanguage
 import com.example.ui.util.LocalAppLanguage
 import com.example.ui.util.LocalAppStrings
@@ -117,6 +120,7 @@ fun DecorationStoreScreen(
   val coins by storeRepository.coinBalance.collectAsState()
   val equippedFrame by storeRepository.equippedFrame.collectAsState()
   val equippedNameplate by storeRepository.equippedNameplate.collectAsState()
+  val equippedWall by storeRepository.equippedWall.collectAsState()
   val ownedItemIds by storeRepository.ownedItemIds.collectAsState()
   val claimedMilestones by storeRepository.claimedMilestones.collectAsState()
   val lastDailyClaimAtMillis by storeRepository.lastDailyClaimAtMillis.collectAsState()
@@ -350,7 +354,7 @@ fun DecorationStoreScreen(
               modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
               horizontalArrangement = Arrangement.spacedBy(8.dp),
               verticalAlignment = Alignment.CenterVertically
             ) {
@@ -369,6 +373,11 @@ fun DecorationStoreScreen(
                 selected = selectedCategory == DecorationType.ROLE_NAMEPLATE,
                 onClick = { selectedCategory = DecorationType.ROLE_NAMEPLATE }
               )
+              StoreFilterChip(
+                label = strings.achievementWalls,
+                selected = selectedCategory == DecorationType.ACHIEVEMENT_WALL,
+                onClick = { selectedCategory = DecorationType.ACHIEVEMENT_WALL }
+              )
             }
 
             Text(
@@ -380,17 +389,18 @@ fun DecorationStoreScreen(
 
             LazyVerticalGrid(
               columns = GridCells.Adaptive(minSize = 158.dp),
-              contentPadding = PaddingValues(14.dp),
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
-              verticalArrangement = Arrangement.spacedBy(12.dp),
+              contentPadding = PaddingValues(12.dp),
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
               modifier = Modifier.fillMaxSize()
             ) {
               items(filteredCatalog, key = { it.id }) { item ->
                 val isOwned = ownedItemIds.contains(item.id)
                 val isEquipped = (item.type == DecorationType.AVATAR_FRAME && equippedFrame == item.id) ||
-                  (item.type == DecorationType.ROLE_NAMEPLATE && equippedNameplate == item.id)
+                  (item.type == DecorationType.ROLE_NAMEPLATE && equippedNameplate == item.id) ||
+                  (item.type == DecorationType.ACHIEVEMENT_WALL && equippedWall == item.id)
 
-                DecorationItemCard(
+                CollectorDecorationCard(
                   item = item,
                   isOwned = isOwned,
                   isEquipped = isEquipped,
@@ -447,13 +457,14 @@ fun DecorationStoreScreen(
       val item = previewItem!!
       val isOwned = ownedItemIds.contains(item.id)
       val isEquipped = (item.type == DecorationType.AVATAR_FRAME && equippedFrame == item.id) ||
-        (item.type == DecorationType.ROLE_NAMEPLATE && equippedNameplate == item.id)
+        (item.type == DecorationType.ROLE_NAMEPLATE && equippedNameplate == item.id) ||
+        (item.type == DecorationType.ACHIEVEMENT_WALL && equippedWall == item.id)
 
       ModalBottomSheet(
         onDismissRequest = { previewItem = null },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = colors.surface,
-        contentColor = colors.onSurface,
+        containerColor = Color(0xFF10131F),
+        contentColor = Color.White,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
       ) {
         Column(
@@ -465,40 +476,90 @@ fun DecorationStoreScreen(
             .navigationBarsPadding(),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          Box(
-            modifier = Modifier
-              .size(144.dp)
-              .clip(RoundedCornerShape(24.dp))
-              .background(
-                Brush.radialGradient(
-                  colors = listOf(colors.surfaceVariant, colors.background)
-                )
-              )
-              .border(1.dp, colors.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(24.dp)),
-            contentAlignment = Alignment.Center
-          ) {
-            val userDisplayName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: strings.appName
-            val userAvatarUrl = currentUser?.avatarUrl
-            if (item.type == DecorationType.AVATAR_FRAME) {
-              AvatarView(
-                name = userDisplayName,
-                avatarUrl = userAvatarUrl,
-                size = 96.dp,
-                frameStyleKey = item.styleKey
-              )
-            } else {
-              Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          val userDisplayName = currentUser?.displayName?.takeIf { it.isNotBlank() } ?: strings.appName
+          val userAvatarUrl = currentUser?.avatarUrl
+
+          when (item.type) {
+            DecorationType.AVATAR_FRAME -> {
+              Box(
+                modifier = Modifier
+                  .size(164.dp)
+                  .clip(RoundedCornerShape(24.dp))
+                  .background(
+                    Brush.radialGradient(colors = listOf(Color(0xFF1D2238), Color(0xFF0A0D16)))
+                  )
+                  .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center
+              ) {
                 AvatarView(
                   name = userDisplayName,
                   avatarUrl = userAvatarUrl,
-                  size = 54.dp,
-                  frameStyleKey = equippedFrame
+                  size = 114.dp,
+                  frameStyleKey = item.styleKey
                 )
-                Spacer(modifier = Modifier.height(10.dp))
-                RoleNameplateView(
+              }
+            }
+
+            DecorationType.ROLE_NAMEPLATE -> {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(132.dp)
+                  .clip(RoundedCornerShape(20.dp))
+                  .background(Brush.radialGradient(listOf(Color(0xFF1B1F34), Color(0xFF0A0D16))))
+                  .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(20.dp))
+                  .padding(horizontal = 18.dp),
+                contentAlignment = Alignment.Center
+              ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                  AvatarView(
+                    name = userDisplayName,
+                    avatarUrl = userAvatarUrl,
+                    size = 56.dp,
+                    frameStyleKey = equippedFrame
+                  )
+                  Spacer(modifier = Modifier.height(10.dp))
+                  RoleNameplateView(
+                    styleKey = item.styleKey,
+                    title = if (isArabic) item.nameAr else item.nameEn,
+                    modifier = Modifier.fillMaxWidth(0.88f)
+                  )
+                }
+              }
+            }
+
+            DecorationType.ACHIEVEMENT_WALL, DecorationType.CHAT_BUBBLE -> {
+              Box(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(150.dp)
+                  .clip(RoundedCornerShape(20.dp))
+                  .border(1.2.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.BottomStart
+              ) {
+                AchievementWallView(
                   styleKey = item.styleKey,
-                  title = if (isArabic) item.nameAr else item.nameEn
+                  scrimAlpha = 0.28f,
+                  modifier = Modifier.fillMaxSize()
                 )
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  modifier = Modifier.padding(14.dp)
+                ) {
+                  AvatarView(
+                    name = userDisplayName,
+                    avatarUrl = userAvatarUrl,
+                    size = 58.dp,
+                    frameStyleKey = equippedFrame
+                  )
+                  Spacer(modifier = Modifier.width(10.dp))
+                  Text(
+                    text = userDisplayName,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                  )
+                }
               }
             }
           }
@@ -513,14 +574,14 @@ fun DecorationStoreScreen(
                 ItemRarity.LEGENDARY -> Color(0xFFF59E0B)
                 ItemRarity.EPIC -> Color(0xFFA855F7)
                 ItemRarity.RARE -> Color(0xFF38BDF8)
-                ItemRarity.COMMON -> colors.onSurfaceVariant
+                ItemRarity.COMMON -> Color(0xFF94A3B8)
               },
               modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
               text = if (isArabic) item.nameAr else item.nameEn,
-              color = colors.onSurface,
+              color = Color.White,
               fontWeight = FontWeight.Bold,
               style = MaterialTheme.typography.titleLarge
             )
@@ -530,7 +591,7 @@ fun DecorationStoreScreen(
 
           Text(
             text = if (isArabic) item.descriptionAr else item.descriptionEn,
-            color = colors.onSurfaceVariant,
+            color = Color(0xFF94A3B8),
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 12.dp)
@@ -542,7 +603,7 @@ fun DecorationStoreScreen(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
               .clip(RoundedCornerShape(12.dp))
-              .background(colors.surfaceVariant)
+              .background(Color(0xFF1B1F32))
               .padding(horizontal = 16.dp, vertical = 8.dp)
           ) {
             Icon(
@@ -554,7 +615,7 @@ fun DecorationStoreScreen(
             Spacer(modifier = Modifier.width(6.dp))
             Text(
               text = "${item.price} ${strings.coinsUnit}",
-              color = colors.onSurface,
+              color = Color.White,
               fontWeight = FontWeight.Bold,
               style = MaterialTheme.typography.titleSmall
             )
@@ -574,10 +635,11 @@ fun DecorationStoreScreen(
               OutlinedButton(
                 onClick = {
                   coroutineScope.launch {
-                    val res = if (item.type == DecorationType.AVATAR_FRAME) {
-                      storeRepository.unequipFrame()
-                    } else {
-                      storeRepository.unequipNameplate()
+                    val res = when (item.type) {
+                      DecorationType.AVATAR_FRAME -> storeRepository.unequipFrame()
+                      DecorationType.ROLE_NAMEPLATE -> storeRepository.unequipNameplate()
+                      DecorationType.ACHIEVEMENT_WALL -> storeRepository.unequipWall()
+                      DecorationType.CHAT_BUBBLE -> storeRepository.unequipNameplate()
                     }
                     previewItem = null
                     if (res.isFailure) {
@@ -588,8 +650,8 @@ fun DecorationStoreScreen(
                 enabled = !isBusy,
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
-                border = BorderStroke(1.dp, colors.error.copy(alpha = 0.6f))
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF87171)),
+                border = BorderStroke(1.dp, Color(0xFFF87171).copy(alpha = 0.6f))
               ) {
                 Text(strings.unequip, fontWeight = FontWeight.Bold)
               }
@@ -647,8 +709,8 @@ fun DecorationStoreScreen(
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 48.dp),
                 colors = ButtonDefaults.buttonColors(
-                  containerColor = if (canAfford) colors.primary else colors.surfaceVariant,
-                  contentColor = if (canAfford) colors.onPrimary else colors.onSurfaceVariant
+                  containerColor = if (canAfford) colors.primary else Color(0xFF1F2437),
+                  contentColor = if (canAfford) colors.onPrimary else Color(0xFF94A3B8)
                 )
               ) {
                 Text(
@@ -660,194 +722,6 @@ fun DecorationStoreScreen(
           }
 
           Spacer(modifier = Modifier.height(16.dp))
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun StoreFilterChip(
-  label: String,
-  selected: Boolean,
-  onClick: () -> Unit
-) {
-  val colors = MaterialTheme.colorScheme
-  Box(
-    modifier = Modifier
-      .defaultMinSize(minHeight = 36.dp)
-      .clip(RoundedCornerShape(12.dp))
-      .background(if (selected) colors.primary else colors.surfaceVariant.copy(alpha = 0.6f))
-      .border(
-        1.dp,
-        if (selected) colors.primary else colors.outlineVariant.copy(alpha = 0.5f),
-        RoundedCornerShape(12.dp)
-      )
-      .clickable(onClick = onClick)
-      .padding(horizontal = 14.dp, vertical = 8.dp),
-    contentAlignment = Alignment.Center
-  ) {
-    Text(
-      text = label,
-      color = if (selected) colors.onPrimary else colors.onSurfaceVariant,
-      style = MaterialTheme.typography.labelMedium,
-      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-      maxLines = 1,
-      softWrap = false
-    )
-  }
-}
-
-@Composable
-private fun DecorationItemCard(
-  item: DecorationItem,
-  isOwned: Boolean,
-  isEquipped: Boolean,
-  isArabic: Boolean,
-  onPreviewClick: () -> Unit
-) {
-  val strings = LocalAppStrings.current
-  val colors = MaterialTheme.colorScheme
-  val gemColor = when (item.rarity) {
-    ItemRarity.LEGENDARY -> Color(0xFFF59E0B)
-    ItemRarity.EPIC -> Color(0xFFA855F7)
-    ItemRarity.RARE -> Color(0xFF38BDF8)
-    ItemRarity.COMMON -> colors.onSurfaceVariant
-  }
-
-  Card(
-    modifier = Modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(16.dp),
-    border = BorderStroke(
-      width = 1.dp,
-      color = if (isEquipped) Color(0xFF10B981).copy(alpha = 0.65f) else colors.outlineVariant.copy(alpha = 0.45f)
-    ),
-    colors = CardDefaults.cardColors(containerColor = colors.surface),
-    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-  ) {
-    Column(modifier = Modifier.padding(12.dp)) {
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .height(112.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .background(
-            Brush.verticalGradient(
-              listOf(colors.surfaceVariant, colors.background)
-            )
-          ),
-        contentAlignment = Alignment.Center
-      ) {
-        if (item.type == DecorationType.AVATAR_FRAME) {
-          AvatarView(
-            name = "K",
-            size = 76.dp,
-            frameStyleKey = item.styleKey
-          )
-        } else {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-          ) {
-            AvatarView(name = "K", size = 44.dp)
-            Spacer(modifier = Modifier.height(6.dp))
-            RoleNameplateView(
-              styleKey = item.styleKey,
-              title = if (isArabic) item.nameAr else item.nameEn
-            )
-          }
-        }
-      }
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Default.MonetizationOn,
-          contentDescription = null,
-          tint = Color(0xFFF59E0B),
-          modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-          text = "${item.price} ${strings.coinsUnit}",
-          color = colors.onSurface,
-          fontWeight = FontWeight.Bold,
-          style = MaterialTheme.typography.labelLarge
-        )
-      }
-
-      Spacer(modifier = Modifier.height(4.dp))
-
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-          imageVector = Icons.Default.Diamond,
-          contentDescription = null,
-          tint = gemColor,
-          modifier = Modifier.size(13.dp)
-        )
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(
-          text = if (isArabic) item.nameAr else item.nameEn,
-          color = colors.onSurface,
-          fontWeight = FontWeight.Bold,
-          style = MaterialTheme.typography.bodyMedium,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-      }
-
-      Spacer(modifier = Modifier.height(3.dp))
-
-      Text(
-        text = if (isArabic) item.descriptionAr else item.descriptionEn,
-        color = colors.onSurfaceVariant,
-        style = MaterialTheme.typography.labelSmall,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        minLines = 2
-      )
-
-      Spacer(modifier = Modifier.height(10.dp))
-
-      Button(
-        onClick = onPreviewClick,
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-          containerColor = if (isEquipped) Color(0xFF059669)
-          else if (isOwned) colors.primaryContainer
-          else colors.primary,
-          contentColor = if (isEquipped) Color.White
-          else if (isOwned) colors.onPrimaryContainer
-          else colors.onPrimary
-        ),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        modifier = Modifier
-          .fillMaxWidth()
-          .defaultMinSize(minHeight = 40.dp)
-      ) {
-        if (isEquipped) {
-          Icon(
-            imageVector = Icons.Default.Check,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp)
-          )
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = strings.equipped,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            softWrap = false
-          )
-        } else {
-          Text(
-            text = if (isOwned) strings.equip else strings.preview,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelMedium,
-            maxLines = 1,
-            softWrap = false
-          )
         }
       }
     }

@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.UserProfile
 import com.example.data.repository.StoreRepository
 import com.example.data.repository.UserRepository
+import com.example.ui.components.AchievementWallView
 import com.example.ui.components.AvatarPickerSheet
 import com.example.ui.components.AvatarView
 import com.example.ui.components.KoraTopBar
@@ -114,8 +115,10 @@ fun ProfileScreen(
   val profile by userRepository.observeUserProfile(uid).collectAsState(initial = cachedInitialProfile)
   val storeFrame by storeRepository.equippedFrame.collectAsState()
   val storeNameplate by storeRepository.equippedNameplate.collectAsState()
+  val storeWall by storeRepository.equippedWall.collectAsState()
   val equippedFrame = storeFrame ?: profile?.equippedFrame
   val equippedNameplate = storeNameplate ?: profile?.equippedNameplate
+  val equippedWall = storeWall ?: profile?.equippedWall
   val coins by storeRepository.coinBalance.collectAsState()
 
   var showEditDialog by remember { mutableStateOf(false) }
@@ -206,25 +209,35 @@ fun ProfileScreen(
           modifier = Modifier.fillMaxWidth()
         ) {
           Column(modifier = Modifier.fillMaxWidth()) {
-            // Subtle Discord Profile Header Banner + Overlapping Avatar
+            // Subtle Discord Profile Header Banner (or equipped Achievement Wall) + Overlapping Avatar
             Box(modifier = Modifier.fillMaxWidth()) {
-              Box(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .height(68.dp)
-                  .background(
-                    Brush.horizontalGradient(
-                      listOf(
-                        colors.surfaceContainerLowest,
-                        colors.primary.copy(alpha = 0.24f)
+              if (!equippedWall.isNullOrBlank()) {
+                AchievementWallView(
+                  styleKey = equippedWall,
+                  scrimAlpha = 0.22f,
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .height(92.dp)
+                )
+              } else {
+                Box(
+                  modifier = Modifier
+                    .fillMaxWidth()
+                    .height(74.dp)
+                    .background(
+                      Brush.horizontalGradient(
+                        listOf(
+                          colors.surfaceContainerLowest,
+                          colors.primary.copy(alpha = 0.24f)
+                        )
                       )
                     )
-                  )
-              )
+                )
+              }
 
               Box(
                 modifier = Modifier
-                  .padding(top = 24.dp)
+                  .padding(top = if (!equippedWall.isNullOrBlank()) 42.dp else 26.dp)
                   .align(Alignment.BottomCenter)
                   .clickable { showAvatarPickerSheet = true }
                   .testTag("profile_avatar_clickable_container"),

@@ -26,9 +26,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
 import java.util.UUID
 
 data class AiConversationState(
@@ -412,11 +414,15 @@ class ChatRepository(
     senderName: String,
     replyTo: Message? = null,
     isSenderVerified: Boolean = false,
-    senderVerifiedTier: String = "BLUE"
+    senderVerifiedTier: String = "BLUE",
+    isSpoiler: Boolean = false,
+    forwardedFromName: String? = null
   ): Result<Unit> {
     val uid = getEffectiveUserId()
     val messageId = UUID.randomUUID().toString()
     val validTier = if (senderVerifiedTier in VALID_TIERS) senderVerifiedTier else "BLUE"
+    val cleanForwardedFrom = forwardedFromName?.trim()?.take(100)?.takeIf { it.isNotBlank() }
+    val previewSummary = (if (isSpoiler) "🙈 $content" else content).take(150)
 
     if (isAiChatbotConversation(conversationId)) {
       val now = Timestamp.now()
@@ -428,6 +434,8 @@ class ChatRepository(
         isSenderVerified = isSenderVerified,
         senderVerifiedTier = validTier,
         content = content,
+        isSpoiler = isSpoiler,
+        forwardedFromName = cleanForwardedFrom,
         replyToId = replyTo?.id,
         replyToSender = replyTo?.senderName,
         replyToText = replyTo?.content?.take(100),
@@ -444,7 +452,7 @@ class ChatRepository(
       localConversations.value = localConversations.value.map { convo ->
         if (convo.id == conversationId) {
           convo.copy(
-            lastMessageText = content.take(150),
+            lastMessageText = previewSummary,
             lastMessageSenderId = uid,
             lastMessageTimestamp = now
           )
@@ -474,6 +482,11 @@ class ChatRepository(
         put("isSenderVerified", isSenderVerified)
         put("senderVerifiedTier", validTier)
         put("content", content.take(4000))
+        put("mediaType", "text")
+        put("isSpoiler", isSpoiler)
+        if (cleanForwardedFrom != null) {
+          put("forwardedFromName", cleanForwardedFrom)
+        }
         if (replyTo != null) {
           put("replyToId", replyTo.id)
           put("replyToSender", replyTo.senderName.take(100))
@@ -493,7 +506,7 @@ class ChatRepository(
         batch.update(
           convoRef,
           mapOf(
-            "lastMessageText" to content.take(150),
+            "lastMessageText" to previewSummary,
             "lastMessageSenderId" to uid,
             "lastMessageTimestamp" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -516,6 +529,8 @@ class ChatRepository(
       isSenderVerified = isSenderVerified,
       senderVerifiedTier = validTier,
       content = content,
+      isSpoiler = isSpoiler,
+      forwardedFromName = cleanForwardedFrom,
       replyToId = replyTo?.id,
       replyToSender = replyTo?.senderName,
       replyToText = replyTo?.content?.take(100),
@@ -530,7 +545,7 @@ class ChatRepository(
     localConversations.value = localConversations.value.map { convo ->
       if (convo.id == conversationId) {
         convo.copy(
-          lastMessageText = content.take(150),
+          lastMessageText = previewSummary,
           lastMessageSenderId = uid,
           lastMessageTimestamp = now
         )
@@ -546,17 +561,22 @@ class ChatRepository(
     senderName: String,
     replyTo: Message? = null,
     isSenderVerified: Boolean = false,
-    senderVerifiedTier: String = "BLUE"
+    senderVerifiedTier: String = "BLUE",
+    isSpoiler: Boolean = false,
+    forwardedFromName: String? = null
   ): Result<Unit> {
     val uid = getEffectiveUserId()
     val messageId = UUID.randomUUID().toString()
     val validTier = if (senderVerifiedTier in VALID_TIERS) senderVerifiedTier else "BLUE"
-    val previewLabel = when (media.mediaType) {
+    val cleanForwardedFrom = forwardedFromName?.trim()?.take(100)?.takeIf { it.isNotBlank() }
+    val baseLabel = when (media.mediaType) {
       "image" -> "📷 ${caption.ifBlank { media.fileName }}"
       "video" -> "🎬 ${caption.ifBlank { media.fileName }}"
+      "audio" -> "🎤 ${caption.ifBlank { ChatMediaRepository.formatDuration(media.durationMs) }}"
       else -> "📎 ${media.fileName}"
     }
-    val messageContent = caption.trim().ifBlank { previewLabel }
+    val previewLabel = if (isSpoiler) "🙈 $baseLabel" else baseLabel
+    val messageContent = caption.trim().ifBlank { baseLabel }
 
     if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
       val msgRef = db.collection("conversations")
@@ -579,6 +599,10 @@ class ChatRepository(
         put("mediaSizeBytes", media.sizeBytes)
         put("mediaChunkCount", media.chunkCount)
         put("mediaDurationMs", media.durationMs)
+        put("isSpoiler", isSpoiler)
+        if (cleanForwardedFrom != null) {
+          put("forwardedFromName", cleanForwardedFrom)
+        }
         if (replyTo != null) {
           put("replyToId", replyTo.id)
           put("replyToSender", replyTo.senderName.take(100))
@@ -629,6 +653,8 @@ class ChatRepository(
       mediaChunkCount = media.chunkCount,
       mediaDurationMs = media.durationMs,
       localMediaUri = Uri.fromFile(media.localFile).toString(),
+      isSpoiler = isSpoiler,
+      forwardedFromName = cleanForwardedFrom,
       replyToId = replyTo?.id,
       replyToSender = replyTo?.senderName,
       replyToText = replyTo?.content?.take(100),
@@ -650,6 +676,282 @@ class ChatRepository(
       } else convo
     }
     return Result.success(Unit)
+  }
+
+  suspend fun sendPollMessage(
+    conversationId: String,
+    question: String,
+    options: List<String>,
+    senderName: String,
+    isSenderVerified: Boolean = false,
+    senderVerifiedTier: String = "BLUE",
+    forwardedFromName: String? = null
+  ): Result<Unit> {
+    val cleanQuestion = question.trim().take(240)
+    val cleanOptions = options.map { it.trim().take(120) }.filter { it.isNotBlank() }.distinct().take(6)
+    if (cleanQuestion.isBlank() || cleanOptions.size < 2) {
+      return Result.failure(IllegalArgumentException("Poll requires a question and at least 2 options"))
+    }
+    val uid = getEffectiveUserId()
+    val messageId = UUID.randomUUID().toString()
+    val validTier = if (senderVerifiedTier in VALID_TIERS) senderVerifiedTier else "BLUE"
+    val cleanForwardedFrom = forwardedFromName?.trim()?.take(100)?.takeIf { it.isNotBlank() }
+    val previewLabel = "📊 $cleanQuestion".take(150)
+
+    if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val msgRef = db.collection("conversations")
+        .document(conversationId)
+        .collection("messages")
+        .document(messageId)
+      val convoRef = db.collection("conversations").document(conversationId)
+
+      val payload = buildMap<String, Any> {
+        put("conversationId", conversationId)
+        put("senderId", uid)
+        put("senderName", senderName.ifBlank { "Member" }.take(100))
+        put("isSenderVerified", isSenderVerified)
+        put("senderVerifiedTier", validTier)
+        put("content", cleanQuestion)
+        put("mediaType", "poll")
+        put("pollQuestion", cleanQuestion)
+        put("pollOptions", cleanOptions)
+        put("pollVotes", emptyMap<String, List<String>>())
+        if (cleanForwardedFrom != null) {
+          put("forwardedFromName", cleanForwardedFrom)
+        }
+        put("status", "sent")
+        put("readBy", listOf(uid))
+        put("isEdited", false)
+        put("isDeleted", false)
+        put("createdAt", FieldValue.serverTimestamp())
+        put("updatedAt", FieldValue.serverTimestamp())
+      }
+
+      return try {
+        val batch = db.batch()
+        batch.set(msgRef, payload)
+        batch.update(
+          convoRef,
+          mapOf(
+            "lastMessageText" to previewLabel,
+            "lastMessageSenderId" to uid,
+            "lastMessageTimestamp" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+          )
+        )
+        batch.commit().await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.CREATE, msgRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    val now = Timestamp.now()
+    val newMsg = Message(
+      id = messageId,
+      conversationId = conversationId,
+      senderId = uid,
+      senderName = senderName,
+      isSenderVerified = isSenderVerified,
+      senderVerifiedTier = validTier,
+      content = cleanQuestion,
+      mediaType = "poll",
+      pollQuestion = cleanQuestion,
+      pollOptions = cleanOptions,
+      pollVotes = emptyMap(),
+      forwardedFromName = cleanForwardedFrom,
+      status = "read",
+      readBy = listOf(uid),
+      isEdited = false,
+      isDeleted = false,
+      createdAt = now
+    )
+    val msgFlow = localMessages.getOrPut(conversationId) { MutableStateFlow(emptyList()) }
+    msgFlow.value = msgFlow.value + newMsg
+    localConversations.value = localConversations.value.map { convo ->
+      if (convo.id == conversationId) {
+        convo.copy(
+          lastMessageText = previewLabel,
+          lastMessageSenderId = uid,
+          lastMessageTimestamp = now
+        )
+      } else convo
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun votePollOption(
+    conversationId: String,
+    messageId: String,
+    optionIndex: Int
+  ): Result<Unit> {
+    if (optionIndex < 0 || optionIndex >= 6) return Result.success(Unit)
+    val uid = getEffectiveUserId()
+    val optionKey = optionIndex.toString()
+
+    if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val msgRef = db.collection("conversations")
+        .document(conversationId)
+        .collection("messages")
+        .document(messageId)
+      return try {
+        db.runTransaction { transaction ->
+          val snap = transaction.get(msgRef)
+          val msg = snap.toObject(Message::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            ?: throw IllegalStateException("Poll message not found")
+          if (msg.isDeleted || !msg.isPollMessage() || optionIndex >= msg.pollOptions.size) {
+            return@runTransaction Unit
+          }
+          val updated = msg.pollVotes.mapValues { it.value.toMutableList() }.toMutableMap()
+          val alreadyVotedThisOption = updated[optionKey]?.contains(uid) == true
+          // Single-choice poll: remove voter from all options first, then toggle target option
+          updated.values.forEach { it.remove(uid) }
+          if (!alreadyVotedThisOption) {
+            updated.getOrPut(optionKey) { mutableListOf() }.add(uid)
+          }
+          val cleanMap = updated
+            .filterValues { it.isNotEmpty() }
+            .mapValues { it.value.distinct().take(200) }
+          transaction.update(
+            msgRef,
+            mapOf(
+              "pollVotes" to cleanMap,
+              "updatedAt" to FieldValue.serverTimestamp()
+            )
+          )
+          Unit
+        }.await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.UPDATE, msgRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    val msgFlow = localMessages[conversationId]
+    if (msgFlow != null) {
+      msgFlow.value = msgFlow.value.map { msg ->
+        if (msg.id == messageId && !msg.isDeleted && msg.isPollMessage() && optionIndex < msg.pollOptions.size) {
+          val updated = msg.pollVotes.mapValues { it.value.toMutableList() }.toMutableMap()
+          val alreadyVoted = updated[optionKey]?.contains(uid) == true
+          updated.values.forEach { it.remove(uid) }
+          if (!alreadyVoted) {
+            updated.getOrPut(optionKey) { mutableListOf() }.add(uid)
+          }
+          msg.copy(pollVotes = updated.filterValues { it.isNotEmpty() }.mapValues { it.value.distinct() })
+        } else msg
+      }
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun pinMessageInConversation(
+    conversationId: String,
+    message: Message?
+  ): Result<Unit> {
+    if (auth.currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val convoRef = db.collection("conversations").document(conversationId)
+      val payload = hashMapOf<String, Any?>(
+        "pinnedMessageId" to message?.id?.take(128),
+        "pinnedMessageText" to message?.content?.take(500),
+        "pinnedMessageSender" to message?.senderName?.take(100),
+        "updatedAt" to FieldValue.serverTimestamp()
+      )
+      return try {
+        convoRef.update(payload).await()
+        Result.success(Unit)
+      } catch (e: Exception) {
+        handleFirestoreError(e, OperationType.UPDATE, convoRef.path, auth)
+        Result.failure(e)
+      }
+    }
+
+    localConversations.value = localConversations.value.map { convo ->
+      if (convo.id == conversationId) {
+        convo.copy(
+          pinnedMessageId = message?.id,
+          pinnedMessageText = message?.content?.take(500),
+          pinnedMessageSender = message?.senderName?.take(100)
+        )
+      } else convo
+    }
+    return Result.success(Unit)
+  }
+
+  suspend fun forwardMessage(
+    targetConversationId: String,
+    sourceMessage: Message,
+    senderName: String,
+    isSenderVerified: Boolean = false,
+    senderVerifiedTier: String = "BLUE",
+    chatMediaRepository: ChatMediaRepository? = null
+  ): Result<Unit> {
+    if (sourceMessage.isDeleted) {
+      return Result.failure(IllegalStateException("Cannot forward a deleted message"))
+    }
+    val forwardedOrigin = sourceMessage.forwardedFromName?.takeIf { it.isNotBlank() }
+      ?: sourceMessage.senderName.ifBlank { "Member" }
+
+    if (sourceMessage.isPollMessage()) {
+      return sendPollMessage(
+        conversationId = targetConversationId,
+        question = sourceMessage.pollQuestion ?: sourceMessage.content,
+        options = sourceMessage.pollOptions,
+        senderName = senderName,
+        isSenderVerified = isSenderVerified,
+        senderVerifiedTier = senderVerifiedTier,
+        forwardedFromName = forwardedOrigin
+      )
+    }
+
+    if (sourceMessage.hasMediaAttachment()) {
+      val repo = chatMediaRepository
+        ?: return Result.failure(IllegalStateException("Media repository required to forward attachments"))
+      val fileRes = repo.resolveMediaFile(
+        conversationId = sourceMessage.conversationId,
+        message = sourceMessage
+      )
+      if (fileRes.isFailure) {
+        return Result.failure(fileRes.exceptionOrNull() ?: IllegalStateException("Could not load media to forward"))
+      }
+      val resolvedFile = fileRes.getOrThrow()
+      val uploadRes = repo.prepareAndUploadMedia(
+        conversationId = targetConversationId,
+        sourceUri = Uri.fromFile(resolvedFile),
+        mediaType = sourceMessage.mediaType,
+        isLocalOnlyChat = isAiChatbotConversation(targetConversationId)
+      )
+      if (uploadRes.isFailure) {
+        return Result.failure(uploadRes.exceptionOrNull() ?: IllegalStateException("Could not re-upload forwarded media"))
+      }
+      val prepared = uploadRes.getOrThrow()
+      val isSynthetic = sourceMessage.content.startsWith("📷 ") ||
+        sourceMessage.content.startsWith("🎬 ") ||
+        sourceMessage.content.startsWith("🎤 ") ||
+        sourceMessage.content.startsWith("📎 ")
+      val caption = if (isSynthetic) "" else sourceMessage.content
+      return sendMediaMessage(
+        conversationId = targetConversationId,
+        media = prepared,
+        caption = caption,
+        senderName = senderName,
+        isSenderVerified = isSenderVerified,
+        senderVerifiedTier = senderVerifiedTier,
+        isSpoiler = sourceMessage.isSpoiler,
+        forwardedFromName = forwardedOrigin
+      )
+    }
+
+    return sendMessage(
+      conversationId = targetConversationId,
+      content = sourceMessage.content,
+      senderName = senderName,
+      isSenderVerified = isSenderVerified,
+      senderVerifiedTier = senderVerifiedTier,
+      isSpoiler = sourceMessage.isSpoiler,
+      forwardedFromName = forwardedOrigin
+    )
   }
 
   fun retryLastAiPrompt() {
@@ -737,10 +1039,62 @@ class ChatRepository(
   }
 
   fun observeTyping(conversationId: String): Flow<List<String>> {
-    return localTypingUsers.getOrPut(conversationId) { MutableStateFlow(emptyList()) }.asStateFlow()
+    val localFlow = localTypingUsers.getOrPut(conversationId) { MutableStateFlow(emptyList()) }.asStateFlow()
+    val currentUser = auth.currentUser
+    if (currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val uid = currentUser.uid
+      val remoteFlow = db.collection("conversations")
+        .document(conversationId)
+        .collection("typing")
+        .snapshots()
+        .map { snapshot ->
+          val nowMs = System.currentTimeMillis()
+          snapshot.documents.mapNotNull { doc ->
+            if (doc.id == uid) return@mapNotNull null
+            val active = doc.getBoolean("isTyping") == true
+            if (!active) return@mapNotNull null
+            val ts = doc.getTimestamp("updatedAt", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            val ageMs = ts?.toDate()?.time?.let { nowMs - it } ?: 0L
+            if (ageMs > 15_000L) return@mapNotNull null
+            doc.getString("displayName")?.takeIf { it.isNotBlank() }
+          }.distinct()
+        }
+        .catch { e ->
+          handleFirestoreError(e, OperationType.LIST, "conversations/$conversationId/typing", auth)
+          emit(emptyList())
+        }
+      return combine(remoteFlow, localFlow) { remote, local ->
+        (remote + local).distinct()
+      }
+    }
+    return localFlow
   }
 
   fun setTyping(conversationId: String, userName: String, isTyping: Boolean) {
+    val currentUser = auth.currentUser
+    if (currentUser != null && !isAiChatbotConversation(conversationId)) {
+      val uid = currentUser.uid
+      val cleanName = userName.trim().ifBlank { "Member" }.take(100)
+      val typingRef = db.collection("conversations")
+        .document(conversationId)
+        .collection("typing")
+        .document(uid)
+      repositoryScope.launch(Dispatchers.IO) {
+        runCatching {
+          typingRef.set(
+            mapOf(
+              "displayName" to cleanName,
+              "isTyping" to isTyping,
+              "updatedAt" to FieldValue.serverTimestamp()
+            )
+          ).await()
+        }.onFailure { err ->
+          Log.w(TAG, "Typing indicator update failed: ${err.message}")
+        }
+      }
+      return
+    }
+
     val typingFlow = localTypingUsers.getOrPut(conversationId) { MutableStateFlow(emptyList()) }
     val current = typingFlow.value
     if (isTyping) {

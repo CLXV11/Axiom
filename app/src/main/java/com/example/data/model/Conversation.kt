@@ -23,6 +23,9 @@ data class Conversation(
   val pinnedBy: List<String> = emptyList(),
   val archivedBy: List<String> = emptyList(),
   val mutedBy: List<String> = emptyList(),
+  val pinnedMessageId: String? = null,
+  val pinnedMessageText: String? = null,
+  val pinnedMessageSender: String? = null,
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
@@ -38,6 +41,9 @@ data class Conversation(
     "pinnedBy" to pinnedBy,
     "archivedBy" to archivedBy,
     "mutedBy" to mutedBy,
+    "pinnedMessageId" to pinnedMessageId,
+    "pinnedMessageText" to pinnedMessageText,
+    "pinnedMessageSender" to pinnedMessageSender,
     "createdAt" to createdAt,
     "updatedAt" to updatedAt
   ).filterValues { it != null }

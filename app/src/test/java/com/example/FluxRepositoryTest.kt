@@ -139,4 +139,22 @@ class FluxRepositoryTest {
     val updatedTarget = fluxRepository.observeVideos().first().first { it.id == target.id }
     assertEquals(initialComments + 1, updatedTarget.commentsCount)
   }
+
+  @Test
+  fun testPublishFlux_extractsArabicAndUnicodeHashtags() = runTest {
+    val arabicVideo = fluxRepository.publishFlux(
+      authorId = "ar_creator_1",
+      authorName = "سامي",
+      authorHandle = "@sami_flux",
+      isAuthorVerified = true,
+      authorVerifiedTier = "BLUE",
+      caption = "تجربة رائعة في #فلوكس #تطبيق_كورا #Kora2026",
+      videoUri = "content://media/external/video/media/777",
+      audioTitle = "Original Sound"
+    )
+
+    assertTrue("Should extract #فلوكس", arabicVideo.tags.contains("#فلوكس"))
+    assertTrue("Should extract #تطبيق_كورا", arabicVideo.tags.contains("#تطبيق_كورا"))
+    assertTrue("Should extract #kora2026", arabicVideo.tags.contains("#kora2026"))
+  }
 }

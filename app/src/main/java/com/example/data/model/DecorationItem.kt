@@ -3,6 +3,7 @@ package com.example.data.model
 enum class DecorationType {
   AVATAR_FRAME,
   ROLE_NAMEPLATE,
+  ACHIEVEMENT_WALL,
   CHAT_BUBBLE
 }
 
@@ -22,5 +23,7 @@ data class DecorationItem(
   val price: Int,
   val type: DecorationType,
   val rarity: ItemRarity,
-  val styleKey: String
+  val styleKey: String,
+  val badgeTagEn: String? = null,
+  val badgeTagAr: String? = null
 )

@@ -38,7 +38,7 @@ fun AvatarView(
   isQuiet: Boolean = false
 ) {
   val initial = name.trim().take(1).uppercase().ifEmpty { "K" }
-  val innerCircleSize = if (frameStyleKey != null) size * 0.72f else size
+  val innerCircleSize = if (frameStyleKey != null) size * 0.64f else size
 
   Box(
     modifier = modifier.size(size),

@@ -209,4 +209,26 @@ class MediaAndCallTest {
     assertTrue(String.format(ArabicStrings.newMessageFromTitle, "سارة").contains("لديك رسالة جديدة"))
     assertTrue(EnglishStrings.newMessageNotificationTitle.contains("new message"))
   }
+
+  @Test
+  fun testVoiceNoteAudioAttachmentAndLocalizedUpgrades() {
+    val audioMsg = Message(
+      id = "aud_1",
+      mediaType = "audio",
+      mediaId = "m_aud_1",
+      mediaDurationMs = 14_000L
+    )
+    assertTrue(audioMsg.hasMediaAttachment())
+    assertFalse(audioMsg.isPollMessage())
+
+    assertTrue(ArabicStrings.inspectProfileAction.isNotBlank())
+    assertTrue(ArabicStrings.voiceNoteLabel.isNotBlank())
+    assertTrue(ArabicStrings.createPollAction.isNotBlank())
+    assertTrue(ArabicStrings.pinMessageAction.isNotBlank())
+    assertTrue(ArabicStrings.forwardAction.isNotBlank())
+    assertTrue(ArabicStrings.spoilerHiddenTitle.isNotBlank())
+    assertTrue(EnglishStrings.inspectProfileAction.isNotBlank())
+    assertTrue(EnglishStrings.voiceNoteLabel.isNotBlank())
+    assertTrue(EnglishStrings.createPollAction.isNotBlank())
+  }
 }

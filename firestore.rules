@@ -35,6 +35,16 @@ service cloud.firestore {
       return reactions is map && reactions.size() <= 40;
     }
 
+    function isValidPollOptions(opts) {
+      return opts is list &&
+             opts.size() <= 6 &&
+             (opts.size() == 0 || (opts[0] is string && opts[0].size() >= 1 && opts[0].size() <= 120));
+    }
+
+    function isValidPollVotesMap(votes) {
+      return votes is map && votes.size() <= 6;
+    }
+
     function isConvoParticipant(conversationId) {
       return isSignedIn() &&
              exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
@@ -54,6 +64,7 @@ service cloud.firestore {
              (!('verifiedTier' in data) || (data.verifiedTier is string && isValidTier(data.verifiedTier))) &&
              (!('equippedFrame' in data) || data.equippedFrame == null || (data.equippedFrame is string && data.equippedFrame.size() <= 64)) &&
              (!('equippedNameplate' in data) || data.equippedNameplate == null || (data.equippedNameplate is string && data.equippedNameplate.size() <= 64)) &&
+             (!('equippedWall' in data) || data.equippedWall == null || (data.equippedWall is string && data.equippedWall.size() <= 64)) &&
              (!('quietMode' in data) || data.quietMode is bool) &&
              (!('readReceiptsEnabled' in data) || data.readReceiptsEnabled is bool) &&
              (!('lastSeen' in data) || data.lastSeen == null || (data.lastSeen is timestamp && data.lastSeen <= request.time)) &&
@@ -78,6 +89,9 @@ service cloud.firestore {
              (!('pinnedBy' in data) || isValidStringList(data.pinnedBy, 50)) &&
              (!('archivedBy' in data) || isValidStringList(data.archivedBy, 50)) &&
              (!('mutedBy' in data) || isValidStringList(data.mutedBy, 50)) &&
+             (!('pinnedMessageId' in data) || data.pinnedMessageId == null || (data.pinnedMessageId is string && data.pinnedMessageId.size() <= 128)) &&
+             (!('pinnedMessageText' in data) || data.pinnedMessageText == null || (data.pinnedMessageText is string && data.pinnedMessageText.size() <= 500)) &&
+             (!('pinnedMessageSender' in data) || data.pinnedMessageSender == null || (data.pinnedMessageSender is string && data.pinnedMessageSender.size() <= 100)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              (!('updatedAt' in data) || data.updatedAt == null || (data.updatedAt is timestamp && data.updatedAt <= request.time)) &&
              !('id' in data);
@@ -90,13 +104,18 @@ service cloud.firestore {
              (!('isSenderVerified' in data) || data.isSenderVerified is bool) &&
              (!('senderVerifiedTier' in data) || (data.senderVerifiedTier is string && isValidTier(data.senderVerifiedTier))) &&
              data.content is string && data.content.size() >= 1 && data.content.size() <= 4000 &&
-             (!('mediaType' in data) || data.mediaType in ['text', 'image', 'video', 'file']) &&
+             (!('mediaType' in data) || data.mediaType in ['text', 'image', 'video', 'file', 'audio', 'poll']) &&
              (!('mediaId' in data) || data.mediaId == null || (data.mediaId is string && isValidId(data.mediaId))) &&
              (!('mediaFileName' in data) || data.mediaFileName == null || (data.mediaFileName is string && data.mediaFileName.size() <= 255)) &&
              (!('mediaMimeType' in data) || data.mediaMimeType == null || (data.mediaMimeType is string && data.mediaMimeType.size() <= 128)) &&
              (!('mediaSizeBytes' in data) || (data.mediaSizeBytes is int && data.mediaSizeBytes >= 0 && data.mediaSizeBytes <= 26214400)) &&
              (!('mediaChunkCount' in data) || (data.mediaChunkCount is int && data.mediaChunkCount >= 0 && data.mediaChunkCount <= 100)) &&
              (!('mediaDurationMs' in data) || (data.mediaDurationMs is int && data.mediaDurationMs >= 0)) &&
+             (!('pollQuestion' in data) || data.pollQuestion == null || (data.pollQuestion is string && data.pollQuestion.size() <= 300)) &&
+             (!('pollOptions' in data) || isValidPollOptions(data.pollOptions)) &&
+             (!('pollVotes' in data) || isValidPollVotesMap(data.pollVotes)) &&
+             (!('isSpoiler' in data) || data.isSpoiler is bool) &&
+             (!('forwardedFromName' in data) || data.forwardedFromName == null || (data.forwardedFromName is string && data.forwardedFromName.size() <= 100)) &&
              (!('replyToId' in data) || data.replyToId == null || (data.replyToId is string && data.replyToId.size() <= 128)) &&
              (!('replyToSender' in data) || data.replyToSender == null || (data.replyToSender is string && data.replyToSender.size() <= 100)) &&
              (!('replyToText' in data) || data.replyToText == null || (data.replyToText is string && data.replyToText.size() <= 500)) &&
@@ -199,7 +218,7 @@ service cloud.firestore {
                        incoming().keys().hasOnly([
                          'displayName', 'handle', 'bio', 'profession', 'isProfessionalVerified',
                          'professionalOrg', 'openToNetworking', 'avatarUrl', 'isVerified',
-                         'verifiedTier', 'equippedFrame', 'equippedNameplate', 'quietMode',
+                         'verifiedTier', 'equippedFrame', 'equippedNameplate', 'equippedWall', 'quietMode',
                          'readReceiptsEnabled', 'lastSeen', 'createdAt', 'updatedAt'
                        ]);
 
@@ -215,7 +234,7 @@ service cloud.firestore {
                          incoming().diff(existing()).affectedKeys().hasOnly([
                            'displayName', 'handle', 'bio', 'profession', 'professionalOrg',
                            'openToNetworking', 'avatarUrl', 'isVerified', 'verifiedTier',
-                           'equippedFrame', 'equippedNameplate', 'quietMode',
+                           'equippedFrame', 'equippedNameplate', 'equippedWall', 'quietMode',
                            'readReceiptsEnabled', 'lastSeen', 'updatedAt'
                          ])
                        );
@@ -226,12 +245,20 @@ service cloud.firestore {
       match /wallet/{walletId} {
         function framePriceMap() {
           return {
+            'haunted_spirits': 100,
             'cat_bell': 200,
             'violet_night': 200,
+            'violet_wreath': 100,
+            'sakura_tide': 50,
+            'sunlit_pattern': 350,
+            'crimson_silver': 500,
             'skull_eye': 200,
             'octopus_crown': 200,
+            'violet_butterfly': 350,
+            'steampunk_engine': 400,
+            'feather_totem': 250,
+            'sunlit_garden': 250,
             'future_mech': 200,
-            'sakura_tide': 50,
             'celestial_wings': 500,
             'imperial_gold': 400,
             'dragon_flame': 450,
@@ -241,12 +268,30 @@ service cloud.firestore {
 
         function nameplatePriceMap() {
           return {
+            'np_peachy_bubble': 200,
+            'np_pear_bubbles': 200,
+            'np_midnight_rose': 100,
+            'np_midnight_haunt': 100,
             'np_aurora': 100,
             'np_prismatic': 100,
             'np_golden': 100,
+            'np_cracked_stone': 300,
+            'np_deep_space': 300,
+            'np_raven_engraving': 300,
             'np_midnight': 100,
             'np_moonlit': 300,
             'np_bone_noir': 350
+          };
+        }
+
+        function wallPriceMap() {
+          return {
+            'wall_moonlight_holo': 100,
+            'wall_digital_matrix': 200,
+            'wall_crimson_forest': 200,
+            'wall_dusk_castle': 200,
+            'wall_neon_nexus': 200,
+            'wall_dragon_throne': 100
           };
         }
 
@@ -259,6 +304,7 @@ service cloud.firestore {
                  (!('lastDailyClaimAt' in data) || data.lastDailyClaimAt == null || (data.lastDailyClaimAt is timestamp && data.lastDailyClaimAt <= request.time)) &&
                  (!('equippedFrame' in data) || data.equippedFrame == null || (data.equippedFrame is string && data.equippedFrame.size() <= 64)) &&
                  (!('equippedNameplate' in data) || data.equippedNameplate == null || (data.equippedNameplate is string && data.equippedNameplate.size() <= 64)) &&
+                 (!('equippedWall' in data) || data.equippedWall == null || (data.equippedWall is string && data.equippedWall.size() <= 64)) &&
                  data.createdAt is timestamp && data.createdAt <= request.time &&
                  data.updatedAt is timestamp && data.updatedAt <= request.time &&
                  !('id' in data);
@@ -274,7 +320,7 @@ service cloud.firestore {
                          incoming().keys().hasAll(['coinBalance', 'ownedItemIds', 'claimedMilestones', 'createdAt', 'updatedAt']) &&
                          incoming().keys().hasOnly([
                            'coinBalance', 'ownedItemIds', 'claimedMilestones',
-                           'lastDailyClaimAt', 'equippedFrame', 'equippedNameplate',
+                           'lastDailyClaimAt', 'equippedFrame', 'equippedNameplate', 'equippedWall',
                            'createdAt', 'updatedAt'
                          ]) &&
                          incoming().coinBalance == 500 &&
@@ -282,7 +328,8 @@ service cloud.firestore {
                          incoming().claimedMilestones.size() == 0 &&
                          (!('lastDailyClaimAt' in incoming()) || incoming().lastDailyClaimAt == null) &&
                          (!('equippedFrame' in incoming()) || incoming().equippedFrame == null) &&
-                         (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null);
+                         (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null) &&
+                         (!('equippedWall' in incoming()) || incoming().equippedWall == null);
 
         allow update: if isSignedIn() &&
                          request.auth.uid == userId &&
@@ -333,11 +380,23 @@ service cloud.firestore {
                              incoming().ownedItemIds.hasAll(existing().ownedItemIds) &&
                              incoming().coinBalance == existing().coinBalance - nameplatePriceMap()[incoming().equippedNameplate]
                            ) ||
+                           // 3c. Buy Achievement Wall (exact price deducted & auto-equipped)
+                           (
+                             incoming().diff(existing()).affectedKeys().hasOnly(['coinBalance', 'ownedItemIds', 'equippedWall', 'updatedAt']) &&
+                             incoming().equippedWall is string &&
+                             incoming().equippedWall in wallPriceMap() &&
+                             !(incoming().equippedWall in existing().ownedItemIds) &&
+                             incoming().equippedWall in incoming().ownedItemIds &&
+                             incoming().ownedItemIds.size() == existing().ownedItemIds.size() + 1 &&
+                             incoming().ownedItemIds.hasAll(existing().ownedItemIds) &&
+                             incoming().coinBalance == existing().coinBalance - wallPriceMap()[incoming().equippedWall]
+                           ) ||
                            // 4. Equip / unequip owned decorations only
                            (
-                             incoming().diff(existing()).affectedKeys().hasOnly(['equippedFrame', 'equippedNameplate', 'updatedAt']) &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['equippedFrame', 'equippedNameplate', 'equippedWall', 'updatedAt']) &&
                              (!('equippedFrame' in incoming()) || incoming().equippedFrame == null || incoming().equippedFrame in existing().ownedItemIds) &&
-                             (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null || incoming().equippedNameplate in existing().ownedItemIds)
+                             (!('equippedNameplate' in incoming()) || incoming().equippedNameplate == null || incoming().equippedNameplate in existing().ownedItemIds) &&
+                             (!('equippedWall' in incoming()) || incoming().equippedWall == null || incoming().equippedWall in existing().ownedItemIds)
                            )
                          );
       }
@@ -385,7 +444,9 @@ service cloud.firestore {
                        incoming().keys().hasOnly([
                          'type', 'title', 'isVerified', 'verifiedTier', 'participantIds',
                          'lastMessageText', 'lastMessageSenderId', 'lastMessageTimestamp',
-                         'pinnedBy', 'archivedBy', 'mutedBy', 'createdAt', 'updatedAt'
+                         'pinnedBy', 'archivedBy', 'mutedBy',
+                         'pinnedMessageId', 'pinnedMessageText', 'pinnedMessageSender',
+                         'createdAt', 'updatedAt'
                        ]);
 
       allow update: if isSignedIn() &&
@@ -403,11 +464,39 @@ service cloud.firestore {
                            'pinnedBy', 'archivedBy', 'mutedBy', 'updatedAt'
                          ]) ||
                          incoming().diff(existing()).affectedKeys().hasOnly([
+                           'pinnedMessageId', 'pinnedMessageText', 'pinnedMessageSender', 'updatedAt'
+                         ]) ||
+                         incoming().diff(existing()).affectedKeys().hasOnly([
                            'title', 'updatedAt'
                          ])
                        );
 
       allow delete: if false;
+
+      // Live cross-user typing indicators inside a conversation (Parent-Gated)
+      match /typing/{userId} {
+        allow get, list: if isValidId(conversationId) && isConvoParticipant(conversationId);
+
+        allow create, update: if isSignedIn() &&
+                                 isValidId(conversationId) &&
+                                 isValidId(userId) &&
+                                 request.auth.uid == userId &&
+                                 isConvoParticipant(conversationId) &&
+                                 incoming().displayName is string &&
+                                 incoming().displayName.size() >= 1 &&
+                                 incoming().displayName.size() <= 100 &&
+                                 incoming().isTyping is bool &&
+                                 incoming().updatedAt is timestamp &&
+                                 incoming().updatedAt <= request.time &&
+                                 incoming().keys().hasAll(['displayName', 'isTyping', 'updatedAt']) &&
+                                 incoming().keys().hasOnly(['displayName', 'isTyping', 'updatedAt']);
+
+        allow delete: if isSignedIn() &&
+                         isValidId(conversationId) &&
+                         isValidId(userId) &&
+                         request.auth.uid == userId &&
+                         isConvoParticipant(conversationId);
+      }
 
       // Messages inside a conversation (Parent-Gated)
       match /messages/{messageId} {
@@ -427,6 +516,7 @@ service cloud.firestore {
                            'conversationId', 'senderId', 'senderName', 'isSenderVerified', 'senderVerifiedTier',
                            'content', 'mediaType', 'mediaId', 'mediaFileName', 'mediaMimeType',
                            'mediaSizeBytes', 'mediaChunkCount', 'mediaDurationMs',
+                           'pollQuestion', 'pollOptions', 'pollVotes', 'isSpoiler', 'forwardedFromName',
                            'replyToId', 'replyToSender', 'replyToText', 'status', 'readBy',
                            'isEdited', 'isDeleted', 'reactions', 'createdAt', 'updatedAt'
                          ]) &&
@@ -444,7 +534,8 @@ service cloud.firestore {
                            (existing().senderId == request.auth.uid &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['content', 'isEdited', 'isDeleted', 'updatedAt'])) ||
                            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'readBy', 'updatedAt']) ||
-                           incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'updatedAt'])
+                           incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['pollVotes', 'updatedAt'])
                          );
 
         allow delete: if false;

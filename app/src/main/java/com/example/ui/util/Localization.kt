@@ -126,6 +126,7 @@ interface KoraStrings {
   val earnCoins: String
   val avatarFrames: String
   val roleNameplates: String
+  val achievementWalls: String
   val chatBubbles: String
   val allCategories: String
   val preview: String
@@ -405,6 +406,89 @@ interface KoraStrings {
   val settingsFullSettingsCardTitle: String
   val settingsFullSettingsCardDesc: String
   val settingsOpenButton: String
+
+  // Cross-User Profile Inspector
+  val inspectProfileAction: String
+  val inspectProfileBioEmpty: String
+  val inspectProfilePostsCount: String
+  val inspectProfileFluxCount: String
+  val inspectProfileStatsTitle: String
+  val inspectProfileSelfBadge: String
+  val inspectProfileHandleCopied: String
+  val inspectProfileDirectMessage: String
+  val inspectProfileCall: String
+  val inspectProfileLastSeenRecently: String
+  val inspectProfileLastSeenAt: String
+  val inspectProfileMemberTitle: String
+
+  // Flux Sync & Error Recovery
+  val refreshFluxFeed: String
+  val fluxVideoLoadFailed: String
+  val fluxTapToLoadVideo: String
+  val fluxVideoTooLargeInline: String
+
+  // Messenger-Beating Chat Upgrades
+  val voiceNoteLabel: String
+  val recordingVoiceNote: String
+  val cancelRecording: String
+  val sendVoiceNote: String
+  val createPollAction: String
+  val pollQuestionLabel: String
+  val pollQuestionPlaceholder: String
+  val pollOptionLabel: String
+  val addPollOption: String
+  val sendPoll: String
+  val pollVotesCountFormat: String
+  val pinMessageAction: String
+  val unpinMessageAction: String
+  val pinnedMessageBannerTitle: String
+  val messagePinnedToast: String
+  val messageUnpinnedToast: String
+  val forwardAction: String
+  val forwardToTitle: String
+  val forwardedFromLabel: String
+  val messageForwardedToast: String
+  val searchMessagesPlaceholder: String
+  val searchResultsCountFormat: String
+  val spoilerToggleLabel: String
+  val spoilerToggleDesc: String
+  val spoilerHiddenTitle: String
+  val spoilerTapToReveal: String
+  val chatInfoTitle: String
+  val sharedMediaTabPhotos: String
+  val sharedMediaTabVideos: String
+  val sharedMediaTabAudio: String
+  val sharedMediaTabFiles: String
+  val sharedMediaTabPolls: String
+  val noSharedMediaYet: String
+  val membersCountFormat: String
+
+  // Focused Auth (Sign In / Create Account / Forgot Password / Recover Account)
+  val authSignInTab: String
+  val authCreateAccountTab: String
+  val authEmailLabel: String
+  val authPasswordLabel: String
+  val authConfirmPasswordLabel: String
+  val authForgotPassword: String
+  val authRecoverAccount: String
+  val authOrDivider: String
+  val authCreatingAccount: String
+  val authForgotPasswordTitle: String
+  val authForgotPasswordDesc: String
+  val authSendResetLink: String
+  val authSendingResetLink: String
+  val authResetLinkSent: String
+  val authRecoverAccountTitle: String
+  val authRecoverAccountDesc: String
+  val authRecoverViaEmailBtn: String
+  val authRecoverViaGoogleBtn: String
+  val authBackToSignIn: String
+  val authShowPasswordDesc: String
+  val authHidePasswordDesc: String
+  val authInvalidEmailError: String
+  val authWeakPasswordError: String
+  val authPasswordMismatchError: String
+  val authSignInSubtitle: String
 }
 
 object EnglishStrings : KoraStrings {
@@ -499,6 +583,7 @@ object EnglishStrings : KoraStrings {
   override val earnCoins = "Earn Coins"
   override val avatarFrames = "Avatar Frames"
   override val roleNameplates = "Role Nameplates"
+  override val achievementWalls = "Achievement Walls"
   override val chatBubbles = "Chat Bubbles"
   override val allCategories = "All"
   override val preview = "Preview"
@@ -744,6 +829,82 @@ object EnglishStrings : KoraStrings {
   override val settingsFullSettingsCardTitle = "All Settings"
   override val settingsFullSettingsCardDesc = "Account, privacy, calls, notifications & media"
   override val settingsOpenButton = "Manage"
+  override val inspectProfileAction = "Inspect Profile"
+  override val inspectProfileBioEmpty = "No bio added yet."
+  override val inspectProfilePostsCount = "Posts"
+  override val inspectProfileFluxCount = "Flux Clips"
+  override val inspectProfileStatsTitle = "Community Activity"
+  override val inspectProfileSelfBadge = "This is your public profile card"
+  override val inspectProfileHandleCopied = "Handle copied to clipboard"
+  override val inspectProfileDirectMessage = "Message"
+  override val inspectProfileCall = "HD Voice Call"
+  override val inspectProfileLastSeenRecently = "Last seen recently"
+  override val inspectProfileLastSeenAt = "Last seen %s"
+  override val inspectProfileMemberTitle = "Profile Inspector"
+  override val refreshFluxFeed = "Refresh Feed"
+  override val fluxVideoLoadFailed = "Could not load video"
+  override val fluxTapToLoadVideo = "Tap to load video"
+  override val fluxVideoTooLargeInline = "Video exceeds the 25 MB upload limit. Pick a shorter clip."
+  override val voiceNoteLabel = "Voice Note"
+  override val recordingVoiceNote = "Recording voice note..."
+  override val cancelRecording = "Cancel"
+  override val sendVoiceNote = "Send Voice"
+  override val createPollAction = "Create Poll"
+  override val pollQuestionLabel = "Poll Question"
+  override val pollQuestionPlaceholder = "Ask something..."
+  override val pollOptionLabel = "Option %d"
+  override val addPollOption = "Add Option"
+  override val sendPoll = "Send Poll"
+  override val pollVotesCountFormat = "%d votes"
+  override val pinMessageAction = "Pin Message"
+  override val unpinMessageAction = "Unpin Message"
+  override val pinnedMessageBannerTitle = "Pinned Message"
+  override val messagePinnedToast = "Message pinned to top of chat"
+  override val messageUnpinnedToast = "Pinned message removed"
+  override val forwardAction = "Forward"
+  override val forwardToTitle = "Forward Message To"
+  override val forwardedFromLabel = "Forwarded from %s"
+  override val messageForwardedToast = "Message forwarded"
+  override val searchMessagesPlaceholder = "Search in conversation..."
+  override val searchResultsCountFormat = "%d / %d"
+  override val spoilerToggleLabel = "Spoiler"
+  override val spoilerToggleDesc = "Blur message until tapped"
+  override val spoilerHiddenTitle = "Spoiler Message"
+  override val spoilerTapToReveal = "Tap to reveal"
+  override val chatInfoTitle = "Chat Info & Media"
+  override val sharedMediaTabPhotos = "Photos"
+  override val sharedMediaTabVideos = "Videos"
+  override val sharedMediaTabAudio = "Voice"
+  override val sharedMediaTabFiles = "Files"
+  override val sharedMediaTabPolls = "Polls"
+  override val noSharedMediaYet = "Nothing shared here yet"
+  override val membersCountFormat = "%d members"
+
+  override val authSignInTab = "Sign In"
+  override val authCreateAccountTab = "Create Account"
+  override val authEmailLabel = "Email Address"
+  override val authPasswordLabel = "Password"
+  override val authConfirmPasswordLabel = "Confirm Password"
+  override val authForgotPassword = "Forgot password?"
+  override val authRecoverAccount = "Recover Account"
+  override val authOrDivider = "or"
+  override val authCreatingAccount = "Creating account..."
+  override val authForgotPasswordTitle = "Forgot Password"
+  override val authForgotPasswordDesc = "Enter your registered email and we will send you a password reset link."
+  override val authSendResetLink = "Send Reset Link"
+  override val authSendingResetLink = "Sending link..."
+  override val authResetLinkSent = "Reset link sent to your email. Check your inbox or spam folder."
+  override val authRecoverAccountTitle = "Recover Account"
+  override val authRecoverAccountDesc = "Restore access to your account via email or your linked Google account."
+  override val authRecoverViaEmailBtn = "Recover via Email"
+  override val authRecoverViaGoogleBtn = "Restore with Google"
+  override val authBackToSignIn = "Back to Sign In"
+  override val authShowPasswordDesc = "Show password"
+  override val authHidePasswordDesc = "Hide password"
+  override val authInvalidEmailError = "Please enter a valid email address."
+  override val authWeakPasswordError = "Password must be at least 6 characters."
+  override val authPasswordMismatchError = "Passwords do not match."
+  override val authSignInSubtitle = "Sign in, create an account, or recover access."
 }
 
 object ArabicStrings : KoraStrings {
@@ -836,8 +997,9 @@ object ArabicStrings : KoraStrings {
   override val customDecoration = "الزينة المخصصة"
   override val buyCoins = "شراء العملات"
   override val earnCoins = "كسب العملات"
-  override val avatarFrames = "الإطارات"
-  override val roleNameplates = "لوحات الاسم"
+  override val avatarFrames = "إطار"
+  override val roleNameplates = "لوحات أسماء الأدوار"
+  override val achievementWalls = "جدار الإنجازات"
   override val chatBubbles = "فقاعات المحادثة"
   override val allCategories = "الكل"
   override val preview = "معاينة"
@@ -1083,6 +1245,82 @@ object ArabicStrings : KoraStrings {
   override val settingsFullSettingsCardTitle = "الإعدادات الشاملة"
   override val settingsFullSettingsCardDesc = "تعديل الحساب، الخصوصية، المكالمات، الإشعارات والوسائط"
   override val settingsOpenButton = "تعديل"
+  override val inspectProfileAction = "فحص الحساب"
+  override val inspectProfileBioEmpty = "لا توجد نبذة شخصية بعد."
+  override val inspectProfilePostsCount = "المنشورات"
+  override val inspectProfileFluxCount = "مقاطع فلوكس"
+  override val inspectProfileStatsTitle = "النشاط في المجتمع"
+  override val inspectProfileSelfBadge = "هذه بطاقة ملفك الشخصي كما يراها الآخرون"
+  override val inspectProfileHandleCopied = "تم نسخ المعرّف"
+  override val inspectProfileDirectMessage = "مراسلة"
+  override val inspectProfileCall = "مكالمة HD"
+  override val inspectProfileLastSeenRecently = "آخر ظهور منذ وقت قريب"
+  override val inspectProfileLastSeenAt = "آخر ظهور %s"
+  override val inspectProfileMemberTitle = "ملف العضو"
+  override val refreshFluxFeed = "تحديث الفيديوهات"
+  override val fluxVideoLoadFailed = "تعذر تحميل الفيديو"
+  override val fluxTapToLoadVideo = "اضغط لتحميل الفيديو"
+  override val fluxVideoTooLargeInline = "حجم الفيديو يتجاوز حد 25 ميجابايت. اختر مقطعاً أقصر."
+  override val voiceNoteLabel = "رسالة صوتية"
+  override val recordingVoiceNote = "جارٍ تسجيل رسالة صوتية..."
+  override val cancelRecording = "إلغاء"
+  override val sendVoiceNote = "إرسال الصوت"
+  override val createPollAction = "إنشاء استطلاع"
+  override val pollQuestionLabel = "سؤال الاستطلاع"
+  override val pollQuestionPlaceholder = "اطرح سؤالاً للأعضاء..."
+  override val pollOptionLabel = "الخيار %d"
+  override val addPollOption = "إضافة خيار"
+  override val sendPoll = "إرسال الاستطلاع"
+  override val pollVotesCountFormat = "%d أصوات"
+  override val pinMessageAction = "تثبيت الرسالة"
+  override val unpinMessageAction = "إلغاء التثبيت"
+  override val pinnedMessageBannerTitle = "رسالة مثبتة"
+  override val messagePinnedToast = "تم تثبيت الرسالة أعلى المحادثة"
+  override val messageUnpinnedToast = "تمت إزالة التثبيت"
+  override val forwardAction = "إعادة توجيه"
+  override val forwardToTitle = "تحويل الرسالة إلى"
+  override val forwardedFromLabel = "محوّلة من %s"
+  override val messageForwardedToast = "تمت إعادة توجيه الرسالة"
+  override val searchMessagesPlaceholder = "ابحث داخل المحادثة..."
+  override val searchResultsCountFormat = "%d / %d"
+  override val spoilerToggleLabel = "إخفاء المحتوى"
+  override val spoilerToggleDesc = "تمويه الرسالة حتى يتم النقر عليها"
+  override val spoilerHiddenTitle = "محتوى مخفي"
+  override val spoilerTapToReveal = "اضغط للعرض"
+  override val chatInfoTitle = "معلومات المحادثة والوسائط"
+  override val sharedMediaTabPhotos = "الصور"
+  override val sharedMediaTabVideos = "الفيديو"
+  override val sharedMediaTabAudio = "الصوتيات"
+  override val sharedMediaTabFiles = "الملفات"
+  override val sharedMediaTabPolls = "الاستطلاعات"
+  override val noSharedMediaYet = "لا توجد عناصر مشتركة هنا بعد"
+  override val membersCountFormat = "%d أعضاء"
+
+  override val authSignInTab = "تسجيل دخول"
+  override val authCreateAccountTab = "إنشاء حساب"
+  override val authEmailLabel = "البريد الإلكتروني"
+  override val authPasswordLabel = "كلمة السر"
+  override val authConfirmPasswordLabel = "تأكيد كلمة السر"
+  override val authForgotPassword = "هل نسيت كلمة السر؟"
+  override val authRecoverAccount = "استرجاع حساب"
+  override val authOrDivider = "أو"
+  override val authCreatingAccount = "جارٍ إنشاء الحساب..."
+  override val authForgotPasswordTitle = "نسيت كلمة السر"
+  override val authForgotPasswordDesc = "أدخل بريدك الإلكتروني المسجّل وسنرسل لك رابطاً لإعادة تعيين كلمة السر."
+  override val authSendResetLink = "إرسال رابط الاستعادة"
+  override val authSendingResetLink = "جارٍ الإرسال..."
+  override val authResetLinkSent = "تم إرسال رابط استعادة كلمة السر إلى بريدك الإلكتروني. تحقق من البريد الوارد."
+  override val authRecoverAccountTitle = "استرجاع حساب"
+  override val authRecoverAccountDesc = "استعد الوصول إلى حسابك عبر البريد الإلكتروني المسجّل أو عبر حساب Google المرتبط."
+  override val authRecoverViaEmailBtn = "استرجاع عبر البريد الإلكتروني"
+  override val authRecoverViaGoogleBtn = "استرجاع عبر حساب Google"
+  override val authBackToSignIn = "العودة لتسجيل الدخول"
+  override val authShowPasswordDesc = "إظهار كلمة السر"
+  override val authHidePasswordDesc = "إخفاء كلمة السر"
+  override val authInvalidEmailError = "يرجى إدخال بريد إلكتروني صحيح."
+  override val authWeakPasswordError = "يجب أن تتكون كلمة السر من 6 أحرف على الأقل."
+  override val authPasswordMismatchError = "كلمتا السر غير متطابقتين."
+  override val authSignInSubtitle = "سجّل دخولك أو أنشئ حساباً جديداً أو استرجع حسابك."
 }
 
 val LocalAppStrings = compositionLocalOf<KoraStrings> { EnglishStrings }

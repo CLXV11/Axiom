@@ -2,8 +2,11 @@ package com.example
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -70,6 +73,7 @@ import com.example.ui.components.LuxurySplashScreen
 import com.example.ui.components.NavigationTab
 import com.example.ui.components.NewMessageBanner
 import com.example.ui.components.ThemeSwitcherSheet
+import com.example.ui.components.UserProfileInspectorSheet
 import com.example.ui.components.VoiceCallController
 import com.example.ui.components.VoiceCallOverlay
 import com.example.ui.components.VoiceCallUiPhase
@@ -537,6 +541,19 @@ fun KoraAppRoot(
   var showStore by remember { mutableStateOf(false) }
   var showQuickThemeSheet by remember { mutableStateOf(false) }
   var inAppMessageAlert by remember { mutableStateOf<IncomingMessageAlert?>(null) }
+  var inspectedUserProfile by remember { mutableStateOf<UserProfile?>(null) }
+
+  var pendingInspectorCall by remember { mutableStateOf<(() -> Unit)?>(null) }
+  val inspectorMicLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { granted ->
+    if (granted) {
+      pendingInspectorCall?.invoke()
+    } else {
+      Toast.makeText(context, strings.micPermissionRequired, Toast.LENGTH_LONG).show()
+    }
+    pendingInspectorCall = null
+  }
 
   // Request Android 13+ POST_NOTIFICATIONS runtime permission once cleanly
   val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -555,6 +572,8 @@ fun KoraAppRoot(
   val conversations by chatRepository.observeConversations().collectAsState(initial = emptyList())
   val directoryUsers by userRepository.observeDirectoryUsers()
     .collectAsState(initial = userRepository.getDirectoryUsers())
+  val allPosts by postRepository.observePosts("all").collectAsState(initial = emptyList())
+  val allFluxVideos by fluxRepository.observeVideos().collectAsState(initial = emptyList())
 
   // Open target conversation when user taps a system message notification
   LaunchedEffect(pendingOpenConversationId, conversations) {
@@ -666,6 +685,9 @@ fun KoraAppRoot(
       chatMediaRepository = chatMediaRepository,
       postRepository = postRepository,
       userRepository = userRepository,
+      conversations = conversations,
+      onSwitchToConversation = { convo -> activeConversation = convo },
+      onInspectUser = { inspectedUserProfile = it },
       onStartVoiceCall = { peerId, peerName, peerAvatarUrl, peerVerified, peerVerifiedTier ->
         voiceCallController.startOutgoingCall(
           conversationId = activeConversation!!.id,
@@ -692,6 +714,7 @@ fun KoraAppRoot(
           onLanguageToggle = { toggleLanguage() },
           onOpenStore = { showStore = true },
           onOpenSettings = { currentTab = NavigationTab.SETTINGS },
+          onInspectUser = { inspectedUserProfile = it },
           compactMode = compactMode
         )
 
@@ -699,6 +722,7 @@ fun KoraAppRoot(
           fluxRepository = fluxRepository,
           userRepository = userRepository,
           onLanguageToggle = { toggleLanguage() },
+          onInspectUser = { inspectedUserProfile = it },
           initialMuted = fluxStartMuted,
           autoLoadVideos = fluxAutoDownload
         )
@@ -706,7 +730,8 @@ fun KoraAppRoot(
         NavigationTab.FEED -> FeedScreen(
           postRepository = postRepository,
           userRepository = userRepository,
-          onLanguageToggle = { toggleLanguage() }
+          onLanguageToggle = { toggleLanguage() },
+          onInspectUser = { inspectedUserProfile = it }
         )
 
         NavigationTab.MEMORY -> MemoryVaultScreen(
@@ -793,5 +818,95 @@ fun KoraAppRoot(
 
   // Persistent App-Wide Voice Call Overlay (Incoming Banner, Minimized Pill, Fullscreen Call)
   VoiceCallOverlay(controller = voiceCallController)
+
+  // App-wide Cross-User Profile Inspector Modal Bottom Sheet
+  inspectedUserProfile?.let { target ->
+    val targetPostsCount = remember(allPosts, target.id) {
+      allPosts.count { it.authorId == target.id }
+    }
+    val targetFluxCount = remember(allFluxVideos, target.id) {
+      allFluxVideos.count { it.authorId == target.id }
+    }
+    UserProfileInspectorSheet(
+      seedUser = target,
+      userRepository = userRepository,
+      currentUid = currentUid,
+      postsCount = targetPostsCount,
+      fluxCount = targetFluxCount,
+      onDismiss = { inspectedUserProfile = null },
+      onMessageClick = { peer ->
+        inspectedUserProfile = null
+        callScope.launch {
+          val res = chatRepository.findOrCreateDirectConversation(
+            targetUserId = peer.id,
+            title = peer.displayName.ifBlank { "Member" },
+            isVerified = peer.isVerified,
+            verifiedTier = peer.verifiedTier
+          )
+          if (res.isSuccess) {
+            val convoId = res.getOrThrow()
+            val resolvedConvo = conversations.find { it.id == convoId } ?: Conversation(
+              id = convoId,
+              type = "direct",
+              title = peer.displayName.ifBlank { "Member" },
+              participantIds = listOf(currentUid, peer.id),
+              isVerified = peer.isVerified,
+              verifiedTier = peer.verifiedTier
+            )
+            showStore = false
+            currentTab = NavigationTab.CHATS
+            activeConversation = resolvedConvo
+          } else {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
+          }
+        }
+      },
+      onVoiceCallClick = { peer ->
+        val launchCall = {
+          inspectedUserProfile = null
+          callScope.launch {
+            val res = chatRepository.findOrCreateDirectConversation(
+              targetUserId = peer.id,
+              title = peer.displayName.ifBlank { "Member" },
+              isVerified = peer.isVerified,
+              verifiedTier = peer.verifiedTier
+            )
+            if (res.isSuccess) {
+              val convoId = res.getOrThrow()
+              voiceCallController.startOutgoingCall(
+                conversationId = convoId,
+                peerId = peer.id,
+                peerName = peer.displayName.ifBlank { "Member" },
+                peerAvatarUrl = peer.avatarUrl,
+                peerVerified = peer.isVerified,
+                peerVerifiedTier = peer.verifiedTier
+              )
+            } else {
+              Toast.makeText(
+                context,
+                res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                Toast.LENGTH_SHORT
+              ).show()
+            }
+          }
+          Unit
+        }
+        val hasMic = ContextCompat.checkSelfPermission(
+          context,
+          Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasMic) {
+          launchCall()
+        } else {
+          pendingInspectorCall = launchCall
+          inspectorMicLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+      }
+    )
+  }
   }
 }

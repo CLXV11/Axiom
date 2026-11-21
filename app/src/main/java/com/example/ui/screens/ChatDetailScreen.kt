@@ -24,6 +24,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -43,13 +45,16 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
@@ -57,34 +62,58 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Poll
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.AddReaction
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Search
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,12 +144,13 @@ import com.example.ui.components.ChatMediaAttachmentSheet
 import com.example.ui.components.FullscreenVideoPlayerDialog
 import com.example.ui.components.IosFloatingReactionBar
 import com.example.ui.components.MediaMessageBubbleContent
+import com.example.ui.components.PollMessageCard
 import com.example.ui.components.ReactionChipsRow
 import com.example.ui.components.TypingBubble
 import com.example.ui.components.TypingDotsIndicator
 import com.example.ui.components.VerifiedBadge
+import com.example.ui.components.VoiceRecorderController
 import com.example.ui.components.WeirdEmojiPickerBottomSheet
-import com.example.ui.theme.KoraTheme
 import com.example.ui.theme.StatusOnline
 import com.example.ui.util.LocalAppStrings
 import kotlinx.coroutines.delay
@@ -138,6 +168,9 @@ fun ChatDetailScreen(
   chatMediaRepository: ChatMediaRepository,
   postRepository: PostRepository,
   userRepository: UserRepository,
+  conversations: List<Conversation> = emptyList(),
+  onSwitchToConversation: (Conversation) -> Unit = {},
+  onInspectUser: (UserProfile) -> Unit = {},
   onStartVoiceCall: (
     peerId: String,
     peerName: String,
@@ -154,8 +187,12 @@ fun ChatDetailScreen(
   val coroutineScope = rememberCoroutineScope()
   val listState = rememberLazyListState()
 
-  val isAiChat = remember(conversation.id) {
-    chatRepository.isAiChatbotConversation(conversation.id)
+  val liveConversation = remember(conversations, conversation) {
+    conversations.find { it.id == conversation.id } ?: conversation
+  }
+
+  val isAiChat = remember(liveConversation.id) {
+    chatRepository.isAiChatbotConversation(liveConversation.id)
   }
 
   val currentUid = userRepository.requireUserId()
@@ -164,15 +201,15 @@ fun ChatDetailScreen(
     .collectAsState(initial = cachedCurrentProfile)
   val currentUserName = currentUserProfile?.displayName?.takeIf { it.isNotBlank() } ?: "Me"
 
-  val messages by chatRepository.observeMessages(conversation.id).collectAsState(initial = emptyList())
-  val typingUsers by chatRepository.observeTyping(conversation.id).collectAsState(initial = emptyList())
-  val aiState by chatRepository.observeAiState(conversation.id).collectAsState(initial = AiConversationState())
+  val messages by chatRepository.observeMessages(liveConversation.id).collectAsState(initial = emptyList())
+  val typingUsers by chatRepository.observeTyping(liveConversation.id).collectAsState(initial = emptyList())
+  val aiState by chatRepository.observeAiState(liveConversation.id).collectAsState(initial = AiConversationState())
   val directoryUsers by userRepository.observeDirectoryUsers()
     .collectAsState(initial = userRepository.getDirectoryUsers())
 
-  val peerId = remember(conversation.participantIds, currentUid, isAiChat) {
-    if (!isAiChat && conversation.type == "direct") {
-      conversation.participantIds.firstOrNull { it != currentUid }
+  val peerId = remember(liveConversation.participantIds, currentUid, isAiChat) {
+    if (!isAiChat && liveConversation.type == "direct") {
+      liveConversation.participantIds.firstOrNull { it != currentUid }
     } else null
   }
   var fallbackPeer by remember(peerId) { mutableStateOf<UserProfile?>(null) }
@@ -187,9 +224,9 @@ fun ChatDetailScreen(
     peerId?.let { id -> directoryUsers.find { it.id == id } ?: fallbackPeer }
   }
 
-  LaunchedEffect(conversation.id, messages.size) {
+  LaunchedEffect(liveConversation.id, messages.size) {
     if (!isAiChat && messages.isNotEmpty()) {
-      chatRepository.markAsRead(conversation.id)
+      chatRepository.markAsRead(liveConversation.id)
     }
   }
 
@@ -200,28 +237,45 @@ fun ChatDetailScreen(
   var messageInput by remember { mutableStateOf("") }
   var replyingToMessage by remember { mutableStateOf<Message?>(null) }
   var editingMessage by remember { mutableStateOf<Message?>(null) }
+  var spoilerMode by remember { mutableStateOf(false) }
 
   // Debounced user typing state for multi-user chats
-  LaunchedEffect(messageInput) {
+  LaunchedEffect(messageInput, liveConversation.id) {
     if (!isAiChat && messageInput.isNotBlank()) {
-      chatRepository.setTyping(conversation.id, currentUserName, true)
+      chatRepository.setTyping(liveConversation.id, currentUserName, true)
       delay(2200)
-      chatRepository.setTyping(conversation.id, currentUserName, false)
+      chatRepository.setTyping(liveConversation.id, currentUserName, false)
     } else if (!isAiChat) {
-      chatRepository.setTyping(conversation.id, currentUserName, false)
+      chatRepository.setTyping(liveConversation.id, currentUserName, false)
     }
   }
 
-  DisposableEffect(conversation.id) {
+  DisposableEffect(liveConversation.id) {
     onDispose {
-      chatRepository.setTyping(conversation.id, currentUserName, false)
+      chatRepository.setTyping(liveConversation.id, currentUserName, false)
     }
   }
 
-  // Save to Memory & Reaction Sheet state
+  // Save to Memory, Reaction, Poll, Forward, Search & Chat Info state
   var memoryTargetMessage by remember { mutableStateOf<Message?>(null) }
   var privateNoteInput by remember { mutableStateOf("") }
   var reactionTargetMessageId by remember { mutableStateOf<String?>(null) }
+  var showCreatePollDialog by remember { mutableStateOf(false) }
+  var forwardTargetMessage by remember { mutableStateOf<Message?>(null) }
+  var showChatInfoSheet by remember { mutableStateOf(false) }
+  var showSearchBar by remember { mutableStateOf(false) }
+  var searchQuery by remember { mutableStateOf("") }
+  var searchMatchIndex by remember { mutableIntStateOf(0) }
+
+  // Voice Note recorder
+  val voiceRecorder = remember(liveConversation.id, coroutineScope) {
+    VoiceRecorderController(context, coroutineScope)
+  }
+  val isRecordingVoice by voiceRecorder.isRecording.collectAsState()
+  val recordingElapsedMs by voiceRecorder.elapsedMs.collectAsState()
+  DisposableEffect(voiceRecorder) {
+    onDispose { voiceRecorder.release() }
+  }
 
   // Rich media attachment, upload progress, and inline/fullscreen video playback state
   var showMediaPickerSheet by remember { mutableStateOf(false) }
@@ -229,6 +283,24 @@ fun ChatDetailScreen(
   var uploadProgress by remember { mutableFloatStateOf(0f) }
   var activeInlineVideoMsgId by remember { mutableStateOf<String?>(null) }
   var fullscreenVideoItem by remember { mutableStateOf<Triple<File, String?, String?>?>(null) }
+
+  fun inspectParticipant(
+    targetUid: String,
+    fallbackName: String,
+    fallbackVerified: Boolean,
+    fallbackTier: String?
+  ) {
+    if (targetUid == ChatRepository.AI_CHATBOT_SENDER_ID || targetUid.isBlank()) return
+    val profile = directoryUsers.find { it.id == targetUid }
+      ?: (if (targetUid == peerId) peerUser else null)
+      ?: UserProfile(
+        id = targetUid,
+        displayName = fallbackName.ifBlank { "Member" },
+        isVerified = fallbackVerified,
+        verifiedTier = fallbackTier ?: "BLUE"
+      )
+    onInspectUser(profile)
+  }
 
   fun uploadAndSendMedia(uri: Uri, mediaType: String) {
     if (isUploadingMedia) return
@@ -250,18 +322,21 @@ fun ChatDetailScreen(
         val senderName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUserName
         val isVerified = userProfile?.isVerified ?: false
         val verifiedTier = userProfile?.verifiedTier ?: "BLUE"
+        val pendingSpoiler = spoilerMode && mediaType != "audio"
         val sendRes = chatRepository.sendMediaMessage(
-          conversationId = conversation.id,
+          conversationId = liveConversation.id,
           media = prepared,
           caption = caption,
           senderName = senderName,
           replyTo = pendingReply,
           isSenderVerified = isVerified,
-          senderVerifiedTier = verifiedTier
+          senderVerifiedTier = verifiedTier,
+          isSpoiler = pendingSpoiler
         )
         if (sendRes.isSuccess) {
           messageInput = ""
           replyingToMessage = null
+          if (pendingSpoiler) spoilerMode = false
         } else {
           Toast.makeText(
             context,
@@ -301,21 +376,63 @@ fun ChatDetailScreen(
     if (uri != null) uploadAndSendMedia(uri, "file")
   }
 
-  var pendingCallTrigger by remember { mutableStateOf<(() -> Unit)?>(null) }
+  var pendingMicAction by remember { mutableStateOf<(() -> Unit)?>(null) }
   val micPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
   ) { granted ->
     if (granted) {
-      pendingCallTrigger?.invoke()
+      pendingMicAction?.invoke()
     } else {
       Toast.makeText(context, strings.micPermissionRequired, Toast.LENGTH_LONG).show()
     }
-    pendingCallTrigger = null
+    pendingMicAction = null
+  }
+
+  fun runWithMicPermission(action: () -> Unit) {
+    val hasMic = ContextCompat.checkSelfPermission(
+      context,
+      Manifest.permission.RECORD_AUDIO
+    ) == PackageManager.PERMISSION_GRANTED
+    if (hasMic) {
+      action()
+    } else {
+      pendingMicAction = action
+      micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+  }
+
+  val matchingMessageIds = remember(messages, searchQuery) {
+    val q = searchQuery.trim()
+    if (q.isBlank()) emptyList()
+    else messages.filter { !it.isDeleted && it.content.contains(q, ignoreCase = true) }.map { it.id }
+  }
+  val activeMatchedMsgId = matchingMessageIds.getOrNull(
+    searchMatchIndex.coerceIn(0, (matchingMessageIds.size - 1).coerceAtLeast(0))
+  )
+
+  LaunchedEffect(searchQuery, matchingMessageIds) {
+    searchMatchIndex = if (matchingMessageIds.isNotEmpty()) matchingMessageIds.lastIndex else 0
+  }
+
+  LaunchedEffect(activeMatchedMsgId) {
+    val targetId = activeMatchedMsgId ?: return@LaunchedEffect
+    val idx = messages.indexOfFirst { it.id == targetId }
+    if (idx >= 0) {
+      listState.animateScrollToItem(idx)
+    }
   }
 
   // Auto-scroll smoothly as messages or streaming chunks arrive
   val lastContentLength = messages.lastOrNull()?.content?.length ?: 0
-  LaunchedEffect(messages.size, lastContentLength, peerTypingUsers.size, aiState.errorMessage) {
+  LaunchedEffect(
+    messages.size,
+    lastContentLength,
+    peerTypingUsers.size,
+    aiState.errorMessage,
+    showSearchBar,
+    searchQuery
+  ) {
+    if (showSearchBar && searchQuery.isNotBlank()) return@LaunchedEffect
     val extraItems = (if (peerTypingUsers.isNotEmpty()) 1 else 0) +
       (if (aiState.errorMessage != null) 1 else 0)
     val totalCount = messages.size + extraItems
@@ -329,7 +446,7 @@ fun ChatDetailScreen(
     if (text.isBlank()) return
     if (isAiChat && aiState.isGenerating) return
 
-    chatRepository.setTyping(conversation.id, currentUserName, false)
+    chatRepository.setTyping(liveConversation.id, currentUserName, false)
 
     coroutineScope.launch {
       val userProfile = currentUserProfile ?: runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
@@ -338,7 +455,7 @@ fun ChatDetailScreen(
       val verifiedTier = userProfile?.verifiedTier ?: "BLUE"
 
       if (editingMessage != null) {
-        val res = chatRepository.editMessage(conversation.id, editingMessage!!.id, text)
+        val res = chatRepository.editMessage(liveConversation.id, editingMessage!!.id, text)
         if (res.isSuccess) {
           editingMessage = null
           messageInput = ""
@@ -351,19 +468,23 @@ fun ChatDetailScreen(
         }
       } else {
         val pendingReply = replyingToMessage
+        val pendingSpoiler = spoilerMode && !isAiChat
         messageInput = ""
         replyingToMessage = null
+        spoilerMode = false
         val res = chatRepository.sendMessage(
-          conversationId = conversation.id,
+          conversationId = liveConversation.id,
           content = text,
           senderName = senderName,
           replyTo = pendingReply,
           isSenderVerified = isVerified,
-          senderVerifiedTier = verifiedTier
+          senderVerifiedTier = verifiedTier,
+          isSpoiler = pendingSpoiler
         )
         if (res.isFailure) {
           messageInput = text
           replyingToMessage = pendingReply
+          spoilerMode = pendingSpoiler
           Toast.makeText(
             context,
             res.exceptionOrNull()?.localizedMessage ?: strings.chatDeliveryError,
@@ -401,16 +522,16 @@ fun ChatDetailScreen(
     }
   }
 
-  val isGroup = conversation.type == "group"
+  val isGroup = liveConversation.type == "group"
   val convoTitle = when {
     isAiChat -> strings.aiAssistantName
     peerUser != null && peerUser.displayName.isNotBlank() -> peerUser.displayName
-    conversation.title.isNotBlank() -> conversation.title
+    liveConversation.title.isNotBlank() -> liveConversation.title
     isGroup -> strings.groupChats
     else -> strings.directChats
   }
 
-  val headerSubtitle = remember(isAiChat, peerTypingUsers, aiState.isGenerating, conversation, peerUser, strings) {
+  val headerSubtitle = remember(isAiChat, peerTypingUsers, aiState.isGenerating, liveConversation, peerUser, strings) {
     when {
       isAiChat && aiState.isGenerating -> strings.aiThinking
       peerTypingUsers.isNotEmpty() -> when {
@@ -419,7 +540,7 @@ fun ChatDetailScreen(
         else -> strings.typingMultiple
       }
       isAiChat -> strings.aiAssistantSubtitle
-      isGroup -> "${conversation.participantIds.size} members"
+      isGroup -> String.format(strings.membersCountFormat, liveConversation.participantIds.size)
       !peerUser?.profession.isNullOrBlank() -> peerUser!!.profession
       !peerUser?.handle.isNullOrBlank() -> peerUser!!.handle
       else -> strings.online
@@ -441,32 +562,46 @@ fun ChatDetailScreen(
         title = convoTitle,
         subtitle = headerSubtitle,
         avatarUrl = peerUser?.avatarUrl,
+        frameStyleKey = peerUser?.equippedFrame,
         isAiChat = isAiChat,
-        isVerified = peerUser?.isVerified ?: conversation.isVerified,
-        verifiedTier = peerUser?.verifiedTier ?: conversation.verifiedTier,
+        isVerified = peerUser?.isVerified ?: liveConversation.isVerified,
+        verifiedTier = peerUser?.verifiedTier ?: liveConversation.verifiedTier,
         isThinkingOrTyping = aiState.isGenerating || peerTypingUsers.isNotEmpty(),
         canClearAiChat = isAiChat && messages.isNotEmpty(),
         canStartVoiceCall = !isAiChat && !isGroup && !peerId.isNullOrBlank(),
+        canInspectOrViewInfo = !isAiChat,
+        isSearchOpen = showSearchBar,
+        onHeaderClick = {
+          if (!isAiChat) {
+            if (!isGroup && peerId != null) {
+              inspectParticipant(
+                targetUid = peerId,
+                fallbackName = convoTitle,
+                fallbackVerified = liveConversation.isVerified,
+                fallbackTier = liveConversation.verifiedTier
+              )
+            } else {
+              showChatInfoSheet = true
+            }
+          }
+        },
+        onToggleSearch = {
+          showSearchBar = !showSearchBar
+          if (!showSearchBar) searchQuery = ""
+        },
+        onOpenChatInfo = {
+          if (!isAiChat) showChatInfoSheet = true
+        },
         onStartVoiceCall = {
           val targetId = peerId ?: return@PolishedChatTopBar
-          val invokeCall = {
+          runWithMicPermission {
             onStartVoiceCall(
               targetId,
               convoTitle,
               peerUser?.avatarUrl,
-              peerUser?.isVerified ?: conversation.isVerified,
-              peerUser?.verifiedTier ?: conversation.verifiedTier
+              peerUser?.isVerified ?: liveConversation.isVerified,
+              peerUser?.verifiedTier ?: liveConversation.verifiedTier
             )
-          }
-          val hasMic = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-          ) == PackageManager.PERMISSION_GRANTED
-          if (hasMic) {
-            invokeCall()
-          } else {
-            pendingCallTrigger = invokeCall
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
           }
         },
         onClearAiChat = { chatRepository.clearAiConversation() },
@@ -482,6 +617,63 @@ fun ChatDetailScreen(
         .imePadding(),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {
+      // Expandable In-Chat Search Bar
+      AnimatedVisibility(
+        visible = showSearchBar,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically()
+      ) {
+        ChatSearchBarStrip(
+          query = searchQuery,
+          onQueryChange = { searchQuery = it },
+          matchCount = matchingMessageIds.size,
+          currentMatchIndex = searchMatchIndex,
+          onPrevMatch = {
+            if (matchingMessageIds.isNotEmpty()) {
+              searchMatchIndex = (searchMatchIndex - 1 + matchingMessageIds.size) % matchingMessageIds.size
+            }
+          },
+          onNextMatch = {
+            if (matchingMessageIds.isNotEmpty()) {
+              searchMatchIndex = (searchMatchIndex + 1) % matchingMessageIds.size
+            }
+          },
+          onClose = {
+            showSearchBar = false
+            searchQuery = ""
+          }
+        )
+      }
+
+      // Sticky Pinned Message Banner
+      val pinnedId = liveConversation.pinnedMessageId
+      AnimatedVisibility(
+        visible = !pinnedId.isNullOrBlank() && !isAiChat,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically()
+      ) {
+        if (!pinnedId.isNullOrBlank()) {
+          PinnedMessageBanner(
+            senderName = liveConversation.pinnedMessageSender.orEmpty(),
+            previewText = liveConversation.pinnedMessageText.orEmpty(),
+            onJumpToPinned = {
+              val idx = messages.indexOfFirst { it.id == pinnedId }
+              if (idx >= 0) {
+                coroutineScope.launch { listState.animateScrollToItem(idx) }
+              }
+            },
+            onUnpin = {
+              coroutineScope.launch {
+                val res = chatRepository.pinMessageInConversation(liveConversation.id, null)
+                if (res.isSuccess) {
+                  Toast.makeText(context, strings.messageUnpinnedToast, Toast.LENGTH_SHORT).show()
+                }
+              }
+            }
+          )
+        }
+      }
+
       // Message Stream or Calm AI Welcome Canvas
       Box(
         modifier = Modifier
@@ -520,8 +712,12 @@ fun ChatDetailScreen(
                 isMe -> currentUserProfile?.verifiedTier ?: msg.senderVerifiedTier
                 else -> senderProfile?.verifiedTier ?: msg.senderVerifiedTier
               }
+              val canPin = !isAiChat && !msg.isDeleted
+              val isPinnedMsg = liveConversation.pinnedMessageId == msg.id
+              val isSearchMatched = activeMatchedMsgId == msg.id
+
               PolishedMessageBubble(
-                conversationId = conversation.id,
+                conversationId = liveConversation.id,
                 currentUid = currentUid,
                 message = msg.copy(
                   isSenderVerified = liveVerified,
@@ -529,9 +725,36 @@ fun ChatDetailScreen(
                 ),
                 isMe = isMe,
                 isAiMessage = isBotMsg,
+                isPinned = isPinnedMsg,
+                isSearchHighlighted = isSearchMatched,
                 senderAvatarUrl = senderProfile?.avatarUrl,
+                senderFrameKey = senderProfile?.equippedFrame,
                 chatMediaRepository = chatMediaRepository,
                 isInlineVideoPlaying = activeInlineVideoMsgId == msg.id,
+                onInspectSender = {
+                  inspectParticipant(
+                    targetUid = msg.senderId,
+                    fallbackName = msg.senderName,
+                    fallbackVerified = liveVerified,
+                    fallbackTier = liveVerifiedTier
+                  )
+                },
+                onVotePoll = { optionIdx ->
+                  coroutineScope.launch {
+                    val res = chatRepository.votePollOption(
+                      conversationId = liveConversation.id,
+                      messageId = msg.id,
+                      optionIndex = optionIdx
+                    )
+                    if (res.isFailure) {
+                      Toast.makeText(
+                        context,
+                        res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                        Toast.LENGTH_SHORT
+                      ).show()
+                    }
+                  }
+                },
                 onPlayInlineVideo = { activeInlineVideoMsgId = msg.id },
                 onStopInlineVideo = {
                   if (activeInlineVideoMsgId == msg.id) {
@@ -544,7 +767,7 @@ fun ChatDetailScreen(
                 },
                 onToggleReaction = { emoji ->
                   coroutineScope.launch {
-                    val res = chatRepository.toggleMessageReaction(conversation.id, msg.id, emoji)
+                    val res = chatRepository.toggleMessageReaction(liveConversation.id, msg.id, emoji)
                     if (res.isFailure) {
                       Toast.makeText(
                         context,
@@ -562,6 +785,26 @@ fun ChatDetailScreen(
                   editingMessage = null
                 },
                 onCopy = { copyToClipboard(msg.content) },
+                onForward = if (!msg.isDeleted) {
+                  { forwardTargetMessage = msg }
+                } else null,
+                onTogglePin = if (canPin) {
+                  {
+                    coroutineScope.launch {
+                      val targetPin = if (isPinnedMsg) null else msg
+                      val res = chatRepository.pinMessageInConversation(liveConversation.id, targetPin)
+                      if (res.isSuccess) {
+                        Toast.makeText(
+                          context,
+                          if (targetPin != null) strings.messagePinnedToast else strings.messageUnpinnedToast,
+                          Toast.LENGTH_SHORT
+                        ).show()
+                      } else {
+                        Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+                      }
+                    }
+                  }
+                } else null,
                 onEdit = {
                   editingMessage = msg
                   replyingToMessage = null
@@ -570,7 +813,7 @@ fun ChatDetailScreen(
                 onDelete = {
                   coroutineScope.launch {
                     val res = chatRepository.deleteMessage(
-                      conversationId = conversation.id,
+                      conversationId = liveConversation.id,
                       messageId = msg.id,
                       deletedPlaceholder = strings.messageDeleted
                     )
@@ -600,7 +843,7 @@ fun ChatDetailScreen(
                 AiErrorBanner(
                   message = aiState.errorMessage!!,
                   onRetry = { chatRepository.retryLastAiPrompt() },
-                  onDismiss = { chatRepository.clearAiError(conversation.id) }
+                  onDismiss = { chatRepository.clearAiError(liveConversation.id) }
                 )
               }
             }
@@ -674,7 +917,7 @@ fun ChatDetailScreen(
         }
       }
 
-      // Floating Soft Pill Composer
+      // Floating Soft Pill Composer (or Voice Note Recording Bar)
       Box(modifier = Modifier.fillMaxWidth().widthIn(max = 840.dp)) {
         PolishedMessageComposer(
           value = messageInput,
@@ -683,6 +926,32 @@ fun ChatDetailScreen(
           isSendEnabled = messageInput.isNotBlank() && !(isAiChat && aiState.isGenerating) && !isUploadingMedia,
           showAttachButton = !isAiChat && editingMessage == null,
           isAttachEnabled = !isUploadingMedia,
+          canRecordVoiceNote = !isAiChat && editingMessage == null && !isUploadingMedia,
+          isRecordingVoice = isRecordingVoice,
+          recordingElapsedMs = recordingElapsedMs,
+          isSpoilerMode = spoilerMode,
+          onToggleSpoiler = { spoilerMode = !spoilerMode },
+          onStartRecording = {
+            runWithMicPermission {
+              val res = voiceRecorder.startRecording()
+              if (res.isFailure) {
+                Toast.makeText(
+                  context,
+                  res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+                  Toast.LENGTH_SHORT
+                ).show()
+              }
+            }
+          },
+          onCancelRecording = { voiceRecorder.cancelRecording() },
+          onSendRecording = {
+            val file = voiceRecorder.stopRecording()
+            if (file != null) {
+              uploadAndSendMedia(Uri.fromFile(file), "audio")
+            } else {
+              Toast.makeText(context, strings.errorOccurred, Toast.LENGTH_SHORT).show()
+            }
+          },
           onAttachClick = { showMediaPickerSheet = true },
           onSend = { sendText(messageInput) }
         )
@@ -701,6 +970,104 @@ fun ChatDetailScreen(
       },
       onPickFile = {
         filePickerLauncher.launch(arrayOf("*/*"))
+      },
+      onCreatePoll = {
+        showCreatePollDialog = true
+      }
+    )
+  }
+
+  if (showCreatePollDialog) {
+    CreatePollDialog(
+      onDismiss = { showCreatePollDialog = false },
+      onConfirm = { question, options ->
+        showCreatePollDialog = false
+        coroutineScope.launch {
+          val userProfile = currentUserProfile ?: runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
+          val res = chatRepository.sendPollMessage(
+            conversationId = liveConversation.id,
+            question = question,
+            options = options,
+            senderName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUserName,
+            isSenderVerified = userProfile?.isVerified ?: false,
+            senderVerifiedTier = userProfile?.verifiedTier ?: "BLUE"
+          )
+          if (res.isFailure) {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
+          }
+        }
+      }
+    )
+  }
+
+  forwardTargetMessage?.let { msgToForward ->
+    val availableTargets = remember(conversations, liveConversation.id) {
+      conversations.filter { !chatRepository.isAiChatbotConversation(it.id) }
+    }
+    ForwardMessageSheet(
+      conversations = availableTargets,
+      directoryUsers = directoryUsers,
+      currentUid = currentUid,
+      onDismiss = { forwardTargetMessage = null },
+      onSelectConversation = { targetConvo ->
+        forwardTargetMessage = null
+        coroutineScope.launch {
+          val userProfile = currentUserProfile ?: runCatching { userRepository.getUserProfile(currentUid) }.getOrNull()
+          val res = chatRepository.forwardMessage(
+            targetConversationId = targetConvo.id,
+            sourceMessage = msgToForward,
+            senderName = userProfile?.displayName?.takeIf { it.isNotBlank() } ?: currentUserName,
+            isSenderVerified = userProfile?.isVerified ?: false,
+            senderVerifiedTier = userProfile?.verifiedTier ?: "BLUE",
+            chatMediaRepository = chatMediaRepository
+          )
+          if (res.isSuccess) {
+            Toast.makeText(context, strings.messageForwardedToast, Toast.LENGTH_SHORT).show()
+            if (targetConvo.id != liveConversation.id) {
+              onSwitchToConversation(targetConvo)
+            }
+          } else {
+            Toast.makeText(
+              context,
+              res.exceptionOrNull()?.localizedMessage ?: strings.errorOccurred,
+              Toast.LENGTH_SHORT
+            ).show()
+          }
+        }
+      }
+    )
+  }
+
+  if (showChatInfoSheet) {
+    val participants = remember(liveConversation.participantIds, directoryUsers, currentUserProfile, peerUser, currentUid) {
+      liveConversation.participantIds.map { uid ->
+        when {
+          uid == currentUid && currentUserProfile != null -> currentUserProfile!!
+          uid == peerId && peerUser != null -> peerUser
+          else -> directoryUsers.find { it.id == uid } ?: UserProfile(id = uid, displayName = "Member")
+        }
+      }
+    }
+    ChatInfoAndMediaSheet(
+      conversationTitle = convoTitle,
+      conversationType = liveConversation.type,
+      participants = participants,
+      messages = messages,
+      onDismiss = { showChatInfoSheet = false },
+      onInspectParticipant = { profile ->
+        showChatInfoSheet = false
+        onInspectUser(profile)
+      },
+      onJumpToMessage = { msgId ->
+        showChatInfoSheet = false
+        val idx = messages.indexOfFirst { it.id == msgId }
+        if (idx >= 0) {
+          coroutineScope.launch { listState.animateScrollToItem(idx) }
+        }
       }
     )
   }
@@ -798,12 +1165,18 @@ private fun PolishedChatTopBar(
   title: String,
   subtitle: String,
   avatarUrl: String?,
+  frameStyleKey: String? = null,
   isAiChat: Boolean,
   isVerified: Boolean,
   verifiedTier: String?,
   isThinkingOrTyping: Boolean,
   canClearAiChat: Boolean,
   canStartVoiceCall: Boolean,
+  canInspectOrViewInfo: Boolean = true,
+  isSearchOpen: Boolean = false,
+  onHeaderClick: () -> Unit = {},
+  onToggleSearch: () -> Unit = {},
+  onOpenChatInfo: () -> Unit = {},
   onStartVoiceCall: () -> Unit,
   onClearAiChat: () -> Unit,
   onBackClick: () -> Unit
@@ -820,7 +1193,7 @@ private fun PolishedChatTopBar(
         modifier = Modifier
           .fillMaxWidth()
           .defaultMinSize(minHeight = 64.dp)
-          .padding(horizontal = 8.dp, vertical = 6.dp),
+          .padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
       ) {
         IconButton(
@@ -834,114 +1207,136 @@ private fun PolishedChatTopBar(
           )
         }
 
-        Spacer(modifier = Modifier.width(4.dp))
-
-        if (isAiChat) {
-          Box(
-            modifier = Modifier
-              .size(40.dp)
-              .clip(CircleShape)
-              .background(
-                Brush.linearGradient(
-                  colors = listOf(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = canInspectOrViewInfo, onClick = onHeaderClick)
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .testTag("chat_header_profile_button")
+        ) {
+          if (isAiChat) {
+            Box(
+              modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(
+                  Brush.linearGradient(
+                    colors = listOf(
+                      MaterialTheme.colorScheme.primary,
+                      MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                    )
                   )
-                )
-              ),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = Icons.Default.AutoAwesome,
-              contentDescription = title,
-              tint = Color.White,
-              modifier = Modifier.size(20.dp)
-            )
-          }
-        } else {
-          AvatarView(
-            name = title,
-            avatarUrl = avatarUrl,
-            size = 40.dp,
-            showPresence = true,
-            isOnline = true
-          )
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              text = title,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f, fill = false)
-            )
-            if (isVerified) {
-              Spacer(modifier = Modifier.width(6.dp))
-              VerifiedBadge(
-                size = 15.dp,
-                tierKey = verifiedTier,
-                showDialogOnClick = true
+                ),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = Icons.Default.AutoAwesome,
+                contentDescription = title,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
               )
             }
-            if (isAiChat) {
-              Spacer(modifier = Modifier.width(6.dp))
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-              ) {
+          } else {
+            AvatarView(
+              name = title,
+              avatarUrl = avatarUrl,
+              size = 40.dp,
+              frameStyleKey = frameStyleKey,
+              showPresence = true,
+              isOnline = true
+            )
+          }
+
+          Spacer(modifier = Modifier.width(10.dp))
+
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+              )
+              if (isVerified) {
+                Spacer(modifier = Modifier.width(5.dp))
+                VerifiedBadge(
+                  size = 15.dp,
+                  tierKey = verifiedTier,
+                  showDialogOnClick = true
+                )
+              }
+              if (isAiChat) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                  shape = RoundedCornerShape(6.dp),
+                  color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                ) {
+                  Text(
+                    text = strings.aiBotBadge,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  )
+                }
+              }
+            }
+
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.padding(top = 2.dp)
+            ) {
+              if (isThinkingOrTyping) {
+                TypingDotsIndicator(
+                  dotSize = 4.dp,
+                  travelDistance = 2.dp,
+                  dotColor = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                  text = strings.aiBotBadge,
-                  style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                  text = subtitle,
+                  style = MaterialTheme.typography.labelSmall,
                   color = MaterialTheme.colorScheme.primary,
-                  fontWeight = FontWeight.Bold,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                  fontWeight = FontWeight.Medium,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              } else {
+                Box(
+                  modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(StatusOnline)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = subtitle,
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
                 )
               }
             }
           }
+        }
 
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 2.dp)
-          ) {
-            if (isThinkingOrTyping) {
-              TypingDotsIndicator(
-                dotSize = 4.dp,
-                travelDistance = 2.dp,
-                dotColor = MaterialTheme.colorScheme.primary
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-              )
-            } else {
-              Box(
-                modifier = Modifier
-                  .size(7.dp)
-                  .clip(CircleShape)
-                  .background(StatusOnline)
-              )
-              Spacer(modifier = Modifier.width(6.dp))
-              Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-              )
-            }
-          }
+        IconButton(
+          onClick = onToggleSearch,
+          modifier = Modifier
+            .size(48.dp)
+            .testTag("chat_search_button")
+        ) {
+          Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = strings.searchMessagesPlaceholder,
+            tint = if (isSearchOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+          )
         }
 
         if (canStartVoiceCall) {
@@ -955,6 +1350,21 @@ private fun PolishedChatTopBar(
               imageVector = Icons.Default.Call,
               contentDescription = strings.startVoiceCall,
               tint = MaterialTheme.colorScheme.primary
+            )
+          }
+        }
+
+        if (canInspectOrViewInfo) {
+          IconButton(
+            onClick = onOpenChatInfo,
+            modifier = Modifier
+              .size(48.dp)
+              .testTag("chat_info_button")
+          ) {
+            Icon(
+              imageVector = Icons.Outlined.Info,
+              contentDescription = strings.chatInfoTitle,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -1100,9 +1510,14 @@ private fun PolishedMessageBubble(
   message: Message,
   isMe: Boolean,
   isAiMessage: Boolean,
+  isPinned: Boolean = false,
+  isSearchHighlighted: Boolean = false,
   senderAvatarUrl: String?,
+  senderFrameKey: String? = null,
   chatMediaRepository: ChatMediaRepository,
   isInlineVideoPlaying: Boolean,
+  onInspectSender: () -> Unit = {},
+  onVotePoll: (Int) -> Unit = {},
   onPlayInlineVideo: () -> Unit,
   onStopInlineVideo: () -> Unit,
   onOpenFullscreenVideo: (File) -> Unit,
@@ -1110,12 +1525,15 @@ private fun PolishedMessageBubble(
   onOpenReactionSheet: () -> Unit,
   onReply: () -> Unit,
   onCopy: () -> Unit,
+  onForward: (() -> Unit)? = null,
+  onTogglePin: (() -> Unit)? = null,
   onEdit: () -> Unit,
   onDelete: () -> Unit,
   onSaveMemory: () -> Unit
 ) {
   val strings = LocalAppStrings.current
   var showMenu by remember { mutableStateOf(false) }
+  var isSpoilerRevealed by remember(message.id) { mutableStateOf(false) }
 
   val formattedTime = remember(message.createdAt) {
     val date = message.createdAt?.toDate()
@@ -1134,16 +1552,17 @@ private fun PolishedMessageBubble(
     RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomEnd = 20.dp, bottomStart = 6.dp)
   }
 
-  val bubbleContainerColor = if (isMe) {
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-  } else {
-    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+  val bubbleContainerColor = when {
+    isSearchHighlighted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+    isMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
   }
 
-  val bubbleBorderColor = if (isMe) {
-    MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-  } else {
-    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+  val bubbleBorderColor = when {
+    isSearchHighlighted -> MaterialTheme.colorScheme.primary
+    isPinned -> Color(0xFFF59E0B).copy(alpha = 0.55f)
+    isMe -> MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
   }
 
   Row(
@@ -1175,11 +1594,19 @@ private fun PolishedMessageBubble(
           )
         }
       } else {
-        AvatarView(
-          name = message.senderName,
-          avatarUrl = senderAvatarUrl,
-          size = 30.dp
-        )
+        Box(
+          modifier = Modifier
+            .clip(CircleShape)
+            .clickable(onClick = onInspectSender)
+            .testTag("message_avatar_inspect_${message.id}")
+        ) {
+          AvatarView(
+            name = message.senderName,
+            avatarUrl = senderAvatarUrl,
+            size = 30.dp,
+            frameStyleKey = senderFrameKey
+          )
+        }
       }
       Spacer(modifier = Modifier.width(8.dp))
     }
@@ -1192,23 +1619,30 @@ private fun PolishedMessageBubble(
       Surface(
         shape = bubbleShape,
         color = bubbleContainerColor,
-        border = BorderStroke(1.dp, bubbleBorderColor),
+        border = BorderStroke(if (isSearchHighlighted) 1.5.dp else 1.dp, bubbleBorderColor),
         modifier = Modifier
           .widthIn(max = 310.dp)
           .clip(bubbleShape)
           .combinedClickable(
-            onClick = {},
+            onClick = {
+              if (message.isSpoiler && !isSpoilerRevealed && !message.isDeleted) {
+                isSpoilerRevealed = true
+              }
+            },
             onLongClick = { showMenu = true }
           )
       ) {
         Column(
           modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-          // Incoming sender badge row
+          // Incoming sender badge row (clickable to inspect user profile)
           if (!isMe) {
             Row(
               verticalAlignment = Alignment.CenterVertically,
-              modifier = Modifier.padding(bottom = 4.dp)
+              modifier = Modifier
+                .padding(bottom = 4.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(enabled = !isAiMessage, onClick = onInspectSender)
             ) {
               Text(
                 text = if (isAiMessage) strings.aiAssistantName else message.senderName,
@@ -1224,6 +1658,28 @@ private fun PolishedMessageBubble(
                   showDialogOnClick = true
                 )
               }
+            }
+          }
+
+          // Forwarded provenance pill
+          if (!message.forwardedFromName.isNullOrBlank() && !message.isDeleted) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.Forward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = String.format(strings.forwardedFromLabel, message.forwardedFromName),
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+              )
             }
           }
 
@@ -1266,44 +1722,101 @@ private fun PolishedMessageBubble(
             }
           }
 
-          // Embedded Media Content (Photo / Inline ExoPlayer Video / File Card)
-          if (message.hasMediaAttachment() && !message.isDeleted) {
-            MediaMessageBubbleContent(
-              conversationId = conversationId,
-              message = message,
-              chatMediaRepository = chatMediaRepository,
-              isInlineVideoPlaying = isInlineVideoPlaying,
-              onPlayInlineVideo = onPlayInlineVideo,
-              onStopInlineVideo = onStopInlineVideo,
-              onOpenFullscreenVideo = onOpenFullscreenVideo
-            )
-          }
+          // Spoiler Gate OR Message Content
+          if (message.isSpoiler && !isSpoilerRevealed && !message.isDeleted) {
+            Surface(
+              onClick = { isSpoilerRevealed = true },
+              shape = RoundedCornerShape(12.dp),
+              color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+              border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("spoiler_cover_${message.id}")
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Icon(
+                  imageVector = Icons.Default.VisibilityOff,
+                  contentDescription = strings.spoilerHiddenTitle,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = strings.spoilerHiddenTitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    text = strings.spoilerTapToReveal,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+            }
+          } else {
+            // Interactive Poll Card
+            if (message.isPollMessage() && !message.isDeleted) {
+              PollMessageCard(
+                message = message,
+                currentUid = currentUid,
+                onVoteOption = onVotePoll
+              )
+            }
 
-          val isSyntheticMediaPlaceholder = message.hasMediaAttachment() &&
-            (message.content.startsWith("📷 ") ||
-              message.content.startsWith("🎬 ") ||
-              message.content.startsWith("📎 "))
+            // Embedded Media Content (Photo / Inline ExoPlayer Video / Voice Note Audio / File Card)
+            if (message.hasMediaAttachment() && !message.isDeleted) {
+              MediaMessageBubbleContent(
+                conversationId = conversationId,
+                message = message,
+                chatMediaRepository = chatMediaRepository,
+                isInlineVideoPlaying = isInlineVideoPlaying,
+                onPlayInlineVideo = onPlayInlineVideo,
+                onStopInlineVideo = onStopInlineVideo,
+                onOpenFullscreenVideo = onOpenFullscreenVideo
+              )
+            }
 
-          // Message Text / Optional Caption
-          if (!isSyntheticMediaPlaceholder && message.content.isNotBlank()) {
-            Text(
-              text = message.content,
-              style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = 15.sp,
-                lineHeight = 23.sp
-              ),
-              color = MaterialTheme.colorScheme.onSurface
-            )
+            val isSyntheticMediaPlaceholder = message.hasMediaAttachment() &&
+              (message.content.startsWith("📷 ") ||
+                message.content.startsWith("🎬 ") ||
+                message.content.startsWith("🎤 ") ||
+                message.content.startsWith("📎 "))
+
+            // Message Text / Optional Caption (suppressed for polls & pure synthetic media prefixes)
+            if (!message.isPollMessage() && !isSyntheticMediaPlaceholder && message.content.isNotBlank()) {
+              Text(
+                text = message.content,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                  fontSize = 15.sp,
+                  lineHeight = 23.sp
+                ),
+                color = MaterialTheme.colorScheme.onSurface
+              )
+            }
           }
 
           Spacer(modifier = Modifier.height(4.dp))
 
-          // Subtle timestamp & status row
+          // Subtle timestamp, pinned indicator & status row
           Row(
             modifier = Modifier.align(Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
           ) {
+            if (isPinned) {
+              Icon(
+                imageVector = Icons.Default.PushPin,
+                contentDescription = strings.pinnedMessageBannerTitle,
+                modifier = Modifier.size(12.dp),
+                tint = Color(0xFFF59E0B)
+              )
+            }
             if (message.isEdited) {
               Text(
                 text = strings.edited,
@@ -1384,6 +1897,51 @@ private fun PolishedMessageBubble(
             onReply()
           }
         )
+        if (onForward != null) {
+          DropdownMenuItem(
+            text = { Text(strings.forwardAction, color = MaterialTheme.colorScheme.onSurface) },
+            leadingIcon = {
+              Icon(Icons.AutoMirrored.Filled.Forward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            onClick = {
+              showMenu = false
+              onForward()
+            }
+          )
+        }
+        if (onTogglePin != null) {
+          DropdownMenuItem(
+            text = {
+              Text(
+                text = if (isPinned) strings.unpinMessageAction else strings.pinMessageAction,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+            },
+            leadingIcon = {
+              Icon(
+                imageVector = if (isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                contentDescription = null,
+                tint = Color(0xFFF59E0B)
+              )
+            },
+            onClick = {
+              showMenu = false
+              onTogglePin()
+            }
+          )
+        }
+        if (!isMe && !isAiMessage) {
+          DropdownMenuItem(
+            text = { Text(strings.inspectProfileAction, color = MaterialTheme.colorScheme.onSurface) },
+            leadingIcon = {
+              Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            },
+            onClick = {
+              showMenu = false
+              onInspectSender()
+            }
+          )
+        }
         DropdownMenuItem(
           text = { Text(strings.saveToMemory, color = MaterialTheme.colorScheme.onSurface) },
           leadingIcon = {
@@ -1567,23 +2125,32 @@ private fun PolishedMessageComposer(
   isSendEnabled: Boolean,
   showAttachButton: Boolean,
   isAttachEnabled: Boolean,
+  canRecordVoiceNote: Boolean = false,
+  isRecordingVoice: Boolean = false,
+  recordingElapsedMs: Long = 0L,
+  isSpoilerMode: Boolean = false,
+  onToggleSpoiler: () -> Unit = {},
+  onStartRecording: () -> Unit = {},
+  onCancelRecording: () -> Unit = {},
+  onSendRecording: () -> Unit = {},
   onAttachClick: () -> Unit,
   onSend: () -> Unit
 ) {
   val strings = LocalAppStrings.current
+  val useMicAction = canRecordVoiceNote && value.isBlank()
   val sendBtnBg by animateColorAsState(
-    targetValue = if (isSendEnabled) {
-      MaterialTheme.colorScheme.primary
-    } else {
-      MaterialTheme.colorScheme.surfaceVariant
+    targetValue = when {
+      useMicAction -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+      isSendEnabled -> MaterialTheme.colorScheme.primary
+      else -> MaterialTheme.colorScheme.surfaceVariant
     },
     label = "send_btn_bg"
   )
   val sendIconTint by animateColorAsState(
-    targetValue = if (isSendEnabled) {
-      MaterialTheme.colorScheme.onPrimary
-    } else {
-      MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+    targetValue = when {
+      useMicAction -> MaterialTheme.colorScheme.primary
+      isSendEnabled -> MaterialTheme.colorScheme.onPrimary
+      else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
     },
     label = "send_icon_tint"
   )
@@ -1594,94 +2161,719 @@ private fun PolishedMessageComposer(
       .navigationBarsPadding()
       .padding(horizontal = 14.dp, vertical = 10.dp)
   ) {
-    Surface(
-      shape = RoundedCornerShape(28.dp),
-      color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-      border = BorderStroke(
-        width = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-      ),
-      tonalElevation = 2.dp,
-      modifier = Modifier.fillMaxWidth()
-    ) {
-      Row(
+    if (isRecordingVoice) {
+      Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f)),
+        tonalElevation = 2.dp,
         modifier = Modifier
           .fillMaxWidth()
-          .padding(
-            start = if (showAttachButton) 6.dp else 18.dp,
-            end = 6.dp,
-            top = 6.dp,
-            bottom = 6.dp
-          ),
-        verticalAlignment = Alignment.CenterVertically
+          .testTag("voice_recording_bar")
       ) {
-        if (showAttachButton) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
           IconButton(
-            onClick = onAttachClick,
-            enabled = isAttachEnabled,
+            onClick = onCancelRecording,
             modifier = Modifier
               .size(48.dp)
-              .testTag("chat_attach_button")
+              .testTag("cancel_voice_recording_button")
           ) {
             Icon(
-              imageVector = Icons.Default.AttachFile,
-              contentDescription = strings.attachMedia,
-              tint = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.size(22.dp)
+              imageVector = Icons.Default.Close,
+              contentDescription = strings.cancelRecording,
+              tint = MaterialTheme.colorScheme.error
             )
           }
-        }
 
-        BasicTextField(
-          value = value,
-          onValueChange = onValueChange,
-          textStyle = MaterialTheme.typography.bodyMedium.copy(
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurface
-          ),
-          cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-          maxLines = 5,
-          modifier = Modifier
-            .weight(1f)
-            .padding(vertical = 8.dp)
-            .testTag("chat_message_input"),
-          decorationBox = { innerTextField ->
-            if (value.isEmpty()) {
-              Text(
-                text = placeholder,
-                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-              )
-            }
-            innerTextField()
-          }
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        IconButton(
-          onClick = onSend,
-          enabled = isSendEnabled,
-          modifier = Modifier
-            .size(48.dp)
-            .testTag("chat_send_button")
-        ) {
           Box(
             modifier = Modifier
-              .size(38.dp)
+              .size(10.dp)
               .clip(CircleShape)
-              .background(sendBtnBg),
-            contentAlignment = Alignment.Center
+              .background(MaterialTheme.colorScheme.error)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "${strings.recordingVoiceNote} • ${ChatMediaRepository.formatDuration(recordingElapsedMs)}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+
+          IconButton(
+            onClick = onSendRecording,
+            modifier = Modifier
+              .size(48.dp)
+              .testTag("send_voice_recording_button")
           ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.Send,
-              contentDescription = strings.send,
-              tint = sendIconTint,
-              modifier = Modifier.size(18.dp)
-            )
+            Box(
+              modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = strings.sendVoiceNote,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(18.dp)
+              )
+            }
           }
         }
       }
+    } else {
+      Surface(
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        border = BorderStroke(
+          width = 1.dp,
+          color = if (isSpoilerMode) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+          } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+          }
+        ),
+        tonalElevation = 2.dp,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+              start = if (showAttachButton) 4.dp else 18.dp,
+              end = 6.dp,
+              top = 6.dp,
+              bottom = 6.dp
+            ),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          if (showAttachButton) {
+            IconButton(
+              onClick = onAttachClick,
+              enabled = isAttachEnabled,
+              modifier = Modifier
+                .size(48.dp)
+                .testTag("chat_attach_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.AttachFile,
+                contentDescription = strings.attachMedia,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+              )
+            }
+
+            IconButton(
+              onClick = onToggleSpoiler,
+              enabled = isAttachEnabled,
+              modifier = Modifier
+                .size(48.dp)
+                .testTag("chat_spoiler_toggle")
+            ) {
+              Icon(
+                imageVector = if (isSpoilerMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                contentDescription = strings.spoilerToggleLabel,
+                tint = if (isSpoilerMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+              )
+            }
+          }
+
+          BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+              fontSize = 15.sp,
+              color = MaterialTheme.colorScheme.onSurface
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            maxLines = 5,
+            modifier = Modifier
+              .weight(1f)
+              .padding(vertical = 8.dp)
+              .testTag("chat_message_input"),
+            decorationBox = { innerTextField ->
+              if (value.isEmpty()) {
+                Text(
+                  text = if (isSpoilerMode) "${strings.spoilerToggleLabel}: $placeholder" else placeholder,
+                  style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                  color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+              innerTextField()
+            }
+          )
+
+          Spacer(modifier = Modifier.width(6.dp))
+
+          if (useMicAction) {
+            IconButton(
+              onClick = onStartRecording,
+              modifier = Modifier
+                .size(48.dp)
+                .testTag("chat_record_voice_button")
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(38.dp)
+                  .clip(CircleShape)
+                  .background(sendBtnBg),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Mic,
+                  contentDescription = strings.voiceNoteLabel,
+                  tint = sendIconTint,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+            }
+          } else {
+            IconButton(
+              onClick = onSend,
+              enabled = isSendEnabled,
+              modifier = Modifier
+                .size(48.dp)
+                .testTag("chat_send_button")
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(38.dp)
+                  .clip(CircleShape)
+                  .background(sendBtnBg),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Filled.Send,
+                  contentDescription = strings.send,
+                  tint = sendIconTint,
+                  modifier = Modifier.size(18.dp)
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PinnedMessageBanner(
+  senderName: String,
+  previewText: String,
+  onJumpToPinned: () -> Unit,
+  onUnpin: () -> Unit
+) {
+  val strings = LocalAppStrings.current
+  Surface(
+    onClick = onJumpToPinned,
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+    modifier = Modifier
+      .fillMaxWidth()
+      .widthIn(max = 840.dp)
+      .testTag("pinned_message_banner")
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 6.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Icon(
+        imageVector = Icons.Default.PushPin,
+        contentDescription = strings.pinnedMessageBannerTitle,
+        tint = Color(0xFFF59E0B),
+        modifier = Modifier.size(18.dp)
+      )
+      Spacer(modifier = Modifier.width(10.dp))
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = if (senderName.isNotBlank()) "${strings.pinnedMessageBannerTitle} • $senderName" else strings.pinnedMessageBannerTitle,
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Bold,
+          color = Color(0xFFF59E0B),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+        Text(
+          text = previewText,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+      }
+      IconButton(
+        onClick = onUnpin,
+        modifier = Modifier
+          .size(48.dp)
+          .testTag("unpin_message_banner_button")
+      ) {
+        Icon(
+          imageVector = Icons.Default.Close,
+          contentDescription = strings.unpinMessageAction,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(18.dp)
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun ChatSearchBarStrip(
+  query: String,
+  onQueryChange: (String) -> Unit,
+  matchCount: Int,
+  currentMatchIndex: Int,
+  onPrevMatch: () -> Unit,
+  onNextMatch: () -> Unit,
+  onClose: () -> Unit
+) {
+  val strings = LocalAppStrings.current
+  Surface(
+    color = MaterialTheme.colorScheme.surface,
+    tonalElevation = 1.dp,
+    modifier = Modifier
+      .fillMaxWidth()
+      .widthIn(max = 840.dp)
+      .testTag("chat_search_bar")
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 10.dp, vertical = 6.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text(strings.searchMessagesPlaceholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+          .weight(1f)
+          .testTag("chat_search_input")
+      )
+      if (query.isNotBlank()) {
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = if (matchCount > 0) {
+            String.format(strings.searchResultsCountFormat, currentMatchIndex + 1, matchCount)
+          } else {
+            "0 / 0"
+          },
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          fontWeight = FontWeight.SemiBold
+        )
+        IconButton(
+          onClick = onPrevMatch,
+          enabled = matchCount > 0,
+          modifier = Modifier.size(48.dp)
+        ) {
+          Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Previous")
+        }
+        IconButton(
+          onClick = onNextMatch,
+          enabled = matchCount > 0,
+          modifier = Modifier.size(48.dp)
+        ) {
+          Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Next")
+        }
+      }
+      IconButton(
+        onClick = onClose,
+        modifier = Modifier.size(48.dp)
+      ) {
+        Icon(Icons.Default.Close, contentDescription = strings.cancel)
+      }
+    }
+  }
+}
+
+@Composable
+private fun CreatePollDialog(
+  onDismiss: () -> Unit,
+  onConfirm: (question: String, options: List<String>) -> Unit
+) {
+  val strings = LocalAppStrings.current
+  var question by remember { mutableStateOf("") }
+  val options = remember { mutableStateListOf("", "") }
+  val validOptions = options.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+  val canSubmit = question.trim().isNotBlank() && validOptions.size >= 2
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    containerColor = MaterialTheme.colorScheme.surface,
+    titleContentColor = MaterialTheme.colorScheme.onSurface,
+    title = {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Poll, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(strings.createPollAction, fontWeight = FontWeight.Bold)
+      }
+    },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+          value = question,
+          onValueChange = { if (it.length <= 240) question = it },
+          label = { Text(strings.pollQuestionLabel) },
+          placeholder = { Text(strings.pollQuestionPlaceholder) },
+          maxLines = 2,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("poll_question_input")
+        )
+        options.forEachIndexed { idx, value ->
+          OutlinedTextField(
+            value = value,
+            onValueChange = { updated -> if (updated.length <= 120) options[idx] = updated },
+            label = { Text(String.format(strings.pollOptionLabel, idx + 1)) },
+            singleLine = true,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("poll_option_input_$idx")
+          )
+        }
+        if (options.size < 5) {
+          TextButton(
+            onClick = { options.add("") },
+            modifier = Modifier.align(Alignment.Start)
+          ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(strings.addPollOption)
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { onConfirm(question, validOptions) },
+        enabled = canSubmit,
+        modifier = Modifier.testTag("poll_submit_button")
+      ) {
+        Text(strings.sendPoll)
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text(strings.cancel)
+      }
+    }
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ForwardMessageSheet(
+  conversations: List<Conversation>,
+  directoryUsers: List<UserProfile>,
+  currentUid: String,
+  onDismiss: () -> Unit,
+  onSelectConversation: (Conversation) -> Unit
+) {
+  val strings = LocalAppStrings.current
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    sheetState = sheetState,
+    containerColor = MaterialTheme.colorScheme.surface,
+    contentColor = MaterialTheme.colorScheme.onSurface
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .navigationBarsPadding()
+        .padding(horizontal = 20.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+      Text(
+        text = strings.forwardToTitle,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold
+      )
+      LazyColumn(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(max = 360.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        items(conversations, key = { it.id }) { convo ->
+          val peerId = if (convo.type == "direct") convo.participantIds.firstOrNull { it != currentUid } else null
+          val peer = peerId?.let { id -> directoryUsers.find { it.id == id } }
+          val title = peer?.displayName?.takeIf { it.isNotBlank() }
+            ?: convo.title.ifBlank { strings.directChats }
+
+          Surface(
+            onClick = { onSelectConversation(convo) },
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier
+              .fillMaxWidth()
+              .defaultMinSize(minHeight = 56.dp)
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              AvatarView(
+                name = title,
+                avatarUrl = peer?.avatarUrl,
+                size = 38.dp,
+                frameStyleKey = peer?.equippedFrame
+              )
+              Spacer(modifier = Modifier.width(12.dp))
+              Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.Forward,
+                contentDescription = strings.forwardAction,
+                tint = MaterialTheme.colorScheme.primary
+              )
+            }
+          }
+        }
+      }
+      Spacer(modifier = Modifier.height(8.dp))
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatInfoAndMediaSheet(
+  conversationTitle: String,
+  conversationType: String,
+  participants: List<UserProfile>,
+  messages: List<Message>,
+  onDismiss: () -> Unit,
+  onInspectParticipant: (UserProfile) -> Unit,
+  onJumpToMessage: (String) -> Unit
+) {
+  val strings = LocalAppStrings.current
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  var selectedFilter by remember { mutableStateOf("image") }
+
+  val filteredItems = remember(messages, selectedFilter) {
+    messages.filter { msg ->
+      !msg.isDeleted && when (selectedFilter) {
+        "poll" -> msg.isPollMessage()
+        else -> msg.hasMediaAttachment() && msg.mediaType == selectedFilter
+      }
+    }.asReversed()
+  }
+
+  ModalBottomSheet(
+    onDismissRequest = onDismiss,
+    sheetState = sheetState,
+    containerColor = MaterialTheme.colorScheme.surface,
+    contentColor = MaterialTheme.colorScheme.onSurface,
+    modifier = Modifier.testTag("chat_info_sheet")
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .navigationBarsPadding()
+        .padding(horizontal = 20.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = strings.chatInfoTitle,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+          )
+          Text(
+            text = conversationTitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+        IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
+          Icon(Icons.Default.Close, contentDescription = strings.cancel)
+        }
+      }
+
+      if (participants.isNotEmpty()) {
+        Text(
+          text = if (conversationType == "group") {
+            String.format(strings.membersCountFormat, participants.size)
+          } else {
+            strings.inspectProfileMemberTitle
+          },
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.primary
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          participants.forEach { member ->
+            Surface(
+              onClick = { onInspectParticipant(member) },
+              shape = RoundedCornerShape(12.dp),
+              color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+              border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+              modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 52.dp)
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                AvatarView(
+                  name = member.displayName.ifBlank { "Member" },
+                  avatarUrl = member.avatarUrl,
+                  size = 34.dp,
+                  frameStyleKey = member.equippedFrame
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                  text = member.displayName.ifBlank { "Member" },
+                  style = MaterialTheme.typography.bodyMedium,
+                  fontWeight = FontWeight.SemiBold,
+                  modifier = Modifier.weight(1f),
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+                if (member.isVerified) {
+                  VerifiedBadge(size = 14.dp, tierKey = member.verifiedTier)
+                  Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                  text = strings.inspectProfileAction,
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.primary,
+                  fontWeight = FontWeight.Bold
+                )
+              }
+            }
+          }
+        }
+      }
+
+      val filters = remember(strings) {
+        listOf(
+          "image" to strings.sharedMediaTabPhotos,
+          "video" to strings.sharedMediaTabVideos,
+          "audio" to strings.sharedMediaTabAudio,
+          "file" to strings.sharedMediaTabFiles,
+          "poll" to strings.sharedMediaTabPolls
+        )
+      }
+
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        filters.forEach { (key, label) ->
+          FilterChip(
+            selected = selectedFilter == key,
+            onClick = { selectedFilter = key },
+            label = { Text(label, maxLines = 1, softWrap = false) },
+            colors = FilterChipDefaults.filterChipColors(
+              selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+              selectedLabelColor = MaterialTheme.colorScheme.primary
+            )
+          )
+        }
+      }
+
+      if (filteredItems.isEmpty()) {
+        Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = strings.noSharedMediaYet,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+      } else {
+        LazyColumn(
+          modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 260.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          items(filteredItems, key = { it.id }) { msg ->
+            Surface(
+              onClick = { onJumpToMessage(msg.id) },
+              shape = RoundedCornerShape(12.dp),
+              color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+              border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                val icon = when (selectedFilter) {
+                  "image" -> Icons.Default.Image
+                  "video" -> Icons.Default.Videocam
+                  "audio" -> Icons.Default.Mic
+                  "poll" -> Icons.Default.Poll
+                  else -> Icons.Default.Description
+                }
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = msg.mediaFileName?.takeIf { it.isNotBlank() } ?: msg.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                  Text(
+                    text = msg.senderName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(6.dp))
     }
   }
 }

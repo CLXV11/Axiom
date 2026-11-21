@@ -41,9 +41,11 @@ import java.io.FileOutputStream
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+import kotlinx.coroutines.delay
+
 data class PreparedMediaMetadata(
   val mediaId: String,
-  val mediaType: String, // "image", "video", "file"
+  val mediaType: String, // "image", "video", "file", "audio"
   val fileName: String,
   val mimeType: String,
   val sizeBytes: Long,
@@ -127,19 +129,24 @@ class ChatMediaRepository(
   }
 
   private fun queryFileDisplayName(uri: Uri, fallbackExt: String): String {
-    appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-      if (cursor.moveToFirst()) {
-        val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (idx >= 0) {
-          val name = cursor.getString(idx)
-          if (!name.isNullOrBlank()) return sanitizeFileName(name)
+    if (uri.scheme == "file") {
+      val name = uri.lastPathSegment
+      if (!name.isNullOrBlank()) return sanitizeFileName(name)
+    } else {
+      appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+          val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (idx >= 0) {
+            val name = cursor.getString(idx)
+            if (!name.isNullOrBlank()) return sanitizeFileName(name)
+          }
         }
       }
     }
     return "kora_${System.currentTimeMillis()}.$fallbackExt"
   }
 
-  private fun extractVideoDurationMs(file: File): Long {
+  private fun extractMediaDurationMs(file: File): Long {
     val retriever = MediaMetadataRetriever()
     return try {
       retriever.setDataSource(file.absolutePath)
@@ -214,6 +221,7 @@ class ChatMediaRepository(
       val defaultExt = when (mediaType) {
         "image" -> "jpg"
         "video" -> "mp4"
+        "audio" -> "m4a"
         else -> "bin"
       }
       val resolvedName = queryFileDisplayName(sourceUri, defaultExt)
@@ -225,13 +233,19 @@ class ChatMediaRepository(
       var mimeType = resolver.getType(sourceUri) ?: when (mediaType) {
         "image" -> "image/jpeg"
         "video" -> "video/mp4"
+        "audio" -> "audio/mp4"
         else -> "application/octet-stream"
       }
 
       if (mediaType == "image") {
         mimeType = copyOrOptimizeImageToFile(sourceUri, destFile)
       } else {
-        resolver.openInputStream(sourceUri)?.use { input ->
+        val inputStream = if (sourceUri.scheme == "file" && !sourceUri.path.isNullOrBlank()) {
+          FileInputStream(File(sourceUri.path!!))
+        } else {
+          resolver.openInputStream(sourceUri)
+        }
+        inputStream?.use { input ->
           FileOutputStream(destFile).use { output ->
             val buf = ByteArray(64 * 1024)
             var total = 0L
@@ -259,7 +273,7 @@ class ChatMediaRepository(
         throw IllegalArgumentException("File exceeds 25 MB limit")
       }
 
-      val durationMs = if (mediaType == "video") extractVideoDurationMs(destFile) else 0L
+      val durationMs = if (mediaType == "video" || mediaType == "audio") extractMediaDurationMs(destFile) else 0L
       val totalChunks = ((sizeBytes + CHUNK_RAW_BYTES - 1L) / CHUNK_RAW_BYTES).toInt().coerceAtLeast(1)
 
       if (!isLocalOnlyChat && auth?.currentUser != null && db != null) {
@@ -376,28 +390,73 @@ class ChatMediaRepository(
     val tmpFile = File(mediaDir, "${mediaId}_${System.currentTimeMillis()}.tmp")
 
     try {
-      onProgress(0.1f)
-      val snap = firestore.collection("conversations")
+      onProgress(0.08f)
+      val chunksCollection = firestore.collection("conversations")
         .document(conversationId)
         .collection("media")
         .document(mediaId)
         .collection("chunks")
-        .orderBy("index", Query.Direction.ASCENDING)
-        .get()
-        .await()
 
-      if (snap.isEmpty) {
+      val expectedChunks = message.mediaChunkCount
+      val orderedBytes: List<ByteArray> = if (expectedChunks > 0) {
+        val semaphore = Semaphore(4)
+        var fetched = 0
+        val countLock = Mutex()
+        coroutineScope {
+          val jobs = (0 until expectedChunks).map { idx ->
+            async {
+              semaphore.withPermit {
+                var lastErr: Exception? = null
+                var bytes: ByteArray? = null
+                for (attempt in 0..1) {
+                  try {
+                    val doc = chunksCollection.document("chunk_$idx").get().await()
+                    val b64 = doc.getString("data")
+                      ?: throw IllegalStateException("Media chunk $idx missing")
+                    bytes = Base64.decode(b64, Base64.DEFAULT)
+                    break
+                  } catch (e: Exception) {
+                    lastErr = e
+                    if (attempt == 0) delay(300L)
+                  }
+                }
+                val resolved = bytes ?: throw (lastErr ?: IllegalStateException("Failed chunk $idx"))
+                countLock.withLock {
+                  fetched++
+                  onProgress(0.10f + (fetched.toFloat() / expectedChunks.toFloat()) * 0.80f)
+                }
+                idx to resolved
+              }
+            }
+          }
+          jobs.awaitAll().sortedBy { it.first }.map { it.second }
+        }
+      } else {
+        val snap = chunksCollection.orderBy("index", Query.Direction.ASCENDING).get().await()
+        if (snap.isEmpty) {
+          return@withContext Result.failure(IllegalStateException("Media chunks not found"))
+        }
+        snap.documents.mapIndexed { idx, doc ->
+          val b64 = doc.getString("data") ?: throw IllegalStateException("Corrupt media chunk $idx")
+          Base64.decode(b64, Base64.DEFAULT)
+        }
+      }
+
+      if (orderedBytes.isEmpty()) {
         return@withContext Result.failure(IllegalStateException("Media chunks not found"))
       }
 
-      val docs = snap.documents
+      var writtenBytes = 0L
       FileOutputStream(tmpFile).use { fos ->
-        docs.forEachIndexed { idx, doc ->
-          val b64 = doc.getString("data") ?: throw IllegalStateException("Corrupt media chunk $idx")
-          val decoded = Base64.decode(b64, Base64.DEFAULT)
+        orderedBytes.forEach { decoded ->
           fos.write(decoded)
-          onProgress(0.15f + ((idx + 1).toFloat() / docs.size.toFloat()) * 0.85f)
+          writtenBytes += decoded.size
         }
+      }
+
+      if (writtenBytes <= 0L) {
+        tmpFile.delete()
+        return@withContext Result.failure(IllegalStateException("Downloaded file is empty"))
       }
 
       if (finalFile.exists()) finalFile.delete()

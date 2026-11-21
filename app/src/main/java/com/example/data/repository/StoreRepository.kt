@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import com.example.R
 import com.example.data.model.DecorationItem
 import com.example.data.model.DecorationType
-import com.example.data.model.ItemRarity
 import com.example.data.util.OperationType
 import com.example.data.util.handleFirestoreError
 import com.google.firebase.Firebase
@@ -88,6 +87,11 @@ class StoreRepository(
   )
   val equippedNameplate: StateFlow<String?> = _equippedNameplate.asStateFlow()
 
+  private val _equippedWall = MutableStateFlow<String?>(
+    prefs?.getString(prefKey("key_equipped_wall"), null)
+  )
+  val equippedWall: StateFlow<String?> = _equippedWall.asStateFlow()
+
   private val _ownedItemIds = MutableStateFlow<Set<String>>(
     prefs?.getStringSet(prefKey("key_owned_ids"), emptySet())?.toSet() ?: emptySet()
   )
@@ -109,190 +113,21 @@ class StoreRepository(
   private var walletListener: ListenerRegistration? = null
   private var listeningUid: String? = null
 
-  val catalog: List<DecorationItem> = listOf(
-    DecorationItem(
-      id = "cat_bell",
-      nameEn = "Cat Bell",
-      nameAr = "أجراس القطة اللطيفة",
-      descriptionEn = "Cat ears, bells, and golden ribbons create a playful aura.",
-      descriptionAr = "آذان قطة بيضاء مع أشرطة بنفسجية وأجراس ذهبية مبهجة.",
-      price = 200,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.RARE,
-      styleKey = "cat_bell"
-    ),
-    DecorationItem(
-      id = "violet_night",
-      nameEn = "Violet Night",
-      nameAr = "ليلة البنفسج الإمبراطورية",
-      descriptionEn = "Ornate baroque violet florals create a calm, regal presence.",
-      descriptionAr = "زخارف ملكية باروكية بنفسجية مذهلة تضفي فخامة استثنائية.",
-      price = 200,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.RARE,
-      styleKey = "violet_night"
-    ),
-    DecorationItem(
-      id = "skull_eye",
-      nameEn = "Skull Eye",
-      nameAr = "عين الجمجمة القوطية",
-      descriptionEn = "A silver skull and mystic eye radiate an enigmatic dark aura.",
-      descriptionAr = "جمجمة فضية منقوشة مع عين غامضة تنبض بهيبة مظلمة.",
-      price = 200,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.EPIC,
-      styleKey = "skull_eye"
-    ),
-    DecorationItem(
-      id = "octopus_crown",
-      nameEn = "Octopus Crown",
-      nameAr = "تاج الأعماق البنفسجي",
-      descriptionEn = "Luminescent deep-sea tentacles crowned with imperial jewels.",
-      descriptionAr = "أذرع أخطبوط مضيئة من الأعماق متوجة بجواهر ملكية براقة.",
-      price = 200,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.EPIC,
-      styleKey = "octopus_crown"
-    ),
-    DecorationItem(
-      id = "future_mech",
-      nameEn = "Future Mech",
-      nameAr = "الآلي المستقبلي النيوني",
-      descriptionEn = "Cybernetic armor plates and cyan energy nodes from 2099.",
-      descriptionAr = "دروع سايبر تقنية مع أضواء نيونية تدور بأسلوب مستقبلي جبار.",
-      price = 200,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.EPIC,
-      styleKey = "future_mech"
-    ),
-    DecorationItem(
-      id = "sakura_tide",
-      nameEn = "Sakura Tide",
-      nameAr = "مد أزهار الكرز",
-      descriptionEn = "Delicate spring blossoms swirling with pastel ocean waves.",
-      descriptionAr = "بتلات ساكورا رقيقة تتناغم مع نسيم الربيع وأمواج الباستيل.",
-      price = 50,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.COMMON,
-      styleKey = "sakura_tide"
-    ),
-    DecorationItem(
-      id = "celestial_wings",
-      nameEn = "Celestial Seraph",
-      nameAr = "أجنحة الملاك النورانية",
-      descriptionEn = "Divine silver-white wings flanked by a radiant celestial star.",
-      descriptionAr = "أجنحة ملائكية نقية مع هالة نورانية ونجمة ماسية ساحرة.",
-      price = 500,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.LEGENDARY,
-      styleKey = "celestial_wings"
-    ),
-    DecorationItem(
-      id = "imperial_gold",
-      nameEn = "Imperial Sunburst",
-      nameAr = "التاج الشمسي الملكي",
-      descriptionEn = "Opulent golden mandala filigree with embedded royal rubies.",
-      descriptionAr = "زخرفة ماندالا ذهبية نقية مرصعة بالياقوت الملكي الفاخر.",
-      price = 400,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.LEGENDARY,
-      styleKey = "imperial_gold"
-    ),
-    DecorationItem(
-      id = "dragon_flame",
-      nameEn = "Infernal Phoenix",
-      nameAr = "لهيب العنقاء الأسطوري",
-      descriptionEn = "Blazing magma embers and blazing dragon flame aura.",
-      descriptionAr = "ألسنة لهب أسطورية وشظايا بركانية مشتعلة تفيض بالقوة.",
-      price = 450,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.LEGENDARY,
-      styleKey = "dragon_flame"
-    ),
-    DecorationItem(
-      id = "cosmic_swirl",
-      nameEn = "Cosmic Swirl",
-      nameAr = "الدوامة الكونية النجمية",
-      descriptionEn = "Hypnotic starlight vortex shifting across iridescent galaxies.",
-      descriptionAr = "دوامة نجمية غامضة بألوان المجرات المتلألئة وغبار النجوم.",
-      price = 300,
-      type = DecorationType.AVATAR_FRAME,
-      rarity = ItemRarity.RARE,
-      styleKey = "cosmic_swirl"
-    ),
-    DecorationItem(
-      id = "np_aurora",
-      nameEn = "Aurora Galaxy",
-      nameAr = "شريط الشفق القطبي",
-      descriptionEn = "Colorful auroras flow into a sparkling distant galaxy.",
-      descriptionAr = "أضواء الشفق المتدفقة بألوان كونية خلابة ونجوم ساطعة.",
-      price = 100,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.RARE,
-      styleKey = "np_aurora"
-    ),
-    DecorationItem(
-      id = "np_prismatic",
-      nameEn = "Prismatic Tide",
-      nameAr = "المد المنشوري الساحر",
-      descriptionEn = "Soft rainbow iridescent light flowing across aqua waters.",
-      descriptionAr = "أطياف قوس قزح ناعمة تتدفق فوق أمواج فيروزية نقية.",
-      price = 100,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.RARE,
-      styleKey = "np_prismatic"
-    ),
-    DecorationItem(
-      id = "np_golden",
-      nameEn = "Golden Flare",
-      nameAr = "التوهج الشمسي الذهبي",
-      descriptionEn = "Fiery crystalline gold releasing dazzling, radiant energy.",
-      descriptionAr = "طاقة شمسية ذهبية مبهرة بطبقات بلورية متألقة.",
-      price = 100,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.RARE,
-      styleKey = "np_golden"
-    ),
-    DecorationItem(
-      id = "np_midnight",
-      nameEn = "Midnight Starscape",
-      nameAr = "سماء منتصف الليل",
-      descriptionEn = "Crystalline stars shine across a velvet deep-blue night.",
-      descriptionAr = "نجوم كريستالية تشع بريقًا في عمق الليل الكحلي الهادئ.",
-      price = 100,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.RARE,
-      styleKey = "np_midnight"
-    ),
-    DecorationItem(
-      id = "np_moonlit",
-      nameEn = "Moonlit Cottage",
-      nameAr = "كوخ ضوء القمر",
-      descriptionEn = "Warm moonlight embraces a quiet lakeside fairy-tale sanctuary.",
-      descriptionAr = "ضوء القمر الدافئ يضيء ضفاف البحيرة الهادئة وسحر الليل.",
-      price = 300,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.EPIC,
-      styleKey = "np_moonlit"
-    ),
-    DecorationItem(
-      id = "np_bone_noir",
-      nameEn = "Bone Noir",
-      nameAr = "الظلام الحالك والجمجمة",
-      descriptionEn = "A chilling dark gothic skull gaze shrouded in dark velvet.",
-      descriptionAr = "نقش قوطي أسود يحمل غموض الظلام ورونق النوار الغامض.",
-      price = 350,
-      type = DecorationType.ROLE_NAMEPLATE,
-      rarity = ItemRarity.EPIC,
-      styleKey = "np_bone_noir"
-    )
-  )
+  val catalog: List<DecorationItem>
+    get() = StoreCatalog.items
 
   private fun walletDocRef(uid: String) =
     db!!.collection("users").document(uid).collection("wallet").document("state")
 
   private fun userDocRef(uid: String) =
     db!!.collection("users").document(uid)
+
+  private fun equipFieldFor(type: DecorationType): String = when (type) {
+    DecorationType.AVATAR_FRAME -> "equippedFrame"
+    DecorationType.ROLE_NAMEPLATE -> "equippedNameplate"
+    DecorationType.ACHIEVEMENT_WALL -> "equippedWall"
+    DecorationType.CHAT_BUBBLE -> "equippedNameplate"
+  }
 
   fun startSync() {
     val uid = currentUid
@@ -329,6 +164,7 @@ class StoreRepository(
           "lastDailyClaimAt" to null,
           "equippedFrame" to null,
           "equippedNameplate" to null,
+          "equippedWall" to null,
           "createdAt" to FieldValue.serverTimestamp(),
           "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -359,6 +195,7 @@ class StoreRepository(
       ?.toDate()?.time
     val frame = snapshot.getString("equippedFrame")?.takeIf { it.isNotBlank() }
     val nameplate = snapshot.getString("equippedNameplate")?.takeIf { it.isNotBlank() }
+    val wall = snapshot.getString("equippedWall")?.takeIf { it.isNotBlank() }
 
     _coinBalance.value = coins
     _ownedItemIds.value = owned
@@ -366,7 +203,8 @@ class StoreRepository(
     _lastDailyClaimAtMillis.value = dailyMs
     _equippedFrame.value = frame
     _equippedNameplate.value = nameplate
-    persistToPrefs(coins, owned, claimed, dailyMs, frame, nameplate)
+    _equippedWall.value = wall
+    persistToPrefs(coins, owned, claimed, dailyMs, frame, nameplate, wall)
   }
 
   private fun persistToPrefs(
@@ -375,7 +213,8 @@ class StoreRepository(
     claimed: Set<String>,
     dailyMs: Long?,
     frame: String?,
-    nameplate: String?
+    nameplate: String?,
+    wall: String?
   ) {
     prefs?.edit()?.apply {
       putInt(prefKey("key_user_coins"), coins)
@@ -387,6 +226,8 @@ class StoreRepository(
       else remove(prefKey("key_equipped_frame"))
       if (nameplate != null) putString(prefKey("key_equipped_nameplate"), nameplate)
       else remove(prefKey("key_equipped_nameplate"))
+      if (wall != null) putString(prefKey("key_equipped_wall"), wall)
+      else remove(prefKey("key_equipped_wall"))
       apply()
     }
   }
@@ -394,7 +235,9 @@ class StoreRepository(
   fun isOwned(itemId: String): Boolean = _ownedItemIds.value.contains(itemId)
 
   fun isEquipped(itemId: String): Boolean =
-    _equippedFrame.value == itemId || _equippedNameplate.value == itemId
+    _equippedFrame.value == itemId ||
+      _equippedNameplate.value == itemId ||
+      _equippedWall.value == itemId
 
   fun isMilestoneClaimed(milestoneId: String): Boolean = _claimedMilestones.value.contains(milestoneId)
 
@@ -417,6 +260,7 @@ class StoreRepository(
 
         val wRef = walletDocRef(uid)
         val uRef = userDocRef(uid)
+        val equipField = equipFieldFor(item.type)
 
         db!!.runTransaction { transaction ->
           val walletSnap = transaction.get(wRef)
@@ -436,7 +280,6 @@ class StoreRepository(
 
           val newCoins = currentCoins - item.price
           val newOwned = currentOwned + item.id
-          val equipField = if (item.type == DecorationType.AVATAR_FRAME) "equippedFrame" else "equippedNameplate"
 
           transaction.update(
             wRef,
@@ -463,12 +306,14 @@ class StoreRepository(
         val newCoins = (_coinBalance.value - item.price).coerceAtLeast(0)
         val newFrame = if (item.type == DecorationType.AVATAR_FRAME) item.id else _equippedFrame.value
         val newNameplate = if (item.type == DecorationType.ROLE_NAMEPLATE) item.id else _equippedNameplate.value
+        val newWall = if (item.type == DecorationType.ACHIEVEMENT_WALL) item.id else _equippedWall.value
 
         _coinBalance.value = newCoins
         _ownedItemIds.value = updatedOwned
         _equippedFrame.value = newFrame
         _equippedNameplate.value = newNameplate
-        persistToPrefs(newCoins, updatedOwned, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate)
+        _equippedWall.value = newWall
+        persistToPrefs(newCoins, updatedOwned, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate, newWall)
         Result.success(true)
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.WRITE, "users/$uid/wallet/state", auth)
@@ -485,12 +330,14 @@ class StoreRepository(
     val updatedOwned = _ownedItemIds.value + item.id
     val newFrame = if (item.type == DecorationType.AVATAR_FRAME) item.id else _equippedFrame.value
     val newNameplate = if (item.type == DecorationType.ROLE_NAMEPLATE) item.id else _equippedNameplate.value
+    val newWall = if (item.type == DecorationType.ACHIEVEMENT_WALL) item.id else _equippedWall.value
 
     _coinBalance.value = newBalance
     _ownedItemIds.value = updatedOwned
     _equippedFrame.value = newFrame
     _equippedNameplate.value = newNameplate
-    persistToPrefs(newBalance, updatedOwned, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate)
+    _equippedWall.value = newWall
+    persistToPrefs(newBalance, updatedOwned, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate, newWall)
     return Result.success(true)
   }
 
@@ -498,7 +345,7 @@ class StoreRepository(
     if (!isOwned(item.id)) {
       return Result.failure(IllegalStateException("Item must be purchased before equipping"))
     }
-    val equipField = if (item.type == DecorationType.AVATAR_FRAME) "equippedFrame" else "equippedNameplate"
+    val equipField = equipFieldFor(item.type)
 
     if (isSignedIn()) {
       val uid = currentUid!!
@@ -536,9 +383,11 @@ class StoreRepository(
 
         val newFrame = if (item.type == DecorationType.AVATAR_FRAME) item.id else _equippedFrame.value
         val newNameplate = if (item.type == DecorationType.ROLE_NAMEPLATE) item.id else _equippedNameplate.value
+        val newWall = if (item.type == DecorationType.ACHIEVEMENT_WALL) item.id else _equippedWall.value
         _equippedFrame.value = newFrame
         _equippedNameplate.value = newNameplate
-        persistToPrefs(_coinBalance.value, _ownedItemIds.value, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate)
+        _equippedWall.value = newWall
+        persistToPrefs(_coinBalance.value, _ownedItemIds.value, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate, newWall)
         Result.success(Unit)
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.UPDATE, "users/$uid/wallet/state", auth)
@@ -550,15 +399,19 @@ class StoreRepository(
 
     val newFrame = if (item.type == DecorationType.AVATAR_FRAME) item.id else _equippedFrame.value
     val newNameplate = if (item.type == DecorationType.ROLE_NAMEPLATE) item.id else _equippedNameplate.value
+    val newWall = if (item.type == DecorationType.ACHIEVEMENT_WALL) item.id else _equippedWall.value
     _equippedFrame.value = newFrame
     _equippedNameplate.value = newNameplate
-    persistToPrefs(_coinBalance.value, _ownedItemIds.value, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate)
+    _equippedWall.value = newWall
+    persistToPrefs(_coinBalance.value, _ownedItemIds.value, _claimedMilestones.value, _lastDailyClaimAtMillis.value, newFrame, newNameplate, newWall)
     return Result.success(Unit)
   }
 
   suspend fun unequipFrame(): Result<Unit> = unequipField("equippedFrame")
 
   suspend fun unequipNameplate(): Result<Unit> = unequipField("equippedNameplate")
+
+  suspend fun unequipWall(): Result<Unit> = unequipField("equippedWall")
 
   private suspend fun unequipField(field: String): Result<Unit> {
     if (isSignedIn()) {
@@ -588,14 +441,15 @@ class StoreRepository(
           }
           null
         }.await()
-        if (field == "equippedFrame") _equippedFrame.value = null else _equippedNameplate.value = null
+        clearEquippedFieldLocal(field)
         persistToPrefs(
           _coinBalance.value,
           _ownedItemIds.value,
           _claimedMilestones.value,
           _lastDailyClaimAtMillis.value,
           _equippedFrame.value,
-          _equippedNameplate.value
+          _equippedNameplate.value,
+          _equippedWall.value
         )
         Result.success(Unit)
       } catch (e: Exception) {
@@ -606,16 +460,25 @@ class StoreRepository(
       }
     }
 
-    if (field == "equippedFrame") _equippedFrame.value = null else _equippedNameplate.value = null
+    clearEquippedFieldLocal(field)
     persistToPrefs(
       _coinBalance.value,
       _ownedItemIds.value,
       _claimedMilestones.value,
       _lastDailyClaimAtMillis.value,
       _equippedFrame.value,
-      _equippedNameplate.value
+      _equippedNameplate.value,
+      _equippedWall.value
     )
     return Result.success(Unit)
+  }
+
+  private fun clearEquippedFieldLocal(field: String) {
+    when (field) {
+      "equippedFrame" -> _equippedFrame.value = null
+      "equippedNameplate" -> _equippedNameplate.value = null
+      "equippedWall" -> _equippedWall.value = null
+    }
   }
 
   suspend fun claimDailyReward(): Result<Int> {
@@ -653,7 +516,7 @@ class StoreRepository(
         val now = System.currentTimeMillis()
         _coinBalance.value = updatedBalance
         _lastDailyClaimAtMillis.value = now
-        persistToPrefs(updatedBalance, _ownedItemIds.value, _claimedMilestones.value, now, _equippedFrame.value, _equippedNameplate.value)
+        persistToPrefs(updatedBalance, _ownedItemIds.value, _claimedMilestones.value, now, _equippedFrame.value, _equippedNameplate.value, _equippedWall.value)
         Result.success(DAILY_REWARD_COINS)
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.UPDATE, "users/$uid/wallet/state", auth)
@@ -667,7 +530,7 @@ class StoreRepository(
     val nextCoins = _coinBalance.value + DAILY_REWARD_COINS
     _coinBalance.value = nextCoins
     _lastDailyClaimAtMillis.value = now
-    persistToPrefs(nextCoins, _ownedItemIds.value, _claimedMilestones.value, now, _equippedFrame.value, _equippedNameplate.value)
+    persistToPrefs(nextCoins, _ownedItemIds.value, _claimedMilestones.value, now, _equippedFrame.value, _equippedNameplate.value, _equippedWall.value)
     return Result.success(DAILY_REWARD_COINS)
   }
 
@@ -710,7 +573,7 @@ class StoreRepository(
         val updatedClaimed = _claimedMilestones.value + milestoneId
         _coinBalance.value = updatedBalance
         _claimedMilestones.value = updatedClaimed
-        persistToPrefs(updatedBalance, _ownedItemIds.value, updatedClaimed, _lastDailyClaimAtMillis.value, _equippedFrame.value, _equippedNameplate.value)
+        persistToPrefs(updatedBalance, _ownedItemIds.value, updatedClaimed, _lastDailyClaimAtMillis.value, _equippedFrame.value, _equippedNameplate.value, _equippedWall.value)
         Result.success(reward)
       } catch (e: Exception) {
         handleFirestoreError(e, OperationType.UPDATE, "users/$uid/wallet/state", auth)
@@ -724,7 +587,7 @@ class StoreRepository(
     val updatedClaimed = _claimedMilestones.value + milestoneId
     _coinBalance.value = nextCoins
     _claimedMilestones.value = updatedClaimed
-    persistToPrefs(nextCoins, _ownedItemIds.value, updatedClaimed, _lastDailyClaimAtMillis.value, _equippedFrame.value, _equippedNameplate.value)
+    persistToPrefs(nextCoins, _ownedItemIds.value, updatedClaimed, _lastDailyClaimAtMillis.value, _equippedFrame.value, _equippedNameplate.value, _equippedWall.value)
     return Result.success(reward)
   }
 }

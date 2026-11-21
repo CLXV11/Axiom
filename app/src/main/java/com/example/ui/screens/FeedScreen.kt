@@ -71,6 +71,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Post
 import com.example.data.model.PostComment
+import com.example.data.model.UserProfile
 import com.example.data.repository.PostRepository
 import com.example.data.repository.UserRepository
 import com.example.ui.components.AvatarView
@@ -89,7 +90,8 @@ import kotlinx.coroutines.launch
 fun FeedScreen(
   postRepository: PostRepository,
   userRepository: UserRepository,
-  onLanguageToggle: () -> Unit
+  onLanguageToggle: () -> Unit,
+  onInspectUser: (UserProfile) -> Unit = {}
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
@@ -275,7 +277,8 @@ fun FeedScreen(
             currentUid = currentUid,
             postRepository = postRepository,
             userRepository = userRepository,
-            onOpenReactionSheet = { reactionTargetPostId = post.id }
+            onOpenReactionSheet = { reactionTargetPostId = post.id },
+            onInspectUser = onInspectUser
           )
         }
       }
@@ -317,11 +320,12 @@ fun FeedScreen(
 private fun PostCard(
   post: Post,
   authorAvatarUrl: String?,
-  usersById: Map<String, com.example.data.model.UserProfile>,
+  usersById: Map<String, UserProfile>,
   currentUid: String,
   postRepository: PostRepository,
   userRepository: UserRepository,
-  onOpenReactionSheet: () -> Unit
+  onOpenReactionSheet: () -> Unit,
+  onInspectUser: (UserProfile) -> Unit
 ) {
   val context = LocalContext.current
   val strings = LocalAppStrings.current
@@ -369,30 +373,55 @@ private fun PostCard(
       )
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
-      // Author Header
+      // Author Header (tappable to inspect profile)
       Row(verticalAlignment = Alignment.CenterVertically) {
-        AvatarView(name = liveAuthorName, avatarUrl = liveAvatarUrl, size = 40.dp)
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-              text = liveAuthorName,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.SemiBold,
-              maxLines = 1,
-              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-              modifier = Modifier.weight(1f, fill = false)
-            )
-            if (liveIsVerified) {
-              Spacer(modifier = Modifier.width(6.dp))
-              VerifiedBadge(size = 15.dp, tierKey = liveVerifiedTier, showDialogOnClick = true)
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable {
+              val target = authorProfile ?: UserProfile(
+                id = post.authorId,
+                displayName = liveAuthorName,
+                handle = post.authorHandle,
+                avatarUrl = liveAvatarUrl.orEmpty(),
+                isVerified = liveIsVerified,
+                verifiedTier = liveVerifiedTier
+              )
+              onInspectUser(target)
             }
-          }
-          Text(
-            text = formatHandleForDisplay(post.authorHandle),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            .padding(vertical = 2.dp)
+            .testTag("post_author_header_${post.id}")
+        ) {
+          AvatarView(
+            name = liveAuthorName,
+            avatarUrl = liveAvatarUrl,
+            size = 40.dp,
+            frameStyleKey = authorProfile?.equippedFrame
           )
+          Spacer(modifier = Modifier.width(12.dp))
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = liveAuthorName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+              )
+              if (liveIsVerified) {
+                Spacer(modifier = Modifier.width(6.dp))
+                VerifiedBadge(size = 15.dp, tierKey = liveVerifiedTier, showDialogOnClick = true)
+              }
+            }
+            Text(
+              text = formatHandleForDisplay(post.authorHandle),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
         }
 
         // Audience Badge
@@ -606,6 +635,15 @@ private fun PostCard(
                 liveVerified = commentAuthor?.isVerified ?: comment.isAuthorVerified,
                 liveVerifiedTier = commentAuthor?.verifiedTier ?: "BLUE",
                 canDelete = comment.authorId == currentUid,
+                onInspectAuthor = {
+                  val target = commentAuthor ?: UserProfile(
+                    id = comment.authorId,
+                    displayName = comment.authorName,
+                    handle = comment.authorHandle,
+                    isVerified = comment.isAuthorVerified
+                  )
+                  onInspectUser(target)
+                },
                 onDelete = {
                   coroutineScope.launch {
                     val res = postRepository.deleteComment(post.id, comment.id)
@@ -669,6 +707,7 @@ private fun ContextThreadCommentItem(
   liveVerified: Boolean = comment.isAuthorVerified,
   liveVerifiedTier: String = "BLUE",
   canDelete: Boolean = false,
+  onInspectAuthor: () -> Unit = {},
   onDelete: () -> Unit = {}
 ) {
   Row(
@@ -676,6 +715,7 @@ private fun ContextThreadCommentItem(
       .fillMaxWidth()
       .clip(RoundedCornerShape(10.dp))
       .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+      .clickable(onClick = onInspectAuthor)
       .padding(8.dp),
     verticalAlignment = Alignment.Top
   ) {

@@ -18,7 +18,7 @@ data class Message(
   val isSenderVerified: Boolean = false,
   val senderVerifiedTier: String = "BLUE",
   val content: String = "",
-  val mediaType: String = "text", // "text", "image", "video", "file"
+  val mediaType: String = "text", // "text", "image", "video", "file", "audio", "poll"
   val mediaId: String? = null,
   val mediaFileName: String? = null,
   val mediaMimeType: String? = null,
@@ -26,6 +26,12 @@ data class Message(
   val mediaChunkCount: Int = 0,
   val mediaDurationMs: Long = 0L,
   val localMediaUri: String? = null,
+  val pollQuestion: String? = null,
+  val pollOptions: List<String> = emptyList(),
+  val pollVotes: Map<String, List<String>> = emptyMap(),
+  @get:PropertyName("isSpoiler") @PropertyName("isSpoiler")
+  val isSpoiler: Boolean = false,
+  val forwardedFromName: String? = null,
   val replyToId: String? = null,
   val replyToSender: String? = null,
   val replyToText: String? = null,
@@ -40,7 +46,10 @@ data class Message(
   @ServerTimestamp val updatedAt: Timestamp? = null
 ) {
   fun hasMediaAttachment(): Boolean =
-    mediaType in listOf("image", "video", "file") && !mediaId.isNullOrBlank()
+    mediaType in listOf("image", "video", "file", "audio") && !mediaId.isNullOrBlank()
+
+  fun isPollMessage(): Boolean =
+    mediaType == "poll" && !pollQuestion.isNullOrBlank() && pollOptions.isNotEmpty()
 
   fun toMap(): Map<String, Any?> = mapOf(
     "conversationId" to conversationId,
@@ -56,6 +65,11 @@ data class Message(
     "mediaSizeBytes" to mediaSizeBytes,
     "mediaChunkCount" to mediaChunkCount,
     "mediaDurationMs" to mediaDurationMs,
+    "pollQuestion" to pollQuestion,
+    "pollOptions" to pollOptions,
+    "pollVotes" to pollVotes,
+    "isSpoiler" to isSpoiler,
+    "forwardedFromName" to forwardedFromName,
     "replyToId" to replyToId,
     "replyToSender" to replyToSender,
     "replyToText" to replyToText,
